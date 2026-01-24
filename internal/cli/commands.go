@@ -1,3 +1,4 @@
+// Package cli provides command definitions for skillsync.
 package cli
 
 import (
@@ -11,7 +12,7 @@ func configCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "config",
 		Usage: "Display current configuration",
-		Action: func(ctx context.Context, cmd *cli.Command) error {
+		Action: func(_ context.Context, _ *cli.Command) error {
 			fmt.Println("Configuration paths:")
 			fmt.Println("  Claude Code: ~/.claude/skills/")
 			fmt.Println("  Cursor: .cursor/rules/")
@@ -25,7 +26,7 @@ func discoveryCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "discovery",
 		Usage: "Discover skills on the system",
-		Action: func(ctx context.Context, cmd *cli.Command) error {
+		Action: func(_ context.Context, _ *cli.Command) error {
 			fmt.Println("Discovery command not yet implemented")
 			return nil
 		},

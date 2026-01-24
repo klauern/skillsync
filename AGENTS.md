@@ -1,40 +1,57 @@
-# Agent Instructions
+# AGENTS.md
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+## What This Is
 
-## Quick Reference
+Sync AI coding skills (Claude Code, Cursor, Codex) across platforms and projects.
 
+**Tech Stack**: Go 1.25.4, urfave/cli v3
+**Architecture**: CLI tool with cmd/ for entry point, internal/ for packages
+
+## Why It Exists
+
+Manage a unified skill repository that works seamlessly across different AI coding assistants,
+preventing duplication and ensuring consistency.
+
+## How to Work With It
+
+### Running Locally
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
+make run              # Build and run
+./bin/skillsync       # Direct binary execution
 ```
 
-## Landing the Plane (Session Completion)
+### Testing
+```bash
+make test             # Run tests with coverage
+make test-coverage    # View coverage report in browser
+```
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+### Building
+```bash
+make build            # Build to bin/skillsync
+make install          # Install to GOPATH/bin
+```
 
-**MANDATORY WORKFLOW:**
+### Quality Gates
+```bash
+make audit            # Run all checks (tidy, fmt, vet, lint, test)
+make fmt              # Format with gofumpt + goimports
+make lint             # Run golangci-lint (see .golangci.yml:1)
+```
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+### Go Conventions
+- Format: gofumpt + goimports (Makefile:36)
+- Lint: golangci-lint with custom rules (.golangci.yml:1)
+- Package structure: cmd/ for binaries, internal/ for private packages
+- Error handling: Always check errors (errcheck enabled in .golangci.yml:6)
 
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+### Issue Tracking (bd)
+Track work in beads issues:
+```bash
+bd ready              # Find available work
+bd show <id>          # View details
+bd update <id> --status in_progress
+bd close <id>         # Complete work
+```
 
+**Session completion**: Always run `bd sync` and `git push` before ending.

@@ -1,0 +1,24 @@
+---
+alwaysApply: true
+---
+# SkillSync Overview
+
+Sync AI coding skills (Claude Code, Cursor, Codex) across platforms.
+
+**Tech**: Go 1.25.4, urfave/cli v3
+**Structure**: cmd/ for binaries, internal/ for private packages
+
+## Quick Commands
+- Build: `make build` → bin/skillsync
+- Test: `make test` (coverage: make test-coverage)
+- Run: `make run`
+
+## Issue Tracking
+Track work in beads issues:
+```bash
+bd ready              # Find available work
+bd show <id>          # View details
+bd update <id> --status in_progress
+bd close <id>         # Complete work
+```
+**Session completion**: Always `bd sync` && `git push`

@@ -1,3 +1,4 @@
+// Package cli provides version command for skillsync.
 package cli
 
 import (
@@ -12,7 +13,7 @@ func versionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "version",
 		Usage: "Display version and build information",
-		Action: func(ctx context.Context, cmd *cli.Command) error {
+		Action: func(_ context.Context, _ *cli.Command) error {
 			fmt.Printf("skillsync version %s\n", Version)
 			fmt.Printf("  commit: %s\n", Commit)
 			fmt.Printf("  built: %s\n", BuildDate)

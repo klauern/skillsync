@@ -1,3 +1,6 @@
+// Package util provides tests for utility functions.
+//
+//nolint:revive // var-naming - package name is meaningful
 package util
 
 import (
@@ -25,7 +28,7 @@ func TestWriteFile(t *testing.T) {
 	WriteFile(t, path, content)
 
 	// Verify file exists and has correct content
-	got, err := os.ReadFile(path)
+	got, err := os.ReadFile(path) //nolint:gosec // G304 - safe in test code using temp directory
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
 	}

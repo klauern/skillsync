@@ -1,0 +1,20 @@
+---
+globs: ["*.go"]
+---
+# Go Conventions
+
+## Tooling
+- Format: `make fmt` (gofumpt + goimports, see Makefile:36)
+- Lint: `make lint` (golangci-lint, config: .golangci.yml:1)
+- Audit: `make audit` (tidy, fmt, vet, lint, test)
+
+## Code Quality
+- Always check errors (errcheck enabled: .golangci.yml:6)
+- Max cyclomatic complexity: 15 (.golangci.yml:25)
+- Use gofumpt (stricter than gofmt)
+- Run goimports to manage imports
+
+## References
+- CLI commands: internal/cli/commands.go:1
+- Version info: internal/cli/version.go:1
+- Platform model: internal/model/platform.go:1

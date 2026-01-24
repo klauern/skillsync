@@ -1,3 +1,4 @@
+// Package main provides the entry point for the skillsync CLI application.
 package main
 
 import (

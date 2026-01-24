@@ -1,3 +1,6 @@
+// Package util provides utility functions for paths and directories.
+//
+//nolint:revive // var-naming - package name is meaningful
 package util
 
 import (

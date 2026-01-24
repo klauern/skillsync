@@ -1,0 +1,19 @@
+---
+description: Testing patterns and coverage
+---
+# Testing
+
+## Running Tests
+```bash
+make test             # Run all tests with coverage
+make test-coverage    # View coverage report in browser
+```
+
+## Conventions
+- Write tests alongside code: `foo_test.go` in same package
+- Use table-driven tests for multiple cases
+- Race detector enabled by default (Makefile:24)
+- Target >80% coverage for new code
+
+## Test Helpers
+- See internal/util/testhelpers.go:1 for shared utilities

@@ -1,3 +1,4 @@
+// Package cli provides the command-line interface for skillsync.
 package cli
 
 import (
@@ -7,11 +8,15 @@ import (
 )
 
 var (
-	Version   = "dev"
-	Commit    = "unknown"
+	// Version is the current version of the application.
+	Version = "dev"
+	// Commit is the git commit hash.
+	Commit = "unknown"
+	// BuildDate is the date and time of the build.
 	BuildDate = "unknown"
 )
 
+// Run executes the CLI application with the given context and arguments.
 func Run(ctx context.Context, args []string) error {
 	app := &cli.Command{
 		Name:    "skillsync",

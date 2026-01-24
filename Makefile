@@ -33,7 +33,7 @@ lint: ## Run golangci-lint
 
 .PHONY: fmt
 fmt: ## Format code
-	gofmt -s -w .
+	gofumpt -w .
 	goimports -w -local github.com/klauern/skillsync .
 
 .PHONY: vet
@@ -44,6 +44,16 @@ vet: ## Run go vet
 tidy: ## Tidy and verify dependencies
 	go mod tidy
 	go mod verify
+
+.PHONY: install-tools
+install-tools: ## Install development tools
+	@echo "Installing gofumpt..."
+	@go install mvdan.cc/gofumpt@latest
+	@echo "Installing goimports..."
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@echo "Installing golangci-lint..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "All tools installed successfully!"
 
 .PHONY: clean
 clean: ## Remove build artifacts
