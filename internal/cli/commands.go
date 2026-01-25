@@ -4,12 +4,14 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/urfave/cli/v3"
+	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/model"
@@ -37,13 +39,121 @@ func configCommand() *cli.Command {
 
 func discoveryCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "discovery",
-		Usage: "Discover skills on the system",
-		Action: func(_ context.Context, _ *cli.Command) error {
-			fmt.Println("Discovery command not yet implemented")
-			return nil
+		Name:    "discover",
+		Aliases: []string{"discovery", "list"},
+		Usage:   "Discover and list skills across platforms",
+		UsageText: `skillsync discover [options]
+   skillsync discover --platform claude-code
+   skillsync discover --format json`,
+		Description: `Discover and list skills from all supported AI coding platforms.
+
+   Supported platforms: claude-code, cursor, codex
+
+   Output formats: table (default), json, yaml`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Filter by platform (claude-code, cursor, codex)",
+			},
+			&cli.StringFlag{
+				Name:    "format",
+				Aliases: []string{"f"},
+				Value:   "table",
+				Usage:   "Output format: table, json, yaml",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			platform := cmd.String("platform")
+			format := cmd.String("format")
+
+			// Determine which platforms to scan
+			var platforms []model.Platform
+			if platform != "" {
+				p, err := model.ParsePlatform(platform)
+				if err != nil {
+					return fmt.Errorf("invalid platform: %w", err)
+				}
+				platforms = []model.Platform{p}
+			} else {
+				platforms = model.AllPlatforms()
+			}
+
+			// Discover skills from each platform
+			var allSkills []model.Skill
+			for _, p := range platforms {
+				skills, err := parsePlatformSkills(p)
+				if err != nil {
+					// Log error but continue with other platforms
+					fmt.Printf("Warning: failed to parse %s: %v\n", p, err)
+					continue
+				}
+				allSkills = append(allSkills, skills...)
+			}
+
+			// Output results
+			return outputSkills(allSkills, format)
 		},
 	}
+}
+
+// outputSkills formats and prints skills in the requested format
+func outputSkills(skills []model.Skill, format string) error {
+	switch format {
+	case "json":
+		return outputJSON(skills)
+	case "yaml":
+		return outputYAML(skills)
+	case "table":
+		return outputTable(skills)
+	default:
+		return fmt.Errorf("unsupported format: %s (use table, json, or yaml)", format)
+	}
+}
+
+// outputJSON prints skills as JSON
+func outputJSON(skills []model.Skill) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(skills)
+}
+
+// outputYAML prints skills as YAML
+func outputYAML(skills []model.Skill) error {
+	data, err := yaml.Marshal(skills)
+	if err != nil {
+		return fmt.Errorf("failed to marshal YAML: %w", err)
+	}
+	fmt.Print(string(data))
+	return nil
+}
+
+// outputTable prints skills in a table format
+func outputTable(skills []model.Skill) error {
+	if len(skills) == 0 {
+		fmt.Println("No skills found.")
+		return nil
+	}
+
+	fmt.Printf("%-25s %-12s %-50s\n", "NAME", "PLATFORM", "DESCRIPTION")
+	fmt.Printf("%-25s %-12s %-50s\n", "----", "--------", "-----------")
+
+	for _, skill := range skills {
+		name := skill.Name
+		if len(name) > 25 {
+			name = name[:22] + "..."
+		}
+
+		desc := skill.Description
+		if len(desc) > 50 {
+			desc = desc[:47] + "..."
+		}
+
+		fmt.Printf("%-25s %-12s %-50s\n", name, skill.Platform, desc)
+	}
+
+	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
+	return nil
 }
 
 func syncCommand() *cli.Command {

@@ -380,10 +380,12 @@ approval_policy = "untrusted"
 	for path, content := range files {
 		fullPath := filepath.Join(tmpDir, path)
 		dir := filepath.Dir(fullPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 - test directory permissions
+		// #nosec G301 -- test directory permissions are acceptable
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
-		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil { // #nosec G306 - test file permissions
+		// #nosec G306 -- test file permissions are acceptable
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
 	}

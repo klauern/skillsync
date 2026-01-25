@@ -1,3 +1,4 @@
+//nolint:revive // var-naming - package name is meaningful
 package util
 
 import (
