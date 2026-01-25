@@ -31,17 +31,17 @@ func TestSyncCommand(t *testing.T) {
 		wantOutput string
 	}{
 		"valid sync": {
-			args:       []string{"skillsync", "sync", "claudecode", "cursor"},
+			args:       []string{"skillsync", "sync", "--skip-validation", "claudecode", "cursor"},
 			wantErr:    false,
 			wantOutput: "Syncing from claude-code to cursor",
 		},
 		"valid sync with dry-run": {
-			args:       []string{"skillsync", "sync", "--dry-run", "cursor", "codex"},
+			args:       []string{"skillsync", "sync", "--dry-run", "--skip-validation", "cursor", "codex"},
 			wantErr:    false,
 			wantOutput: "DRY RUN: Would sync from cursor to codex",
 		},
 		"sync with short dry-run flag": {
-			args:       []string{"skillsync", "sync", "-d", "claudecode", "cursor"},
+			args:       []string{"skillsync", "sync", "-d", "--skip-validation", "claudecode", "cursor"},
 			wantErr:    false,
 			wantOutput: "DRY RUN",
 		},

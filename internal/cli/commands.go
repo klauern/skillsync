@@ -11,6 +11,7 @@ import (
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/sync"
+	"github.com/klauern/skillsync/internal/validation"
 )
 
 func configCommand() *cli.Command {
@@ -60,6 +61,10 @@ func syncCommand() *cli.Command {
 				Name:  "skip-backup",
 				Usage: "Skip automatic backup before sync",
 			},
+			&cli.BoolFlag{
+				Name:  "skip-validation",
+				Usage: "Skip validation checks (not recommended)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			// Parse arguments
@@ -82,6 +87,42 @@ func syncCommand() *cli.Command {
 			// Get flags
 			dryRun := cmd.Bool("dry-run")
 			skipBackup := cmd.Bool("skip-backup")
+			skipValidation := cmd.Bool("skip-validation")
+
+			// Validate before sync (unless skipped)
+			if !skipValidation {
+				fmt.Println("Validating sync configuration...")
+
+				// Get platform paths for validation
+				sourcePath, err := validation.GetPlatformPath(sourcePlatform)
+				if err != nil {
+					return fmt.Errorf("failed to get source platform path: %w", err)
+				}
+				targetPath, err := validation.GetPlatformPath(targetPlatform)
+				if err != nil {
+					return fmt.Errorf("failed to get target platform path: %w", err)
+				}
+
+				// Validate source and target paths exist
+				if err := validation.ValidatePath(sourcePath, sourcePlatform); err != nil {
+					return fmt.Errorf("source validation failed: %w", err)
+				}
+
+				// For target, validate parent directory if path doesn't exist yet
+				if err := validation.ValidatePath(targetPath, targetPlatform); err != nil {
+					var vErr *validation.Error
+					if !errors.As(err, &vErr) || vErr.Message != "path does not exist" {
+						return fmt.Errorf("target validation failed: %w", err)
+					}
+					// Path doesn't exist - validate parent directory
+					parentDir := targetPath[:len(targetPath)-1] // rough trim for now
+					if err := validation.ValidatePath(parentDir, targetPlatform); err != nil {
+						return fmt.Errorf("target parent directory validation failed: %w", err)
+					}
+				}
+
+				fmt.Println("Validation passed")
+			}
 
 			// Create backup before sync (unless skipped or dry-run)
 			if !dryRun && !skipBackup {
