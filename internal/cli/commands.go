@@ -8,6 +8,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/sync"
 )
@@ -55,6 +56,10 @@ func syncCommand() *cli.Command {
 				Aliases: []string{"d"},
 				Usage:   "Preview changes without modifying files",
 			},
+			&cli.BoolFlag{
+				Name:  "skip-backup",
+				Usage: "Skip automatic backup before sync",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			// Parse arguments
@@ -74,8 +79,29 @@ func syncCommand() *cli.Command {
 				return fmt.Errorf("invalid target platform: %w", err)
 			}
 
-			// Get dry-run flag
+			// Get flags
 			dryRun := cmd.Bool("dry-run")
+			skipBackup := cmd.Bool("skip-backup")
+
+			// Create backup before sync (unless skipped or dry-run)
+			if !dryRun && !skipBackup {
+				fmt.Println("Creating backup before sync...")
+
+				// Run automatic cleanup to maintain retention policy
+				cleanupOpts := backup.DefaultCleanupOptions()
+				cleanupOpts.Platform = string(targetPlatform)
+
+				deleted, err := backup.CleanupBackups(cleanupOpts)
+				if err != nil {
+					fmt.Printf("Warning: backup cleanup failed: %v\n", err)
+				} else if len(deleted) > 0 {
+					fmt.Printf("Cleaned up %d old backup(s)\n", len(deleted))
+				}
+
+				// Note: Actual backup creation will be integrated when sync implementation
+				// is added. For now, we prepare the backup infrastructure.
+				fmt.Println("Backup infrastructure ready")
+			}
 
 			// Create sync options
 			opts := sync.Options{

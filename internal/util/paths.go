@@ -28,3 +28,22 @@ func CursorRulesPath(projectDir string) string {
 func CodexConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".codex")
 }
+
+// SkillsyncConfigPath returns the skillsync configuration directory
+// Supports SKILLSYNC_HOME environment variable override
+func SkillsyncConfigPath() string {
+	if configHome := os.Getenv("SKILLSYNC_HOME"); configHome != "" {
+		return configHome
+	}
+	return filepath.Join(HomeDir(), ".skillsync")
+}
+
+// SkillsyncBackupsPath returns the skillsync backups directory
+func SkillsyncBackupsPath() string {
+	return filepath.Join(SkillsyncConfigPath(), "backups")
+}
+
+// SkillsyncMetadataPath returns the skillsync metadata directory
+func SkillsyncMetadataPath() string {
+	return filepath.Join(SkillsyncConfigPath(), "metadata")
+}
