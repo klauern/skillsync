@@ -5,11 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/model"
+	parsercli "github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/parser/claude"
+	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -89,36 +94,45 @@ func syncCommand() *cli.Command {
 			skipBackup := cmd.Bool("skip-backup")
 			skipValidation := cmd.Bool("skip-validation")
 
-			// Validate before sync (unless skipped)
+			// Parse and validate source skills before sync (unless skipped)
+			var sourceSkills []model.Skill
 			if !skipValidation {
-				fmt.Println("Validating sync configuration...")
+				fmt.Println("Validating source skills...")
 
-				// Get platform paths for validation
-				sourcePath, err := validation.GetPlatformPath(sourcePlatform)
+				sourceSkills, err = parsePlatformSkills(sourcePlatform)
 				if err != nil {
-					return fmt.Errorf("failed to get source platform path: %w", err)
+					return fmt.Errorf("failed to parse source skills: %w", err)
 				}
-				targetPath, err := validation.GetPlatformPath(targetPlatform)
+
+				// Validate skill formats
+				formatResult, err := validation.ValidateSkillsFormat(sourceSkills, sourcePlatform)
 				if err != nil {
-					return fmt.Errorf("failed to get target platform path: %w", err)
+					return fmt.Errorf("validation error: %w", err)
 				}
 
-				// Validate source and target paths exist
-				if err := validation.ValidatePath(sourcePath, sourcePlatform); err != nil {
-					return fmt.Errorf("source validation failed: %w", err)
+				// Show warnings
+				for _, warning := range formatResult.Warnings {
+					fmt.Printf("  Warning: %s\n", warning)
 				}
 
-				// For target, validate parent directory if path doesn't exist yet
-				if err := validation.ValidatePath(targetPath, targetPlatform); err != nil {
-					var vErr *validation.Error
-					if !errors.As(err, &vErr) || vErr.Message != "path does not exist" {
-						return fmt.Errorf("target validation failed: %w", err)
+				// Check for validation errors
+				if formatResult.HasErrors() {
+					fmt.Println("\nValidation failed - the following issues were found:")
+					for i, e := range formatResult.Errors {
+						fmt.Printf("  %d. %s\n", i+1, formatValidationError(e, sourceSkills))
 					}
-					// Path doesn't exist - validate parent directory
-					parentDir := targetPath[:len(targetPath)-1] // rough trim for now
-					if err := validation.ValidatePath(parentDir, targetPlatform); err != nil {
-						return fmt.Errorf("target parent directory validation failed: %w", err)
-					}
+					return errors.New("skill validation failed - fix the issues above and try again")
+				}
+
+				if len(sourceSkills) == 0 {
+					fmt.Println("  No skills found in source directory")
+				} else {
+					fmt.Printf("  Found %d valid skill(s)\n", len(sourceSkills))
+				}
+
+				// Validate paths and permissions
+				if err := validateSyncPaths(sourcePlatform, targetPlatform); err != nil {
+					return err
 				}
 
 				fmt.Println("Validation passed")
@@ -164,4 +178,113 @@ func syncCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+// parsePlatformSkills parses skills from the given platform
+func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
+	var parserInstance parsercli.Parser
+
+	switch platform {
+	case model.ClaudeCode:
+		parserInstance = claude.New("")
+	case model.Cursor:
+		parserInstance = cursor.New("")
+	case model.Codex:
+		return nil, fmt.Errorf("codex platform parsing not yet implemented")
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	skills, err := parserInstance.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse skills from %s: %w", platform, err)
+	}
+
+	return skills, nil
+}
+
+// formatValidationError formats a validation error for display with context
+func formatValidationError(err error, skills []model.Skill) string {
+	var vErr *validation.Error
+	if errors.As(err, &vErr) {
+		msg := vErr.Message
+		// Add helpful suggestions for common errors
+		switch {
+		case vErr.Field == "skills[0].name" || msg == "skill name cannot be empty":
+			msg += " (ensure each skill file has a name in frontmatter or a valid filename)"
+		case strings.Contains(msg, "duplicate skill name"):
+			msg += " (rename one of the conflicting skills)"
+		case strings.Contains(msg, "cannot access skill file"):
+			msg += " (check file path and permissions)"
+		}
+		return fmt.Sprintf("%s: %s", vErr.Field, msg)
+	}
+
+	// Handle Errors collection
+	var vErrors validation.Errors
+	if errors.As(err, &vErrors) {
+		var msgs []string
+		for _, e := range vErrors {
+			msgs = append(msgs, formatValidationError(e, skills))
+		}
+		return strings.Join(msgs, "; ")
+	}
+
+	return err.Error()
+}
+
+// validateSyncPaths validates source and target paths before sync
+func validateSyncPaths(sourcePlatform, targetPlatform model.Platform) error {
+	// Validate source path exists
+	sourcePath, err := validation.GetPlatformPath(sourcePlatform)
+	if err != nil {
+		return fmt.Errorf("source path error: %w", err)
+	}
+
+	if err := validation.ValidatePath(sourcePath, sourcePlatform); err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+
+	// Validate target path (or parent if it doesn't exist)
+	targetPath, err := validation.GetPlatformPath(targetPlatform)
+	if err != nil {
+		return fmt.Errorf("target path error: %w", err)
+	}
+
+	if err := validation.ValidatePath(targetPath, targetPlatform); err != nil {
+		var vErr *validation.Error
+		if errors.As(err, &vErr) && vErr.Message == "path does not exist" {
+			// Target doesn't exist - validate parent directory is writable
+			parentDir := targetPath[:len(targetPath)-1]
+			if err := validation.ValidatePath(parentDir, targetPlatform); err != nil {
+				return fmt.Errorf("target parent directory validation failed: %w", err)
+			}
+			// Check write permission on parent
+			if err := checkWritePermission(parentDir); err != nil {
+				return fmt.Errorf("target directory not writable: %w", err)
+			}
+		} else {
+			return fmt.Errorf("target validation failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// checkWritePermission verifies a directory is writable
+func checkWritePermission(path string) error {
+	// If path doesn't exist, check parent
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		path = "." // fallback to current directory
+	}
+
+	testFile := path + "/.skillsync-write-test"
+	// #nosec G304 - testFile is constructed from validated path and is not user input
+	f, err := os.Create(testFile)
+	if err != nil {
+		return fmt.Errorf("cannot write to directory: %w", err)
+	}
+	_ = f.Close()
+	_ = os.Remove(testFile)
+	return nil
 }

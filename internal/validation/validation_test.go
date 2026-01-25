@@ -179,7 +179,7 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			tmpDir := t.TempDir()
 			skillPath := filepath.Join(tmpDir, filepath.Base(tt.path))
 			// #nosec G306 - test file permissions are acceptable
-	if err := os.WriteFile(skillPath, []byte("test"), 0o644); err != nil {
+			if err := os.WriteFile(skillPath, []byte("test"), 0o644); err != nil {
 				t.Fatalf("failed to create test file: %v", err)
 			}
 			skill.Path = skillPath
@@ -217,7 +217,7 @@ func TestValidateSkill_StrictMode(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillPath := filepath.Join(tmpDir, "test.md")
 		// #nosec G306 - test file permissions are acceptable
-	if err := os.WriteFile(skillPath, []byte(""), 0o644); err != nil {
+		if err := os.WriteFile(skillPath, []byte(""), 0o644); err != nil {
 			t.Fatalf("failed to create test file: %v", err)
 		}
 
@@ -459,7 +459,7 @@ func TestGetPlatformPath(t *testing.T) {
 
 func TestValidationError_Error(t *testing.T) {
 	t.Run("with underlying error", func(t *testing.T) {
-		err :=  &Error{
+		err := &Error{
 			Field:   "test",
 			Message: "failed",
 			Err:     errors.New("underlying"),
@@ -470,7 +470,7 @@ func TestValidationError_Error(t *testing.T) {
 	})
 
 	t.Run("without underlying error", func(t *testing.T) {
-		err :=  &Error{
+		err := &Error{
 			Field:   "test",
 			Message: "failed",
 		}
@@ -492,7 +492,7 @@ func TestValidateWritePermission(t *testing.T) {
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")
 		// #nosec G301 - test directory permissions are acceptable
-	if err := os.Mkdir(readOnlyDir, 0o444); err != nil {
+		if err := os.Mkdir(readOnlyDir, 0o444); err != nil {
 			t.Fatalf("failed to create read-only dir: %v", err)
 		}
 
