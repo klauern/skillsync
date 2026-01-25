@@ -31,7 +31,7 @@ func TestSyncCommand(t *testing.T) {
 		wantOutput string
 	}{
 		"valid sync": {
-			args:       []string{"skillsync", "sync", "--skip-validation", "claudecode", "cursor"},
+			args:       []string{"skillsync", "sync", "--skip-validation", "--yes", "claudecode", "cursor"},
 			wantErr:    false,
 			wantOutput: "Syncing from claude-code to cursor",
 		},

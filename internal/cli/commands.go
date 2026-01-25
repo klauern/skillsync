@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -70,6 +71,11 @@ func syncCommand() *cli.Command {
 				Name:  "skip-validation",
 				Usage: "Skip validation checks (not recommended)",
 			},
+			&cli.BoolFlag{
+				Name:    "yes",
+				Aliases: []string{"y"},
+				Usage:   "Skip confirmation prompts (use with caution)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			// Parse arguments
@@ -93,9 +99,10 @@ func syncCommand() *cli.Command {
 			dryRun := cmd.Bool("dry-run")
 			skipBackup := cmd.Bool("skip-backup")
 			skipValidation := cmd.Bool("skip-validation")
+			yesFlag := cmd.Bool("yes")
 
 			// Parse and validate source skills before sync (unless skipped)
-			var sourceSkills []model.Skill
+			sourceSkills := make([]model.Skill, 0)
 			if !skipValidation {
 				fmt.Println("Validating source skills...")
 
@@ -138,9 +145,43 @@ func syncCommand() *cli.Command {
 				fmt.Println("Validation passed")
 			}
 
+			// Show summary and request confirmation (unless --yes or --dry-run)
+			if !dryRun && !yesFlag {
+				fmt.Printf("\n=== Sync Summary ===\n")
+				fmt.Printf("Source: %s\n", sourcePlatform)
+				fmt.Printf("Target: %s\n", targetPlatform)
+
+				if len(sourceSkills) > 0 {
+					fmt.Printf("Skills to sync: %d\n", len(sourceSkills))
+					for i, skill := range sourceSkills {
+						fmt.Printf("  %d. %s\n", i+1, skill.Name)
+					}
+				}
+
+				if skipBackup {
+					fmt.Println("Warning: Backup will be skipped (--skip-backup flag)")
+				}
+
+				// Determine risk level
+				riskLevel := riskLevelInfo
+				if skipBackup || skipValidation {
+					riskLevel = riskLevelWarning
+				}
+
+				// Request confirmation
+				confirmed, err := confirmAction("Proceed with sync?", riskLevel)
+				if err != nil {
+					return fmt.Errorf("confirmation error: %w", err)
+				}
+				if !confirmed {
+					fmt.Println("Sync cancelled by user")
+					return nil
+				}
+			}
+
 			// Create backup before sync (unless skipped or dry-run)
 			if !dryRun && !skipBackup {
-				fmt.Println("Creating backup before sync...")
+				fmt.Println("\nCreating backup before sync...")
 
 				// Run automatic cleanup to maintain retention policy
 				cleanupOpts := backup.DefaultCleanupOptions()
@@ -166,13 +207,13 @@ func syncCommand() *cli.Command {
 			// TODO: Create actual syncer implementation
 			// For now, just show what would happen
 			if dryRun {
-				fmt.Printf("DRY RUN: Would sync from %s to %s\n", sourcePlatform, targetPlatform)
+				fmt.Printf("\nDRY RUN: Would sync from %s to %s\n", sourcePlatform, targetPlatform)
 				fmt.Println("\nProposed changes:")
 				fmt.Println("  (Sync implementation not yet available)")
 				return nil
 			}
 
-			fmt.Printf("Syncing from %s to %s...\n", sourcePlatform, targetPlatform)
+			fmt.Printf("\nSyncing from %s to %s...\n", sourcePlatform, targetPlatform)
 			fmt.Printf("Options: %+v\n", opts)
 			fmt.Println("(Sync implementation not yet available)")
 			return nil
@@ -287,4 +328,55 @@ func checkWritePermission(path string) error {
 	_ = f.Close()
 	_ = os.Remove(testFile)
 	return nil
+}
+
+// riskLevel defines the severity level for confirmation prompts
+type riskLevel int
+
+const (
+	riskLevelInfo      riskLevel = iota // Informational, low risk
+	riskLevelWarning                    // Warning, moderate risk
+	riskLevelDangerous                  // Dangerous, high risk
+)
+
+// confirmAction prompts the user for confirmation before proceeding with an action
+func confirmAction(message string, level riskLevel) (bool, error) {
+	// Build prompt based on risk level
+	var prompt string
+	var defaultYes bool
+
+	switch level {
+	case riskLevelInfo:
+		prompt = fmt.Sprintf("%s [Y/n]", message)
+		defaultYes = true
+	case riskLevelWarning:
+		prompt = fmt.Sprintf("%s [y/N]", message)
+		defaultYes = false
+	case riskLevelDangerous:
+		prompt = fmt.Sprintf("⚠️  %s [y/N] (This operation cannot be undone)", message)
+		defaultYes = false
+	default:
+		prompt = fmt.Sprintf("%s [y/N]", message)
+		defaultYes = false
+	}
+
+	fmt.Printf("\n%s ", prompt)
+
+	// Read user input
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, fmt.Errorf("failed to read input: %w", err)
+	}
+
+	// Trim whitespace and convert to lowercase
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	// Handle empty input (use default)
+	if response == "" {
+		return defaultYes, nil
+	}
+
+	// Parse response
+	return response == "y" || response == "yes", nil
 }
