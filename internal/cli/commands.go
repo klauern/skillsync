@@ -165,14 +165,27 @@ func syncCommand() *cli.Command {
 
    Supported platforms: claudecode, cursor, codex
 
+   Strategies:
+     overwrite - Replace target skills unconditionally (default)
+     skip      - Skip skills that already exist in target
+     newer     - Copy only if source is newer than target
+     merge     - Merge source and target content
+
    Examples:
      skillsync sync claudecode cursor
-     skillsync sync --dry-run cursor codex`,
+     skillsync sync --dry-run cursor codex
+     skillsync sync --strategy=skip claude-code cursor`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "dry-run",
 				Aliases: []string{"d"},
 				Usage:   "Preview changes without modifying files",
+			},
+			&cli.StringFlag{
+				Name:    "strategy",
+				Aliases: []string{"s"},
+				Value:   "overwrite",
+				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge",
 			},
 			&cli.BoolFlag{
 				Name:  "skip-backup",
@@ -189,98 +202,21 @@ func syncCommand() *cli.Command {
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			// Parse arguments
-			args := cmd.Args()
-			if args.Len() != 2 {
-				return errors.New("sync requires exactly 2 arguments: <source> <target>")
-			}
-
-			// Parse platforms
-			sourcePlatform, err := model.ParsePlatform(args.Get(0))
+			cfg, err := parseSyncConfig(cmd)
 			if err != nil {
-				return fmt.Errorf("invalid source platform: %w", err)
+				return err
 			}
 
-			targetPlatform, err := model.ParsePlatform(args.Get(1))
-			if err != nil {
-				return fmt.Errorf("invalid target platform: %w", err)
-			}
-
-			// Get flags
-			dryRun := cmd.Bool("dry-run")
-			skipBackup := cmd.Bool("skip-backup")
-			skipValidation := cmd.Bool("skip-validation")
-			yesFlag := cmd.Bool("yes")
-
-			// Parse and validate source skills before sync (unless skipped)
-			sourceSkills := make([]model.Skill, 0)
-			if !skipValidation {
-				fmt.Println("Validating source skills...")
-
-				sourceSkills, err = parsePlatformSkills(sourcePlatform)
-				if err != nil {
-					return fmt.Errorf("failed to parse source skills: %w", err)
-				}
-
-				// Validate skill formats
-				formatResult, err := validation.ValidateSkillsFormat(sourceSkills, sourcePlatform)
-				if err != nil {
-					return fmt.Errorf("validation error: %w", err)
-				}
-
-				// Show warnings
-				for _, warning := range formatResult.Warnings {
-					fmt.Printf("  Warning: %s\n", warning)
-				}
-
-				// Check for validation errors
-				if formatResult.HasErrors() {
-					fmt.Println("\nValidation failed - the following issues were found:")
-					for i, e := range formatResult.Errors {
-						fmt.Printf("  %d. %s\n", i+1, formatValidationError(e, sourceSkills))
-					}
-					return errors.New("skill validation failed - fix the issues above and try again")
-				}
-
-				if len(sourceSkills) == 0 {
-					fmt.Println("  No skills found in source directory")
-				} else {
-					fmt.Printf("  Found %d valid skill(s)\n", len(sourceSkills))
-				}
-
-				// Validate paths and permissions
-				if err := validateSyncPaths(sourcePlatform, targetPlatform); err != nil {
+			// Validate source skills before sync (unless skipped)
+			if !cfg.skipValidation {
+				if err := validateSourceSkills(cfg); err != nil {
 					return err
 				}
-
-				fmt.Println("Validation passed")
 			}
 
 			// Show summary and request confirmation (unless --yes or --dry-run)
-			if !dryRun && !yesFlag {
-				fmt.Printf("\n=== Sync Summary ===\n")
-				fmt.Printf("Source: %s\n", sourcePlatform)
-				fmt.Printf("Target: %s\n", targetPlatform)
-
-				if len(sourceSkills) > 0 {
-					fmt.Printf("Skills to sync: %d\n", len(sourceSkills))
-					for i, skill := range sourceSkills {
-						fmt.Printf("  %d. %s\n", i+1, skill.Name)
-					}
-				}
-
-				if skipBackup {
-					fmt.Println("Warning: Backup will be skipped (--skip-backup flag)")
-				}
-
-				// Determine risk level
-				riskLevel := riskLevelInfo
-				if skipBackup || skipValidation {
-					riskLevel = riskLevelWarning
-				}
-
-				// Request confirmation
-				confirmed, err := confirmAction("Proceed with sync?", riskLevel)
+			if !cfg.dryRun && !cfg.yesFlag {
+				confirmed, err := showSyncSummaryAndConfirm(cfg)
 				if err != nil {
 					return fmt.Errorf("confirmation error: %w", err)
 				}
@@ -291,44 +227,196 @@ func syncCommand() *cli.Command {
 			}
 
 			// Create backup before sync (unless skipped or dry-run)
-			if !dryRun && !skipBackup {
-				fmt.Println("\nCreating backup before sync...")
-
-				// Run automatic cleanup to maintain retention policy
-				cleanupOpts := backup.DefaultCleanupOptions()
-				cleanupOpts.Platform = string(targetPlatform)
-
-				deleted, err := backup.CleanupBackups(cleanupOpts)
-				if err != nil {
-					fmt.Printf("Warning: backup cleanup failed: %v\n", err)
-				} else if len(deleted) > 0 {
-					fmt.Printf("Cleaned up %d old backup(s)\n", len(deleted))
-				}
-
-				// Note: Actual backup creation will be integrated when sync implementation
-				// is added. For now, we prepare the backup infrastructure.
-				fmt.Println("Backup infrastructure ready")
+			if !cfg.dryRun && !cfg.skipBackup {
+				prepareBackup(cfg.targetPlatform)
 			}
 
-			// Create sync options
+			// Create sync options and execute
 			opts := sync.Options{
-				DryRun: dryRun,
+				DryRun:   cfg.dryRun,
+				Strategy: cfg.strategy,
 			}
 
-			// TODO: Create actual syncer implementation
-			// For now, just show what would happen
-			if dryRun {
-				fmt.Printf("\nDRY RUN: Would sync from %s to %s\n", sourcePlatform, targetPlatform)
-				fmt.Println("\nProposed changes:")
-				fmt.Println("  (Sync implementation not yet available)")
-				return nil
+			syncer := sync.New()
+			result, err := syncer.Sync(cfg.sourcePlatform, cfg.targetPlatform, opts)
+			if err != nil {
+				return fmt.Errorf("sync failed: %w", err)
 			}
 
-			fmt.Printf("\nSyncing from %s to %s...\n", sourcePlatform, targetPlatform)
-			fmt.Printf("Options: %+v\n", opts)
-			fmt.Println("(Sync implementation not yet available)")
+			displaySyncResults(result)
+
+			if !result.Success() {
+				return errors.New("sync completed with errors")
+			}
+
 			return nil
 		},
+	}
+}
+
+// syncConfig holds the parsed configuration for a sync command
+type syncConfig struct {
+	sourcePlatform model.Platform
+	targetPlatform model.Platform
+	dryRun         bool
+	strategy       sync.Strategy
+	skipBackup     bool
+	skipValidation bool
+	yesFlag        bool
+	sourceSkills   []model.Skill
+}
+
+// parseSyncConfig parses and validates sync command arguments and flags
+func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
+	args := cmd.Args()
+	if args.Len() != 2 {
+		return nil, errors.New("sync requires exactly 2 arguments: <source> <target>")
+	}
+
+	sourcePlatform, err := model.ParsePlatform(args.Get(0))
+	if err != nil {
+		return nil, fmt.Errorf("invalid source platform: %w", err)
+	}
+
+	targetPlatform, err := model.ParsePlatform(args.Get(1))
+	if err != nil {
+		return nil, fmt.Errorf("invalid target platform: %w", err)
+	}
+
+	strategyStr := cmd.String("strategy")
+	strategy := sync.Strategy(strategyStr)
+	if !strategy.IsValid() {
+		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge)", strategyStr)
+	}
+
+	return &syncConfig{
+		sourcePlatform: sourcePlatform,
+		targetPlatform: targetPlatform,
+		dryRun:         cmd.Bool("dry-run"),
+		strategy:       strategy,
+		skipBackup:     cmd.Bool("skip-backup"),
+		skipValidation: cmd.Bool("skip-validation"),
+		yesFlag:        cmd.Bool("yes"),
+		sourceSkills:   make([]model.Skill, 0),
+	}, nil
+}
+
+// validateSourceSkills validates source skills and returns them
+func validateSourceSkills(cfg *syncConfig) error {
+	fmt.Println("Validating source skills...")
+
+	var err error
+	cfg.sourceSkills, err = parsePlatformSkills(cfg.sourcePlatform)
+	if err != nil {
+		return fmt.Errorf("failed to parse source skills: %w", err)
+	}
+
+	// Validate skill formats
+	formatResult, err := validation.ValidateSkillsFormat(cfg.sourceSkills, cfg.sourcePlatform)
+	if err != nil {
+		return fmt.Errorf("validation error: %w", err)
+	}
+
+	// Show warnings
+	for _, warning := range formatResult.Warnings {
+		fmt.Printf("  Warning: %s\n", warning)
+	}
+
+	// Check for validation errors
+	if formatResult.HasErrors() {
+		fmt.Println("\nValidation failed - the following issues were found:")
+		for i, e := range formatResult.Errors {
+			fmt.Printf("  %d. %s\n", i+1, formatValidationError(e, cfg.sourceSkills))
+		}
+		return errors.New("skill validation failed - fix the issues above and try again")
+	}
+
+	if len(cfg.sourceSkills) == 0 {
+		fmt.Println("  No skills found in source directory")
+	} else {
+		fmt.Printf("  Found %d valid skill(s)\n", len(cfg.sourceSkills))
+	}
+
+	// Validate paths and permissions
+	if err := validateSyncPaths(cfg.sourcePlatform, cfg.targetPlatform); err != nil {
+		return err
+	}
+
+	fmt.Println("Validation passed")
+	return nil
+}
+
+// showSyncSummaryAndConfirm shows sync summary and requests user confirmation
+func showSyncSummaryAndConfirm(cfg *syncConfig) (bool, error) {
+	fmt.Printf("\n=== Sync Summary ===\n")
+	fmt.Printf("Source: %s\n", cfg.sourcePlatform)
+	fmt.Printf("Target: %s\n", cfg.targetPlatform)
+	fmt.Printf("Strategy: %s (%s)\n", cfg.strategy, cfg.strategy.Description())
+
+	if len(cfg.sourceSkills) > 0 {
+		fmt.Printf("Skills to sync: %d\n", len(cfg.sourceSkills))
+		for i, skill := range cfg.sourceSkills {
+			fmt.Printf("  %d. %s\n", i+1, skill.Name)
+		}
+	}
+
+	if cfg.skipBackup {
+		fmt.Println("Warning: Backup will be skipped (--skip-backup flag)")
+	}
+
+	// Determine risk level
+	level := riskLevelInfo
+	if cfg.skipBackup || cfg.skipValidation {
+		level = riskLevelWarning
+	}
+
+	return confirmAction("Proceed with sync?", level)
+}
+
+// prepareBackup runs backup cleanup before sync
+func prepareBackup(targetPlatform model.Platform) {
+	fmt.Println("\nCreating backup before sync...")
+
+	// Run automatic cleanup to maintain retention policy
+	cleanupOpts := backup.DefaultCleanupOptions()
+	cleanupOpts.Platform = string(targetPlatform)
+
+	deleted, err := backup.CleanupBackups(cleanupOpts)
+	if err != nil {
+		fmt.Printf("Warning: backup cleanup failed: %v\n", err)
+	} else if len(deleted) > 0 {
+		fmt.Printf("Cleaned up %d old backup(s)\n", len(deleted))
+	}
+
+	fmt.Println("Backup infrastructure ready")
+}
+
+// displaySyncResults shows the results of a sync operation
+func displaySyncResults(result *sync.Result) {
+	fmt.Println()
+	fmt.Print(result.Summary())
+
+	if len(result.Skills) > 0 {
+		fmt.Println("\nDetails:")
+		for _, sr := range result.Skills {
+			var status string
+			switch sr.Action {
+			case sync.ActionFailed:
+				status = "✗"
+			case sync.ActionSkipped:
+				status = "-"
+			default:
+				status = "✓"
+			}
+			fmt.Printf("  %s %s: %s", status, sr.Skill.Name, sr.Action)
+			if sr.Message != "" {
+				fmt.Printf(" (%s)", sr.Message)
+			}
+			if sr.Error != nil {
+				fmt.Printf(" - Error: %v", sr.Error)
+			}
+			fmt.Println()
+		}
 	}
 }
 
