@@ -24,6 +24,11 @@ func CursorRulesPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "rules")
 }
 
+// CursorSkillsPath returns the default Cursor rules directory (global)
+func CursorSkillsPath() string {
+	return filepath.Join(HomeDir(), ".cursor", "rules")
+}
+
 // CodexConfigPath returns the Codex config directory for a project
 func CodexConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".codex")
