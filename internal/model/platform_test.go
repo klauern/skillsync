@@ -38,3 +38,36 @@ func TestAllPlatforms(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePlatform(t *testing.T) {
+	tests := map[string]struct {
+		input   string
+		want    Platform
+		wantErr bool
+	}{
+		"claude-code exact":     {input: "claude-code", want: ClaudeCode, wantErr: false},
+		"claudecode normalized": {input: "claudecode", want: ClaudeCode, wantErr: false},
+		"claude shorthand":      {input: "claude", want: ClaudeCode, wantErr: false},
+		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
+		"codex exact":           {input: "codex", want: Codex, wantErr: false},
+		"uppercase normalized":  {input: "CURSOR", want: Cursor, wantErr: false},
+		"mixed case":            {input: "ClaudeCode", want: ClaudeCode, wantErr: false},
+		"with whitespace":       {input: "  cursor  ", want: Cursor, wantErr: false},
+		"unknown platform":      {input: "unknown", want: "", wantErr: true},
+		"empty string":          {input: "", want: "", wantErr: true},
+		"invalid name":          {input: "vscode", want: "", wantErr: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := ParsePlatform(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParsePlatform(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("ParsePlatform(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
