@@ -15,6 +15,7 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 	parsercli "github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
+	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/validation"
@@ -231,7 +232,7 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 	case model.Cursor:
 		parserInstance = cursor.New("")
 	case model.Codex:
-		return nil, fmt.Errorf("codex platform parsing not yet implemented")
+		parserInstance = codex.New("")
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
