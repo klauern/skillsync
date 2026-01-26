@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauern/skillsync/internal/backup"
 )
@@ -278,6 +279,147 @@ func TestOutputBackupsTable(t *testing.T) {
 
 			if !strings.Contains(output, tt.wantOutput) {
 				t.Errorf("outputBackupsTable() output = %q, want substring %q", output, tt.wantOutput)
+			}
+		})
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	tests := map[string]struct {
+		input   string
+		want    time.Duration
+		wantErr bool
+	}{
+		"days lowercase": {
+			input: "30d",
+			want:  30 * 24 * time.Hour,
+		},
+		"days uppercase": {
+			input: "30D",
+			want:  30 * 24 * time.Hour,
+		},
+		"weeks lowercase": {
+			input: "2w",
+			want:  2 * 7 * 24 * time.Hour,
+		},
+		"weeks uppercase": {
+			input: "2W",
+			want:  2 * 7 * 24 * time.Hour,
+		},
+		"hours": {
+			input: "168h",
+			want:  168 * time.Hour,
+		},
+		"minutes": {
+			input: "30m",
+			want:  30 * time.Minute,
+		},
+		"complex duration": {
+			input: "1h30m",
+			want:  1*time.Hour + 30*time.Minute,
+		},
+		"invalid day format": {
+			input:   "abcd",
+			wantErr: true,
+		},
+		"invalid week format": {
+			input:   "xyzw",
+			wantErr: true,
+		},
+		"empty string": {
+			input:   "",
+			wantErr: true,
+		},
+		"single character": {
+			input:   "d",
+			wantErr: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := parseDuration(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseDuration(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("parseDuration(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBackupDeleteCommand(t *testing.T) {
+	tests := map[string]struct {
+		args       []string
+		wantErr    bool
+		wantOutput string
+	}{
+		"delete without args or flags": {
+			args:    []string{"skillsync", "backup", "delete"},
+			wantErr: true,
+		},
+		"delete with non-existent backup ID": {
+			args:    []string{"skillsync", "backup", "delete", "non-existent-id", "--force"},
+			wantErr: true,
+		},
+		"delete with keep-latest no backups": {
+			args:       []string{"skillsync", "backup", "delete", "--keep-latest", "5", "--force"},
+			wantErr:    false,
+			wantOutput: "No backups found",
+		},
+		"delete with older-than no backups": {
+			args:       []string{"skillsync", "backup", "delete", "--older-than", "30d", "--force"},
+			wantErr:    false,
+			wantOutput: "No backups found",
+		},
+		"delete with platform filter no backups": {
+			args:       []string{"skillsync", "backup", "delete", "--older-than", "1d", "--platform", "claude-code", "--force"},
+			wantErr:    false,
+			wantOutput: "No backups found",
+		},
+		"delete with invalid duration": {
+			args:    []string{"skillsync", "backup", "delete", "--older-than", "invalid"},
+			wantErr: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Capture stdout
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Run command
+			ctx := context.Background()
+			err := Run(ctx, tt.args)
+
+			// Restore stdout
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close pipe writer: %v", err)
+			}
+			os.Stdout = old
+
+			// Read captured output
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, r); err != nil {
+				t.Fatalf("failed to read captured output: %v", err)
+			}
+			output := buf.String()
+
+			// Check error expectation
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Run() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			// Check output if no error expected
+			if !tt.wantErr && tt.wantOutput != "" {
+				if !strings.Contains(output, tt.wantOutput) {
+					t.Errorf("Run() output = %q, want substring %q", output, tt.wantOutput)
+				}
 			}
 		})
 	}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
@@ -1067,6 +1068,7 @@ func backupCommand() *cli.Command {
 		Commands: []*cli.Command{
 			backupListCommand(),
 			backupRestoreCommand(),
+			backupDeleteCommand(),
 		},
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: list backups
@@ -1237,6 +1239,247 @@ func restoreBackup(backupID, targetPath string, force bool) error {
 
 	fmt.Printf("\n✓ Successfully restored backup to %s\n", targetPath)
 	return nil
+}
+
+func backupDeleteCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "delete",
+		Usage: "Delete old backups",
+		UsageText: `skillsync backup delete [options] [backup-id...]
+   skillsync backup delete <backup-id>              # Delete specific backup
+   skillsync backup delete --older-than 30d         # Delete backups older than 30 days
+   skillsync backup delete --keep-latest 5          # Keep only 5 most recent backups
+   skillsync backup delete --platform claude-code --keep-latest 3`,
+		Description: `Delete backups by ID, age, or count-based retention.
+
+   By ID: Pass one or more backup IDs as arguments
+   By Age: Use --older-than with a duration (e.g., 30d, 2w, 168h)
+   By Count: Use --keep-latest N to keep only N most recent backups
+
+   Combine --platform with --older-than or --keep-latest to filter by platform.
+   Use --force to skip confirmation prompt.
+
+   Examples of duration formats:
+     30d   = 30 days
+     2w    = 2 weeks (14 days)
+     168h  = 168 hours (7 days)`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "older-than",
+				Aliases: []string{"o"},
+				Usage:   "Delete backups older than duration (e.g., 30d, 2w, 168h)",
+			},
+			&cli.IntFlag{
+				Name:    "keep-latest",
+				Aliases: []string{"k"},
+				Value:   0,
+				Usage:   "Keep only N most recent backups (0 = disabled)",
+			},
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Filter by platform (claude-code, cursor, codex)",
+			},
+			&cli.BoolFlag{
+				Name:    "force",
+				Aliases: []string{"f"},
+				Usage:   "Skip confirmation prompt",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			olderThan := cmd.String("older-than")
+			keepLatest := cmd.Int("keep-latest")
+			platform := cmd.String("platform")
+			force := cmd.Bool("force")
+
+			// Determine delete mode based on arguments and flags
+			if args.Len() > 0 {
+				// Delete by specific IDs
+				ids := make([]string, args.Len())
+				for i := 0; i < args.Len(); i++ {
+					ids[i] = args.Get(i)
+				}
+				return deleteBackupsByID(ids, force)
+			}
+
+			if olderThan != "" || keepLatest > 0 {
+				// Delete by retention policy
+				return deleteBackupsByPolicy(olderThan, int(keepLatest), platform, force)
+			}
+
+			return errors.New("either backup IDs or --older-than/--keep-latest flag is required")
+		},
+	}
+}
+
+// deleteBackupsByID deletes specific backups by their IDs
+func deleteBackupsByID(ids []string, force bool) error {
+	// Load index to verify backups exist
+	index, err := backup.LoadIndex()
+	if err != nil {
+		return fmt.Errorf("failed to load backup index: %w", err)
+	}
+
+	// Verify all IDs exist
+	var backupsToDelete []backup.Metadata
+	for _, id := range ids {
+		metadata, exists := index.Backups[id]
+		if !exists {
+			return fmt.Errorf("backup %q not found", id)
+		}
+		backupsToDelete = append(backupsToDelete, metadata)
+	}
+
+	// Display what will be deleted
+	fmt.Printf("\nBackups to delete (%d):\n", len(backupsToDelete))
+	for _, b := range backupsToDelete {
+		fmt.Printf("  - %s (%s, %s)\n", b.ID, b.Platform, formatSize(b.Size))
+	}
+
+	// Confirm unless force flag is set
+	if !force {
+		message := fmt.Sprintf("Delete %d backup(s)?", len(backupsToDelete))
+		confirmed, err := confirmAction(message, riskLevelWarning)
+		if err != nil {
+			return fmt.Errorf("confirmation error: %w", err)
+		}
+		if !confirmed {
+			fmt.Println("Delete cancelled.")
+			return nil
+		}
+	}
+
+	// Delete each backup
+	var deleted int
+	for _, b := range backupsToDelete {
+		if err := backup.DeleteBackup(b.ID); err != nil {
+			return fmt.Errorf("failed to delete backup %q: %w", b.ID, err)
+		}
+		deleted++
+	}
+
+	fmt.Printf("\n✓ Deleted %d backup(s)\n", deleted)
+	return nil
+}
+
+// deleteBackupsByPolicy deletes backups based on age or count retention
+func deleteBackupsByPolicy(olderThan string, keepLatest int, platform string, force bool) error {
+	// Parse duration from --older-than flag
+	var maxAge time.Duration
+	if olderThan != "" {
+		duration, err := parseDuration(olderThan)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", olderThan, err)
+		}
+		maxAge = duration
+	}
+
+	// Get list of backups to analyze
+	backups, err := backup.ListBackups(platform)
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	if len(backups) == 0 {
+		fmt.Println("No backups found.")
+		return nil
+	}
+
+	// Determine which backups to delete
+	now := time.Now()
+	var toDelete []backup.Metadata
+
+	for i, b := range backups {
+		shouldDelete := false
+
+		// Check age
+		if maxAge > 0 && now.Sub(b.CreatedAt) > maxAge {
+			shouldDelete = true
+		}
+
+		// Check count limit (backups are already sorted newest first)
+		if keepLatest > 0 && i >= keepLatest {
+			shouldDelete = true
+		}
+
+		if shouldDelete {
+			toDelete = append(toDelete, b)
+		}
+	}
+
+	if len(toDelete) == 0 {
+		fmt.Println("No backups match the deletion criteria.")
+		return nil
+	}
+
+	// Display what will be deleted
+	var totalSize int64
+	fmt.Printf("\nBackups to delete (%d):\n", len(toDelete))
+	for _, b := range toDelete {
+		fmt.Printf("  - %s (%s, %s, %s)\n",
+			b.ID, b.Platform, formatSize(b.Size), b.CreatedAt.Format("2006-01-02"))
+		totalSize += b.Size
+	}
+	fmt.Printf("\nTotal space to free: %s\n", formatSize(totalSize))
+
+	// Show what will be kept
+	keptCount := len(backups) - len(toDelete)
+	fmt.Printf("Backups remaining: %d\n", keptCount)
+
+	// Confirm unless force flag is set
+	if !force {
+		message := fmt.Sprintf("Delete %d backup(s)?", len(toDelete))
+		confirmed, err := confirmAction(message, riskLevelWarning)
+		if err != nil {
+			return fmt.Errorf("confirmation error: %w", err)
+		}
+		if !confirmed {
+			fmt.Println("Delete cancelled.")
+			return nil
+		}
+	}
+
+	// Delete each backup
+	var deleted int
+	for _, b := range toDelete {
+		if err := backup.DeleteBackup(b.ID); err != nil {
+			return fmt.Errorf("failed to delete backup %q: %w", b.ID, err)
+		}
+		deleted++
+	}
+
+	fmt.Printf("\n✓ Deleted %d backup(s), freed %s\n", deleted, formatSize(totalSize))
+	return nil
+}
+
+// parseDuration parses a duration string with support for day and week units
+func parseDuration(s string) (time.Duration, error) {
+	// Check for custom units (days, weeks)
+	if len(s) >= 2 {
+		lastChar := s[len(s)-1]
+		numPart := s[:len(s)-1]
+
+		switch lastChar {
+		case 'd', 'D':
+			// Days
+			var days int
+			if _, err := fmt.Sscanf(numPart, "%d", &days); err != nil {
+				return 0, fmt.Errorf("invalid day count: %s", numPart)
+			}
+			return time.Duration(days) * 24 * time.Hour, nil
+		case 'w', 'W':
+			// Weeks
+			var weeks int
+			if _, err := fmt.Sscanf(numPart, "%d", &weeks); err != nil {
+				return 0, fmt.Errorf("invalid week count: %s", numPart)
+			}
+			return time.Duration(weeks) * 7 * 24 * time.Hour, nil
+		}
+	}
+
+	// Fall back to standard Go duration parsing (hours, minutes, seconds)
+	return time.ParseDuration(s)
 }
 
 // outputBackups formats and prints backups in the requested format
