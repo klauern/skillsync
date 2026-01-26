@@ -29,6 +29,9 @@ func Run(ctx context.Context, args []string) error {
 			discoveryCommand(),
 			exportCommand(),
 			backupCommand(),
+			promoteCommand(),
+			demoteCommand(),
+			scopeCommand(),
 		},
 	}
 	return app.Run(ctx, args)
