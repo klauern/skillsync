@@ -2,6 +2,9 @@
 package ui
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/fatih/color"
 )
 
@@ -78,4 +81,49 @@ func EnableColors() {
 // IsColorEnabled returns whether colors are currently enabled.
 func IsColorEnabled() bool {
 	return !color.NoColor
+}
+
+// ConfigureColors sets up color output based on the provided setting.
+// Supports "auto", "always", "never", and respects NO_COLOR env var.
+// Priority order: NO_COLOR env var > explicit setting (always/never) > auto-detect
+func ConfigureColors(colorSetting string) {
+	// NO_COLOR env var takes highest priority per https://no-color.org/
+	if _, exists := os.LookupEnv("NO_COLOR"); exists {
+		DisableColors()
+		return
+	}
+
+	switch colorSetting {
+	case "never":
+		DisableColors()
+	case "always":
+		EnableColors()
+	case "auto", "":
+		// auto-detection is already handled by fatih/color library
+		// which checks if stdout is a terminal
+	}
+}
+
+// PrintSuccess prints a success message to stdout (green checkmark + message).
+func PrintSuccess(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Println(StatusSuccess(msg))
+}
+
+// PrintError prints an error message to stderr (red X + message).
+func PrintError(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintln(os.Stderr, StatusError(msg))
+}
+
+// PrintWarning prints a warning message to stderr (yellow warning + message).
+func PrintWarning(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintln(os.Stderr, StatusWarning(msg))
+}
+
+// PrintInfo prints an info message to stdout (cyan).
+func PrintInfo(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	fmt.Println(Info(msg))
 }

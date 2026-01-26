@@ -7,6 +7,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/ui"
 )
@@ -61,11 +62,25 @@ func Run(ctx context.Context, args []string) error {
 	return app.Run(ctx, args)
 }
 
-// configureColors sets up color output based on CLI flags.
+// configureColors sets up color output based on CLI flags and config.
+// Priority order: NO_COLOR env var > --no-color flag > config setting > auto-detect
 func configureColors(cmd *cli.Command) {
+	// --no-color flag takes precedence over config
 	if cmd.Bool("no-color") {
 		ui.DisableColors()
+		return
 	}
+
+	// Load config to get color setting
+	cfg, err := config.Load()
+	if err != nil {
+		// If config fails to load, use auto-detection
+		ui.ConfigureColors("auto")
+		return
+	}
+
+	// Use config's color setting (handles NO_COLOR env var internally)
+	ui.ConfigureColors(cfg.Output.Color)
 }
 
 // configureLogging sets up the logging level based on CLI flags.

@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"bytes"
+	"io"
+	"os"
 	"testing"
 )
 
@@ -81,5 +84,164 @@ func TestColorFunctions(t *testing.T) {
 	}
 	if got := Header("test"); got != "test" {
 		t.Errorf("Header() = %q, want %q", got, "test")
+	}
+}
+
+func TestConfigureColors(t *testing.T) {
+	// Save initial state
+	initial := IsColorEnabled()
+	defer func() {
+		if initial {
+			EnableColors()
+		} else {
+			DisableColors()
+		}
+	}()
+
+	tests := []struct {
+		name          string
+		setting       string
+		envNoColor    bool
+		expectEnabled bool
+	}{
+		{"never disables colors", "never", false, false},
+		{"always enables colors", "always", false, true},
+		{"auto keeps default", "auto", false, true}, // Default with fatih/color
+		{"empty keeps default", "", false, true},
+		{"NO_COLOR env overrides always", "always", true, false},
+		{"NO_COLOR env overrides auto", "auto", true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset to enabled state before each test
+			EnableColors()
+
+			if tt.envNoColor {
+				t.Setenv("NO_COLOR", "1")
+			}
+
+			ConfigureColors(tt.setting)
+
+			if got := IsColorEnabled(); got != tt.expectEnabled {
+				t.Errorf("IsColorEnabled() = %v, want %v", got, tt.expectEnabled)
+			}
+		})
+	}
+}
+
+func TestPrintSuccess(t *testing.T) {
+	DisableColors()
+	defer EnableColors()
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	PrintSuccess("operation completed")
+
+	_ = w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if output != SymbolSuccess+" operation completed\n" {
+		t.Errorf("PrintSuccess() output = %q, want %q", output, SymbolSuccess+" operation completed\n")
+	}
+}
+
+func TestPrintError(t *testing.T) {
+	DisableColors()
+	defer EnableColors()
+
+	// Capture stderr
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	PrintError("operation failed")
+
+	_ = w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if output != SymbolError+" operation failed\n" {
+		t.Errorf("PrintError() output = %q, want %q", output, SymbolError+" operation failed\n")
+	}
+}
+
+func TestPrintWarning(t *testing.T) {
+	DisableColors()
+	defer EnableColors()
+
+	// Capture stderr
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	PrintWarning("be careful")
+
+	_ = w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if output != SymbolWarning+" be careful\n" {
+		t.Errorf("PrintWarning() output = %q, want %q", output, SymbolWarning+" be careful\n")
+	}
+}
+
+func TestPrintInfo(t *testing.T) {
+	DisableColors()
+	defer EnableColors()
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	PrintInfo("informational message")
+
+	_ = w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if output != "informational message\n" {
+		t.Errorf("PrintInfo() output = %q, want %q", output, "informational message\n")
+	}
+}
+
+func TestPrintFunctionsWithFormat(t *testing.T) {
+	DisableColors()
+	defer EnableColors()
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	PrintSuccess("processed %d items", 42)
+
+	_ = w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	expected := SymbolSuccess + " processed 42 items\n"
+	if output != expected {
+		t.Errorf("PrintSuccess() with format = %q, want %q", output, expected)
 	}
 }
