@@ -9,6 +9,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/util"
@@ -78,7 +79,10 @@ func New(basePath string) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		// Return empty slice if directory doesn't exist (not an error)
+		logging.Debug("config directory not found",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+		)
 		return []model.Skill{}, nil
 	}
 
@@ -93,9 +97,19 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	// Parse AGENTS.md files
 	agentsSkills, err := p.parseAgentsFiles()
 	if err != nil {
+		logging.Error("failed to parse AGENTS.md files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+			logging.Err(err),
+		)
 		return nil, fmt.Errorf("failed to parse AGENTS.md files: %w", err)
 	}
 	skills = append(skills, agentsSkills...)
+
+	logging.Debug("completed parsing skills",
+		logging.Platform(string(p.Platform())),
+		logging.Count(len(skills)),
+	)
 
 	return skills, nil
 }
@@ -170,15 +184,30 @@ func (p *Parser) parseAgentsFiles() ([]model.Skill, error) {
 	patterns := []string{"AGENTS.md", "**/AGENTS.md"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
+		logging.Error("failed to discover AGENTS.md files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+			logging.Err(err),
+		)
 		return nil, fmt.Errorf("failed to discover AGENTS.md files: %w", err)
 	}
+
+	logging.Debug("discovered AGENTS.md files",
+		logging.Platform(string(p.Platform())),
+		logging.Path(p.basePath),
+		logging.Count(len(files)),
+	)
 
 	// Parse each file
 	skills := make([]model.Skill, 0, len(files))
 	for _, filePath := range files {
 		skill, err := p.parseAgentsFile(filePath)
 		if err != nil {
-			// Skip files with errors
+			logging.Warn("failed to parse AGENTS.md file",
+				logging.Platform(string(p.Platform())),
+				logging.Path(filePath),
+				logging.Err(err),
+			)
 			continue
 		}
 		skills = append(skills, skill)

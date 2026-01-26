@@ -182,3 +182,8 @@ func Err(err error) slog.Attr {
 	}
 	return slog.Any(KeyError, err)
 }
+
+// Count returns a slog attribute for item counts.
+func Count(n int) slog.Attr {
+	return slog.Int(KeyCount, n)
+}

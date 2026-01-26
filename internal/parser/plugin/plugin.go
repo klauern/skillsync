@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/util"
@@ -81,23 +82,45 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		var err error
 		repoPath, err = p.ensureRepo()
 		if err != nil {
+			logging.Error("failed to ensure repository",
+				logging.Platform(string(p.Platform())),
+				logging.Path(p.repoURL),
+				logging.Err(err),
+			)
 			return nil, fmt.Errorf("failed to ensure repository: %w", err)
 		}
 	}
 
 	// Check if the base path exists
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		logging.Debug("plugins directory not found",
+			logging.Platform(string(p.Platform())),
+			logging.Path(repoPath),
+		)
 		return []model.Skill{}, nil
 	}
 
 	// Try to parse as a plugin repository with marketplace.json
 	skills, err := p.parseMarketplace(repoPath)
 	if err == nil && len(skills) > 0 {
+		logging.Debug("parsed marketplace plugins",
+			logging.Platform(string(p.Platform())),
+			logging.Path(repoPath),
+			logging.Count(len(skills)),
+		)
 		return skills, nil
 	}
 
 	// Fall back to scanning for individual plugins
-	return p.scanForPlugins(repoPath)
+	scannedSkills, err := p.scanForPlugins(repoPath)
+	if err == nil {
+		logging.Debug("completed scanning plugins",
+			logging.Platform(string(p.Platform())),
+			logging.Path(repoPath),
+			logging.Count(len(scannedSkills)),
+		)
+	}
+	return scannedSkills, err
 }
 
 // parseMarketplace parses skills from a repository with .claude-plugin/marketplace.json
@@ -112,8 +135,19 @@ func (p *Parser) parseMarketplace(repoPath string) ([]model.Skill, error) {
 
 	var manifest MarketplaceManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
+		logging.Error("failed to parse marketplace.json",
+			logging.Platform(string(p.Platform())),
+			logging.Path(marketplacePath),
+			logging.Err(err),
+		)
 		return nil, fmt.Errorf("failed to parse marketplace.json: %w", err)
 	}
+
+	logging.Debug("discovered marketplace plugins",
+		logging.Platform(string(p.Platform())),
+		logging.Path(marketplacePath),
+		logging.Count(len(manifest.Plugins)),
+	)
 
 	var skills []model.Skill
 
@@ -122,7 +156,11 @@ func (p *Parser) parseMarketplace(repoPath string) ([]model.Skill, error) {
 		pluginPath := filepath.Join(repoPath, strings.TrimPrefix(pluginRef.Source, "./"))
 		pluginSkills, err := p.parsePlugin(pluginPath, manifest.Name)
 		if err != nil {
-			// Log but continue with other plugins
+			logging.Warn("failed to parse plugin",
+				logging.Platform(string(p.Platform())),
+				logging.Path(pluginPath),
+				logging.Err(err),
+			)
 			continue
 		}
 		skills = append(skills, pluginSkills...)
@@ -148,14 +186,29 @@ func (p *Parser) parsePlugin(pluginPath, repoName string) ([]model.Skill, error)
 	patterns := []string{"**/SKILL.md", "SKILL.md"}
 	files, err := parser.DiscoverFiles(pluginPath, patterns)
 	if err != nil {
+		logging.Error("failed to discover skill files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(pluginPath),
+			logging.Err(err),
+		)
 		return nil, fmt.Errorf("failed to discover skill files: %w", err)
 	}
+
+	logging.Debug("discovered skill files in plugin",
+		logging.Platform(string(p.Platform())),
+		logging.Path(pluginPath),
+		logging.Count(len(files)),
+	)
 
 	var skills []model.Skill
 	for _, filePath := range files {
 		skill, err := p.parseSkillFile(filePath, pluginManifest, repoName)
 		if err != nil {
-			// Log but continue with other skills
+			logging.Warn("failed to parse skill file",
+				logging.Platform(string(p.Platform())),
+				logging.Path(filePath),
+				logging.Err(err),
+			)
 			continue
 		}
 		skills = append(skills, skill)
@@ -326,7 +379,13 @@ func (p *Parser) ensureRepo() (string, error) {
 	gitDir := filepath.Join(repoPath, ".git")
 	if _, err := os.Stat(gitDir); err == nil {
 		// Repo exists, pull updates (ignore errors - can use existing clone)
-		_ = p.gitPull(repoPath)
+		if err := p.gitPull(repoPath); err != nil {
+			logging.Debug("git pull failed, using existing clone",
+				logging.Platform(string(p.Platform())),
+				logging.Path(repoPath),
+				logging.Err(err),
+			)
+		}
 		return repoPath, nil
 	}
 

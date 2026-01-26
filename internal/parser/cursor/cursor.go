@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/util"
@@ -30,7 +31,10 @@ func New(basePath string) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		// Return empty slice if directory doesn't exist (not an error)
+		logging.Debug("skills directory not found",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+		)
 		return []model.Skill{}, nil
 	}
 
@@ -38,20 +42,39 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	patterns := []string{"*.md", "*.mdc", "**/*.md", "**/*.mdc"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
+		logging.Error("failed to discover skill files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+			logging.Err(err),
+		)
 		return nil, fmt.Errorf("failed to discover skill files in %q: %w", p.basePath, err)
 	}
+
+	logging.Debug("discovered skill files",
+		logging.Platform(string(p.Platform())),
+		logging.Path(p.basePath),
+		logging.Count(len(files)),
+	)
 
 	// Parse each skill file
 	skills := make([]model.Skill, 0, len(files))
 	for _, filePath := range files {
 		skill, err := p.parseSkillFile(filePath)
 		if err != nil {
-			// Log the error but continue parsing other files
-			// TODO: Consider adding structured logging here
+			logging.Warn("failed to parse skill file",
+				logging.Platform(string(p.Platform())),
+				logging.Path(filePath),
+				logging.Err(err),
+			)
 			continue
 		}
 		skills = append(skills, skill)
 	}
+
+	logging.Debug("completed parsing skills",
+		logging.Platform(string(p.Platform())),
+		logging.Count(len(skills)),
+	)
 
 	return skills, nil
 }
