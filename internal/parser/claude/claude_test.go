@@ -357,3 +357,201 @@ Content`
 		t.Error("tools should not be in Metadata")
 	}
 }
+
+func TestParser_Parse_SkillMdSupport(t *testing.T) {
+	t.Run("SKILL.md files are parsed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a skill directory with SKILL.md
+		skillDir := filepath.Join(tmpDir, "my-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMd := `---
+name: my-skill
+description: A skill using Agent Skills Standard
+scope: user
+---
+# My Skill
+
+This is a SKILL.md format skill.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		skill := skills[0]
+		if skill.Name != "my-skill" {
+			t.Errorf("Name = %q, want %q", skill.Name, "my-skill")
+		}
+		if skill.Description != "A skill using Agent Skills Standard" {
+			t.Errorf("Description = %q, want %q", skill.Description, "A skill using Agent Skills Standard")
+		}
+		if skill.Platform != model.ClaudeCode {
+			t.Errorf("Platform = %v, want %v", skill.Platform, model.ClaudeCode)
+		}
+	})
+
+	t.Run("SKILL.md takes precedence over legacy files with same name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a legacy skill file
+		legacyContent := `---
+name: duplicate-skill
+description: Legacy version
+---
+Legacy content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "duplicate-skill.md"), []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("failed to write legacy file: %v", err)
+		}
+
+		// Create a SKILL.md version with same name
+		skillDir := filepath.Join(tmpDir, "duplicate-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMdContent := `---
+name: duplicate-skill
+description: SKILL.md version
+---
+SKILL.md content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should only have 1 skill (SKILL.md version)
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill (SKILL.md should take precedence), got %d", len(skills))
+		}
+
+		skill := skills[0]
+		if skill.Description != "SKILL.md version" {
+			t.Errorf("Expected SKILL.md version to take precedence, got description: %q", skill.Description)
+		}
+	})
+
+	t.Run("mixed SKILL.md and legacy files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a legacy-only skill
+		legacyContent := `---
+name: legacy-only
+description: Legacy skill only
+---
+Legacy content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "legacy-only.md"), []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("failed to write legacy file: %v", err)
+		}
+
+		// Create a SKILL.md-only skill
+		skillDir := filepath.Join(tmpDir, "skillmd-only")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMdContent := `---
+name: skillmd-only
+description: SKILL.md skill only
+---
+SKILL.md content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should have both skills
+		if len(skills) != 2 {
+			t.Fatalf("expected 2 skills, got %d", len(skills))
+		}
+
+		// Check both skills are present
+		names := make(map[string]bool)
+		for _, s := range skills {
+			names[s.Name] = true
+		}
+		if !names["legacy-only"] {
+			t.Error("missing legacy-only skill")
+		}
+		if !names["skillmd-only"] {
+			t.Error("missing skillmd-only skill")
+		}
+	})
+
+	t.Run("Claude-specific tools array in SKILL.md", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a skill directory with SKILL.md containing tools array
+		skillDir := filepath.Join(tmpDir, "tool-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMd := `---
+name: tool-skill
+description: Skill with tools
+tools:
+  - Read
+  - Write
+  - Bash
+---
+# Tool Skill
+
+This skill has tools.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		skill := skills[0]
+		if len(skill.Tools) != 3 {
+			t.Errorf("expected 3 tools, got %d", len(skill.Tools))
+		}
+		expectedTools := []string{"Read", "Write", "Bash"}
+		for i, want := range expectedTools {
+			if i < len(skill.Tools) && skill.Tools[i] != want {
+				t.Errorf("Tools[%d] = %q, want %q", i, skill.Tools[i], want)
+			}
+		}
+	})
+}
