@@ -141,10 +141,13 @@ alwaysApply: true
 
 ### Storage Locations
 
-Codex (OpenAI) typically stores function/skill definitions in:
+Codex (OpenAI CLI) loads skills from multiple locations in order of precedence (high to low):
 
-1. **Project configuration**: `.codex/` directory
-2. **Configuration files**: JSON or YAML schemas
+1. **Project skills**: `.codex/skills/` in working directory and repo root
+2. **User skills**: `~/.codex/skills/` for user-wide skills
+3. **Admin skills**: `/etc/codex/skills/` for system-wide skills
+
+See: https://developers.openai.com/codex/skills/
 
 ### File Format
 
@@ -282,4 +285,4 @@ skills:
 |----------|------------|-------------|
 | Claude Code | `.claude/skills/` | `~/.claude/skills/` |
 | Cursor | `.cursor/rules/` | `~/.cursor/rules/` |
-| Codex | `.codex/` | `~/.codex/` |
+| Codex | `.codex/skills/` | `~/.codex/skills/`, `/etc/codex/skills/` |

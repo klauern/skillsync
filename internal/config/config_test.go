@@ -591,15 +591,18 @@ func TestDefaultSkillsPaths(t *testing.T) {
 		t.Errorf("expected second Cursor path to be '~/.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[1])
 	}
 
-	// Check Codex defaults
-	if len(cfg.Platforms.Codex.SkillsPaths) != 2 {
-		t.Errorf("expected 2 Codex skills paths, got %d", len(cfg.Platforms.Codex.SkillsPaths))
+	// Check Codex defaults (3 paths: project, user, admin)
+	if len(cfg.Platforms.Codex.SkillsPaths) != 3 {
+		t.Errorf("expected 3 Codex skills paths, got %d", len(cfg.Platforms.Codex.SkillsPaths))
 	}
 	if cfg.Platforms.Codex.SkillsPaths[0] != ".codex/skills" {
 		t.Errorf("expected first Codex path to be '.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[0])
 	}
 	if cfg.Platforms.Codex.SkillsPaths[1] != "~/.codex/skills" {
 		t.Errorf("expected second Codex path to be '~/.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[1])
+	}
+	if cfg.Platforms.Codex.SkillsPaths[2] != "/etc/codex/skills" {
+		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
 	}
 }
 

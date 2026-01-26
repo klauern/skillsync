@@ -142,8 +142,9 @@ func Default() *Config {
 			},
 			Codex: PlatformConfig{
 				SkillsPaths: []string{
-					".codex/skills",   // Project (relative)
-					"~/.codex/skills", // User (absolute)
+					".codex/skills",     // Project (relative)
+					"~/.codex/skills",   // User (absolute)
+					"/etc/codex/skills", // Admin (system-wide)
 				},
 				BackupEnabled: true,
 			},
