@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/parser/skills"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -75,7 +77,10 @@ func New(basePath string) *Parser {
 	return &Parser{basePath: basePath}
 }
 
-// Parse parses Codex skills from config.toml and AGENTS.md files
+// Parse parses Codex skills from SKILL.md files, config.toml, and AGENTS.md files
+// Supports both:
+// 1. Agent Skills Standard: SKILL.md files in subdirectories (takes precedence)
+// 2. Legacy formats: config.toml instructions and AGENTS.md files
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
@@ -86,16 +91,50 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		return []model.Skill{}, nil
 	}
 
-	var skills []model.Skill
+	var allSkills []model.Skill
+	seenNames := make(map[string]bool)
+
+	// First, parse SKILL.md files (Agent Skills Standard format)
+	// These take precedence over legacy formats when names collide
+	skillsParser := skills.New(p.basePath, p.Platform())
+	agentSkills, err := skillsParser.Parse()
+	if err != nil {
+		logging.Warn("failed to parse SKILL.md files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+			logging.Err(err),
+		)
+	} else {
+		for _, skill := range agentSkills {
+			seenNames[skill.Name] = true
+			allSkills = append(allSkills, skill)
+		}
+		if len(agentSkills) > 0 {
+			logging.Debug("discovered SKILL.md files",
+				logging.Platform(string(p.Platform())),
+				logging.Path(p.basePath),
+				logging.Count(len(agentSkills)),
+			)
+		}
+	}
 
 	// Parse config.toml for custom instructions
 	configSkill, err := p.parseConfigFile()
 	if err == nil && configSkill != nil {
-		skills = append(skills, *configSkill)
+		// Skip if a SKILL.md with the same name was already parsed
+		if seenNames[configSkill.Name] {
+			logging.Debug("skipping config.toml skill, SKILL.md version takes precedence",
+				logging.Skill(configSkill.Name),
+				logging.Path(configSkill.Path),
+			)
+		} else {
+			seenNames[configSkill.Name] = true
+			allSkills = append(allSkills, *configSkill)
+		}
 	}
 
 	// Parse AGENTS.md files
-	agentsSkills, err := p.parseAgentsFiles()
+	agentsSkills, err := p.parseAgentsFiles(seenNames)
 	if err != nil {
 		logging.Error("failed to parse AGENTS.md files",
 			logging.Platform(string(p.Platform())),
@@ -104,14 +143,14 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		)
 		return nil, fmt.Errorf("failed to parse AGENTS.md files: %w", err)
 	}
-	skills = append(skills, agentsSkills...)
+	allSkills = append(allSkills, agentsSkills...)
 
 	logging.Debug("completed parsing skills",
 		logging.Platform(string(p.Platform())),
-		logging.Count(len(skills)),
+		logging.Count(len(allSkills)),
 	)
 
-	return skills, nil
+	return allSkills, nil
 }
 
 // parseConfigFile parses the config.toml file and extracts instructions as a skill
@@ -179,7 +218,8 @@ func (p *Parser) parseConfigFile() (*model.Skill, error) {
 }
 
 // parseAgentsFiles finds and parses AGENTS.md files
-func (p *Parser) parseAgentsFiles() ([]model.Skill, error) {
+// seenNames tracks skill names that have already been parsed (from SKILL.md or config.toml)
+func (p *Parser) parseAgentsFiles(seenNames map[string]bool) ([]model.Skill, error) {
 	// Discover AGENTS.md files
 	patterns := []string{"AGENTS.md", "**/AGENTS.md"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
@@ -192,15 +232,23 @@ func (p *Parser) parseAgentsFiles() ([]model.Skill, error) {
 		return nil, fmt.Errorf("failed to discover AGENTS.md files: %w", err)
 	}
 
+	// Filter out SKILL.md files (already parsed by skills parser)
+	var legacyFiles []string
+	for _, f := range files {
+		if !strings.HasSuffix(f, "SKILL.md") {
+			legacyFiles = append(legacyFiles, f)
+		}
+	}
+
 	logging.Debug("discovered AGENTS.md files",
 		logging.Platform(string(p.Platform())),
 		logging.Path(p.basePath),
-		logging.Count(len(files)),
+		logging.Count(len(legacyFiles)),
 	)
 
 	// Parse each file
-	skills := make([]model.Skill, 0, len(files))
-	for _, filePath := range files {
+	parsedSkills := make([]model.Skill, 0, len(legacyFiles))
+	for _, filePath := range legacyFiles {
 		skill, err := p.parseAgentsFile(filePath)
 		if err != nil {
 			logging.Warn("failed to parse AGENTS.md file",
@@ -210,10 +258,19 @@ func (p *Parser) parseAgentsFiles() ([]model.Skill, error) {
 			)
 			continue
 		}
-		skills = append(skills, skill)
+		// Skip if a SKILL.md or config.toml skill with the same name was already parsed
+		if seenNames[skill.Name] {
+			logging.Debug("skipping legacy AGENTS.md skill, higher precedence version exists",
+				logging.Skill(skill.Name),
+				logging.Path(filePath),
+			)
+			continue
+		}
+		seenNames[skill.Name] = true
+		parsedSkills = append(parsedSkills, skill)
 	}
 
-	return skills, nil
+	return parsedSkills, nil
 }
 
 // parseAgentsFile parses a single AGENTS.md file

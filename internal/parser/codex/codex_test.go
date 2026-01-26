@@ -442,3 +442,259 @@ func skillNames(skills []model.Skill) []string {
 	}
 	return names
 }
+
+func TestParser_Parse_SkillMdSupport(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a skill directory with SKILL.md
+	skillDir := filepath.Join(tmpDir, "my-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	skillMd := `---
+name: my-skill
+description: A skill using Agent Skills Standard
+scope: user
+---
+# My Skill
+
+This is a SKILL.md format skill.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(skills))
+	}
+
+	skill := skills[0]
+	if skill.Name != "my-skill" {
+		t.Errorf("Name = %q, want %q", skill.Name, "my-skill")
+	}
+	if skill.Description != "A skill using Agent Skills Standard" {
+		t.Errorf("Description = %q, want %q", skill.Description, "A skill using Agent Skills Standard")
+	}
+	if skill.Platform != model.Codex {
+		t.Errorf("Platform = %v, want %v", skill.Platform, model.Codex)
+	}
+}
+
+func TestParser_Parse_SkillMdPrecedenceOverAgents(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create an AGENTS.md file that would generate "my-skill-agents" name
+	agentsDir := filepath.Join(tmpDir, "my-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatalf("failed to create agents directory: %v", err)
+	}
+
+	agentsContent := `# Legacy AGENTS.md
+This is legacy content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(agentsDir, "AGENTS.md"), []byte(agentsContent), 0o644); err != nil {
+		t.Fatalf("failed to write AGENTS.md: %v", err)
+	}
+
+	// Create a SKILL.md version with name that would conflict
+	skillMdContent := `---
+name: my-skill-agents
+description: SKILL.md version
+---
+SKILL.md content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(agentsDir, "SKILL.md"), []byte(skillMdContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	// Should only have 1 skill (SKILL.md version)
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill (SKILL.md should take precedence), got %d: %v", len(skills), skillNames(skills))
+	}
+
+	skill := skills[0]
+	if skill.Description != "SKILL.md version" {
+		t.Errorf("Expected SKILL.md version to take precedence, got description: %q", skill.Description)
+	}
+}
+
+func TestParser_Parse_SkillMdPrecedenceOverConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create config.toml (produces "codex-config" skill)
+	configContent := `
+model = "o4-mini"
+instructions = "Config instructions"
+`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(tmpDir, "config.toml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config.toml: %v", err)
+	}
+
+	// Create a SKILL.md version with name "codex-config"
+	skillDir := filepath.Join(tmpDir, "codex-config")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	skillMdContent := `---
+name: codex-config
+description: SKILL.md version of codex-config
+---
+SKILL.md content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	// Should only have 1 skill (SKILL.md version takes precedence)
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill (SKILL.md should take precedence), got %d: %v", len(skills), skillNames(skills))
+	}
+
+	skill := skills[0]
+	if skill.Description != "SKILL.md version of codex-config" {
+		t.Errorf("Expected SKILL.md version to take precedence, got description: %q", skill.Description)
+	}
+}
+
+func TestParser_Parse_MixedSkillMdConfigAgents(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create config.toml
+	configContent := `
+model = "o4-mini"
+instructions = "Config instructions"
+`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(tmpDir, "config.toml"), []byte(configContent), 0o644); err != nil {
+		t.Fatalf("failed to write config.toml: %v", err)
+	}
+
+	// Create an AGENTS.md file
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte("# Root agents"), 0o644); err != nil {
+		t.Fatalf("failed to write AGENTS.md: %v", err)
+	}
+
+	// Create a SKILL.md-only skill
+	skillDir := filepath.Join(tmpDir, "skillmd-only")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	skillMdContent := `---
+name: skillmd-only
+description: SKILL.md skill only
+---
+SKILL.md content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	// Should have 3 skills: codex-config, agents, skillmd-only
+	if len(skills) != 3 {
+		t.Fatalf("expected 3 skills, got %d: %v", len(skills), skillNames(skills))
+	}
+
+	// Check all skills are present
+	names := make(map[string]bool)
+	for _, s := range skills {
+		names[s.Name] = true
+	}
+	if !names["codex-config"] {
+		t.Error("missing codex-config skill")
+	}
+	if !names["agents"] {
+		t.Error("missing agents skill")
+	}
+	if !names["skillmd-only"] {
+		t.Error("missing skillmd-only skill")
+	}
+}
+
+func TestParser_Parse_SkillMdAgentSkillsStandard(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a skill directory with SKILL.md containing Agent Skills Standard fields
+	skillDir := filepath.Join(tmpDir, "standard-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	skillMd := `---
+name: standard-skill
+description: Skill with Agent Skills Standard fields
+scope: repo
+license: MIT
+disable-model-invocation: true
+tools:
+  - Read
+  - Write
+---
+# Standard Skill
+
+This skill has Agent Skills Standard fields.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(skills))
+	}
+
+	skill := skills[0]
+	if skill.Name != "standard-skill" {
+		t.Errorf("Name = %q, want %q", skill.Name, "standard-skill")
+	}
+	if skill.Scope != model.ScopeRepo {
+		t.Errorf("Scope = %q, want %q", skill.Scope, model.ScopeRepo)
+	}
+	if skill.License != "MIT" {
+		t.Errorf("License = %q, want %q", skill.License, "MIT")
+	}
+	if !skill.DisableModelInvocation {
+		t.Error("DisableModelInvocation should be true")
+	}
+	if len(skill.Tools) != 2 {
+		t.Errorf("expected 2 tools, got %d", len(skill.Tools))
+	}
+}
