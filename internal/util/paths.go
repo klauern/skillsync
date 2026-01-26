@@ -52,3 +52,8 @@ func SkillsyncBackupsPath() string {
 func SkillsyncMetadataPath() string {
 	return filepath.Join(SkillsyncConfigPath(), "metadata")
 }
+
+// SkillsyncPluginsPath returns the skillsync plugins directory
+func SkillsyncPluginsPath() string {
+	return filepath.Join(SkillsyncConfigPath(), "plugins")
+}
