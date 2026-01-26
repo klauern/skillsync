@@ -38,3 +38,6 @@ Thumbs.db
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# E2E test artifacts
+internal/e2e/.codex/
