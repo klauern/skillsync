@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/util"
@@ -566,6 +567,11 @@ func runScopeListAll(cmd *cli.Command) error {
 		}
 
 		for _, scope := range model.AllScopes() {
+			// Skip plugin scope - plugins are handled separately below
+			if scope == model.ScopePlugin {
+				continue
+			}
+
 			skills, err := tieredParser.ParseFromScope(scope)
 			if err != nil {
 				continue
@@ -579,6 +585,20 @@ func runScopeListAll(cmd *cli.Command) error {
 					Path:     skill.Path,
 				})
 			}
+		}
+	}
+
+	// Include plugin skills by default
+	pluginParser := plugin.New("")
+	pluginSkills, err := pluginParser.Parse()
+	if err == nil {
+		for _, skill := range pluginSkills {
+			allSkills = append(allSkills, scopedSkill{
+				Platform: model.ClaudeCode, // Plugins are Claude Code specific
+				Scope:    model.ScopePlugin,
+				Name:     skill.Name,
+				Path:     skill.Path,
+			})
 		}
 	}
 
