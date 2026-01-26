@@ -1069,6 +1069,7 @@ func backupCommand() *cli.Command {
 			backupListCommand(),
 			backupRestoreCommand(),
 			backupDeleteCommand(),
+			backupVerifyCommand(),
 		},
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: list backups
@@ -1311,6 +1312,112 @@ func backupDeleteCommand() *cli.Command {
 			return errors.New("either backup IDs or --older-than/--keep-latest flag is required")
 		},
 	}
+}
+
+func backupVerifyCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "verify",
+		Usage: "Verify backup integrity using SHA256 checksums",
+		UsageText: `skillsync backup verify [backup-id...]
+   skillsync backup verify                           # Verify all backups
+   skillsync backup verify 20240125-120000-abc12345  # Verify specific backup
+   skillsync backup verify --platform claude-code    # Verify backups for a platform`,
+		Description: `Verify backup integrity by comparing file content against stored SHA256 checksums.
+
+   Without arguments, verifies all backups. Pass one or more backup IDs to verify
+   specific backups. Use --platform to filter verification to a specific platform.
+
+   The command reports:
+     ✓ OK       - Backup file is intact and matches stored checksum
+     ✗ CORRUPT  - Backup file has been modified or corrupted
+     ✗ MISSING  - Backup file no longer exists on disk
+
+   Exit codes:
+     0 - All verified backups are intact
+     1 - One or more backups failed verification`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Filter by platform (claude-code, cursor, codex)",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			platform := cmd.String("platform")
+
+			if args.Len() > 0 {
+				// Verify specific backup IDs
+				ids := make([]string, args.Len())
+				for i := 0; i < args.Len(); i++ {
+					ids[i] = args.Get(i)
+				}
+				return verifyBackupsByID(ids)
+			}
+
+			// Verify all backups (optionally filtered by platform)
+			return verifyAllBackups(platform)
+		},
+	}
+}
+
+// verifyBackupsByID verifies specific backups by their IDs
+func verifyBackupsByID(ids []string) error {
+	fmt.Printf("Verifying %d backup(s)...\n\n", len(ids))
+
+	var failed int
+	for _, id := range ids {
+		if err := backup.VerifyBackup(id); err != nil {
+			fmt.Printf("✗ %-28s FAILED: %v\n", id, err)
+			failed++
+		} else {
+			fmt.Printf("✓ %-28s OK\n", id)
+		}
+	}
+
+	fmt.Println()
+	if failed > 0 {
+		fmt.Printf("Verification complete: %d OK, %d FAILED\n", len(ids)-failed, failed)
+		return fmt.Errorf("%d backup(s) failed verification", failed)
+	}
+
+	fmt.Printf("Verification complete: %d OK\n", len(ids))
+	return nil
+}
+
+// verifyAllBackups verifies all backups, optionally filtered by platform
+func verifyAllBackups(platform string) error {
+	backups, err := backup.ListBackups(platform)
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	if len(backups) == 0 {
+		fmt.Println("No backups found to verify.")
+		return nil
+	}
+
+	fmt.Printf("Verifying %d backup(s)...\n\n", len(backups))
+
+	var ok, failed int
+	for _, b := range backups {
+		if err := backup.VerifyBackup(b.ID); err != nil {
+			fmt.Printf("✗ %-28s %-12s FAILED: %v\n", b.ID, b.Platform, err)
+			failed++
+		} else {
+			fmt.Printf("✓ %-28s %-12s OK\n", b.ID, b.Platform)
+			ok++
+		}
+	}
+
+	fmt.Println()
+	if failed > 0 {
+		fmt.Printf("Verification complete: %d OK, %d FAILED\n", ok, failed)
+		return fmt.Errorf("%d backup(s) failed verification", failed)
+	}
+
+	fmt.Printf("Verification complete: %d OK\n", ok)
+	return nil
 }
 
 // deleteBackupsByID deletes specific backups by their IDs
