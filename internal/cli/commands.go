@@ -1062,9 +1062,11 @@ func backupCommand() *cli.Command {
    Examples:
      skillsync backup list                    # List all backups
      skillsync backup list --platform claude-code
-     skillsync backup list --format json`,
+     skillsync backup list --format json
+     skillsync backup restore <backup-id>     # Restore a backup`,
 		Commands: []*cli.Command{
 			backupListCommand(),
+			backupRestoreCommand(),
 		},
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: list backups
@@ -1115,6 +1117,48 @@ func backupListCommand() *cli.Command {
 	}
 }
 
+func backupRestoreCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "restore",
+		Usage: "Restore a backup to its original or specified location",
+		UsageText: `skillsync backup restore <backup-id> [options]
+   skillsync backup restore 20240125-120000-abc12345
+   skillsync backup restore 20240125-120000-abc12345 --target /path/to/restore
+   skillsync backup restore 20240125-120000-abc12345 --force`,
+		Description: `Restore a skill file from a backup.
+
+   By default, restores to the original source path. Use --target to specify
+   a different location.
+
+   The restore operation verifies backup integrity using SHA256 hash before
+   restoring. Use --force to skip the confirmation prompt.`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "target",
+				Aliases: []string{"t"},
+				Usage:   "Target path for restoration (defaults to original source path)",
+			},
+			&cli.BoolFlag{
+				Name:    "force",
+				Aliases: []string{"f"},
+				Usage:   "Skip confirmation prompt before overwriting",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			if args.Len() < 1 {
+				return errors.New("backup ID is required")
+			}
+
+			backupID := args.Get(0)
+			targetPath := cmd.String("target")
+			force := cmd.Bool("force")
+
+			return restoreBackup(backupID, targetPath, force)
+		},
+	}
+}
+
 // listBackups retrieves and displays backups based on filters
 func listBackups(platform, format string, limit int) error {
 	backups, err := backup.ListBackups(platform)
@@ -1128,6 +1172,71 @@ func listBackups(platform, format string, limit int) error {
 	}
 
 	return outputBackups(backups, format)
+}
+
+// restoreBackup restores a backup to the original or specified target path
+func restoreBackup(backupID, targetPath string, force bool) error {
+	// Load index to get backup metadata
+	index, err := backup.LoadIndex()
+	if err != nil {
+		return fmt.Errorf("failed to load backup index: %w", err)
+	}
+
+	// Find the backup
+	metadata, exists := index.Backups[backupID]
+	if !exists {
+		return fmt.Errorf("backup %q not found", backupID)
+	}
+
+	// Use original source path if no target specified
+	if targetPath == "" {
+		targetPath = metadata.SourcePath
+	}
+
+	// Check if target file exists
+	targetExists := false
+	if _, err := os.Stat(targetPath); err == nil {
+		targetExists = true
+	}
+
+	// Display restore details
+	fmt.Println("\nBackup Details:")
+	fmt.Printf("  ID:       %s\n", metadata.ID)
+	fmt.Printf("  Platform: %s\n", metadata.Platform)
+	fmt.Printf("  Size:     %s\n", formatSize(metadata.Size))
+	fmt.Printf("  Created:  %s\n", metadata.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("  Source:   %s\n", metadata.SourcePath)
+	fmt.Printf("  Target:   %s\n", targetPath)
+
+	if targetExists {
+		fmt.Println("\n⚠️  Target file already exists and will be overwritten.")
+	}
+
+	// Confirm unless force flag is set
+	if !force {
+		message := fmt.Sprintf("Restore backup to %s?", targetPath)
+		level := riskLevelInfo
+		if targetExists {
+			level = riskLevelWarning
+		}
+
+		confirmed, err := confirmAction(message, level)
+		if err != nil {
+			return fmt.Errorf("confirmation error: %w", err)
+		}
+		if !confirmed {
+			fmt.Println("Restore cancelled.")
+			return nil
+		}
+	}
+
+	// Perform the restore
+	if err := backup.RestoreBackup(backupID, targetPath); err != nil {
+		return fmt.Errorf("restore failed: %w", err)
+	}
+
+	fmt.Printf("\n✓ Successfully restored backup to %s\n", targetPath)
+	return nil
 }
 
 // outputBackups formats and prints backups in the requested format
