@@ -44,10 +44,16 @@ type PlatformsConfig struct {
 
 // PlatformConfig holds configuration for a single platform.
 type PlatformConfig struct {
-	// SkillsPath is the path to the skills directory
-	SkillsPath string `yaml:"skills_path"`
+	// SkillsPaths is an ordered list of paths to search for skills (project → user → system)
+	// Paths can use ~ for home directory or be relative (resolved from working directory)
+	SkillsPaths []string `yaml:"skills_paths,omitempty"`
+	// LegacyPath is an optional path for backward compatibility (e.g., ~/.cursor/rules)
+	LegacyPath string `yaml:"legacy_path,omitempty"`
 	// BackupEnabled indicates whether to backup this platform's skills
 	BackupEnabled bool `yaml:"backup_enabled"`
+
+	// Deprecated: Use SkillsPaths instead. Kept for backward compatibility during migration.
+	SkillsPath string `yaml:"skills_path,omitempty"`
 }
 
 // SyncConfig holds synchronization settings.
@@ -109,15 +115,24 @@ func Default() *Config {
 	return &Config{
 		Platforms: PlatformsConfig{
 			ClaudeCode: PlatformConfig{
-				SkillsPath:    util.ClaudeCodeSkillsPath(),
+				SkillsPaths: []string{
+					".claude/skills",   // Project (relative)
+					"~/.claude/skills", // User (absolute)
+				},
 				BackupEnabled: true,
 			},
 			Cursor: PlatformConfig{
-				SkillsPath:    util.CursorSkillsPath(),
+				SkillsPaths: []string{
+					".cursor/skills",   // Project (relative)
+					"~/.cursor/skills", // User (absolute)
+				},
+				LegacyPath:    "~/.cursor/rules", // Backward compat
 				BackupEnabled: true,
 			},
 			Codex: PlatformConfig{
-				SkillsPath:    filepath.Join(".", ".codex"),
+				SkillsPaths: []string{
+					".codex", // Project (relative)
+				},
 				BackupEnabled: true,
 			},
 		},
@@ -274,7 +289,18 @@ func (c *Config) applyEnvironment() {
 		c.Output.Verbose = parseBool(v)
 	}
 
-	// Platform paths
+	// Platform paths - new colon-separated format
+	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS"); v != "" {
+		c.Platforms.ClaudeCode.SkillsPaths = splitPaths(v)
+	}
+	if v := os.Getenv("SKILLSYNC_CURSOR_SKILLS_PATHS"); v != "" {
+		c.Platforms.Cursor.SkillsPaths = splitPaths(v)
+	}
+	if v := os.Getenv("SKILLSYNC_CODEX_SKILLS_PATHS"); v != "" {
+		c.Platforms.Codex.SkillsPaths = splitPaths(v)
+	}
+
+	// Deprecated: single path environment variables (for backward compatibility)
 	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
 		c.Platforms.ClaudeCode.SkillsPath = v
 	}
@@ -308,6 +334,20 @@ func parseBool(s string) bool {
 	return s == "true" || s == "1" || s == "yes" || s == "on"
 }
 
+// splitPaths splits a colon-separated path string into individual paths.
+// Empty segments are filtered out.
+func splitPaths(s string) []string {
+	parts := strings.Split(s, ":")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
 // GetStrategy returns the sync strategy from config, validating it.
 func (c *Config) GetStrategy() sync.Strategy {
 	strategy := sync.Strategy(c.Sync.DefaultStrategy)
@@ -315,6 +355,45 @@ func (c *Config) GetStrategy() sync.Strategy {
 		return strategy
 	}
 	return sync.StrategyOverwrite
+}
+
+// GetSkillsPaths returns all skills paths for this platform, expanded and in order.
+// If SkillsPaths is empty but deprecated SkillsPath is set, falls back to that.
+// The baseDir is used for resolving relative paths.
+func (pc *PlatformConfig) GetSkillsPaths(baseDir string) []string {
+	var paths []string
+
+	// Use new SkillsPaths if available
+	if len(pc.SkillsPaths) > 0 {
+		paths = util.ExpandPaths(pc.SkillsPaths, baseDir)
+	} else if pc.SkillsPath != "" {
+		// Fall back to deprecated SkillsPath for backward compatibility
+		expanded := util.ExpandPath(pc.SkillsPath, baseDir)
+		if expanded != "" {
+			paths = []string{expanded}
+		}
+	}
+
+	// Include legacy path if set (typically for Cursor's ~/.cursor/rules)
+	if pc.LegacyPath != "" {
+		expanded := util.ExpandPath(pc.LegacyPath, baseDir)
+		if expanded != "" {
+			paths = append(paths, expanded)
+		}
+	}
+
+	return paths
+}
+
+// GetPrimarySkillsPath returns the first (highest priority) skills path for this platform.
+// This is useful when writing new skills - they go to the highest priority location.
+// Returns empty string if no paths are configured.
+func (pc *PlatformConfig) GetPrimarySkillsPath(baseDir string) string {
+	paths := pc.GetSkillsPaths(baseDir)
+	if len(paths) > 0 {
+		return paths[0]
+	}
+	return ""
 }
 
 // Exists returns true if a config file exists.

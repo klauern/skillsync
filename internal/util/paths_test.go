@@ -403,3 +403,124 @@ func TestGetTieredPaths_OtherPlatformsNoLegacyPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestExpandPath(t *testing.T) {
+	home := HomeDir()
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name     string
+		path     string
+		baseDir  string
+		expected string
+	}{
+		{
+			name:     "empty path returns empty",
+			path:     "",
+			baseDir:  tmpDir,
+			expected: "",
+		},
+		{
+			name:     "tilde only",
+			path:     "~",
+			baseDir:  tmpDir,
+			expected: home,
+		},
+		{
+			name:     "tilde with path",
+			path:     "~/.cursor/skills",
+			baseDir:  tmpDir,
+			expected: filepath.Join(home, ".cursor", "skills"),
+		},
+		{
+			name:     "absolute path unchanged",
+			path:     "/absolute/path/to/skills",
+			baseDir:  tmpDir,
+			expected: "/absolute/path/to/skills",
+		},
+		{
+			name:     "relative path expanded from baseDir",
+			path:     ".cursor/skills",
+			baseDir:  tmpDir,
+			expected: filepath.Join(tmpDir, ".cursor", "skills"),
+		},
+		{
+			name:     "relative path with dots",
+			path:     "../other/skills",
+			baseDir:  tmpDir,
+			expected: filepath.Clean(filepath.Join(tmpDir, "../other/skills")),
+		},
+		{
+			name:     "single dot relative path",
+			path:     "./skills",
+			baseDir:  tmpDir,
+			expected: filepath.Join(tmpDir, "skills"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExpandPath(tt.path, tt.baseDir)
+			if result != tt.expected {
+				t.Errorf("ExpandPath(%q, %q) = %q, want %q", tt.path, tt.baseDir, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExpandPath_EmptyBaseDir(t *testing.T) {
+	// When baseDir is empty, relative paths should resolve from cwd
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
+	result := ExpandPath("relative/path", "")
+	expected := filepath.Join(wd, "relative/path")
+
+	if result != expected {
+		t.Errorf("ExpandPath with empty baseDir = %q, want %q", result, expected)
+	}
+}
+
+func TestExpandPaths(t *testing.T) {
+	home := HomeDir()
+	tmpDir := t.TempDir()
+
+	paths := []string{
+		"~/.cursor/skills",
+		".cursor/skills",
+		"/absolute/path",
+		"",
+	}
+
+	result := ExpandPaths(paths, tmpDir)
+
+	if len(result) != 3 {
+		t.Errorf("ExpandPaths() returned %d paths, expected 3 (empty should be filtered)", len(result))
+	}
+
+	expected := []string{
+		filepath.Join(home, ".cursor", "skills"),
+		filepath.Join(tmpDir, ".cursor", "skills"),
+		"/absolute/path",
+	}
+
+	for i, exp := range expected {
+		if i < len(result) && result[i] != exp {
+			t.Errorf("ExpandPaths()[%d] = %q, want %q", i, result[i], exp)
+		}
+	}
+}
+
+func TestExpandPaths_EmptyInput(t *testing.T) {
+	result := ExpandPaths([]string{}, "/base")
+	if len(result) != 0 {
+		t.Errorf("ExpandPaths([]) returned %d paths, expected 0", len(result))
+	}
+
+	result = ExpandPaths(nil, "/base")
+	if len(result) != 0 {
+		t.Errorf("ExpandPaths(nil) returned %d paths, expected 0", len(result))
+	}
+}

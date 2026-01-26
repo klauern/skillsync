@@ -220,3 +220,45 @@ func PlatformSkillsPath(p model.Platform) string {
 func RepoSkillsPath(p model.Platform, repoRoot string) string {
 	return filepath.Join(repoRoot, platformDirName(p), "skills")
 }
+
+// ExpandPath expands a path by replacing ~ with the home directory
+// and resolving relative paths from the given base directory.
+// If baseDir is empty, relative paths are resolved from the current working directory.
+func ExpandPath(path, baseDir string) string {
+	if path == "" {
+		return path
+	}
+
+	// Expand ~ to home directory
+	if strings.HasPrefix(path, "~/") {
+		path = filepath.Join(HomeDir(), path[2:])
+	} else if path == "~" {
+		return HomeDir()
+	}
+
+	// If already absolute, return as-is
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+
+	// Resolve relative paths from baseDir (or working directory if baseDir is empty)
+	if baseDir == "" {
+		if wd, err := os.Getwd(); err == nil {
+			baseDir = wd
+		}
+	}
+
+	return filepath.Clean(filepath.Join(baseDir, path))
+}
+
+// ExpandPaths expands multiple paths using ExpandPath.
+func ExpandPaths(paths []string, baseDir string) []string {
+	result := make([]string, 0, len(paths))
+	for _, p := range paths {
+		expanded := ExpandPath(p, baseDir)
+		if expanded != "" {
+			result = append(result, expanded)
+		}
+	}
+	return result
+}
