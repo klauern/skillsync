@@ -1,0 +1,28 @@
+[
+  {
+    "name": "skill-alpha",
+    "description": "First test skill",
+    "platform": "claude-code",
+    "path": "skill-alpha.md",
+    "tools": [
+      "read",
+      "write"
+    ],
+    "content": "# Skill Alpha\n\nThis is the first skill content.",
+    "modified_at": "2024-06-15T10:30:00Z"
+  },
+  {
+    "name": "skill-beta",
+    "description": "Second test skill",
+    "platform": "cursor",
+    "path": "skill-beta.md",
+    "tools": [
+      "bash"
+    ],
+    "metadata": {
+      "category": "testing"
+    },
+    "content": "# Skill Beta\n\nThis is the second skill content.",
+    "modified_at": "2024-06-16T10:30:00Z"
+  }
+]

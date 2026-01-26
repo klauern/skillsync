@@ -1,0 +1,15 @@
+- name: yaml-skill
+  description: A YAML exported skill
+  platform: cursor
+  path: yaml-skill.md
+  tools:
+    - read
+    - write
+    - bash
+  content: |-
+    # YAML Skill
+
+    Multiline
+    content
+    here.
+  modified_at: "2024-06-15T10:30:00Z"

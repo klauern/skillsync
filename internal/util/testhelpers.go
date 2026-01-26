@@ -47,3 +47,44 @@ func AssertEqual[T comparable](t *testing.T, got, want T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// GoldenFile compares got against a golden file and updates it if -update flag is set.
+// The golden file path is relative to the testdata directory.
+func GoldenFile(t *testing.T, testdataDir, name, got string) {
+	t.Helper()
+	goldenPath := filepath.Join(testdataDir, name+".golden")
+
+	if UpdateGolden() {
+		dir := filepath.Dir(goldenPath)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create golden directory: %v", err)
+		}
+		if err := os.WriteFile(goldenPath, []byte(got), 0o600); err != nil {
+			t.Fatalf("failed to write golden file: %v", err)
+		}
+		return
+	}
+
+	// #nosec G304 - goldenPath is constructed from trusted testdata directory and test name
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		t.Fatalf("failed to read golden file %s: %v\nRun with -update to create it", goldenPath, err)
+	}
+
+	if got != string(want) {
+		t.Errorf("output mismatch for %s\n--- got ---\n%s\n--- want ---\n%s", name, got, string(want))
+	}
+}
+
+// updateGolden is set via -update flag
+var updateGoldenFlag = false
+
+// SetUpdateGolden sets the update golden flag (call from TestMain)
+func SetUpdateGolden(update bool) {
+	updateGoldenFlag = update
+}
+
+// UpdateGolden returns whether golden files should be updated
+func UpdateGolden() bool {
+	return updateGoldenFlag
+}

@@ -1,0 +1,10 @@
+Synced claude-code -> codex using overwrite strategy
+  Created:   1
+  Updated:   0
+  Merged:    0
+  Skipped:   0
+  Conflicts: 0
+  Failed:    1
+
+Errors:
+  - failed-skill: permission denied

@@ -1,0 +1,28 @@
+# Exported Skills
+
+Total: 1 skill(s)
+
+## markdown-skill
+
+*A fully featured skill for Markdown export*
+
+| Property | Value |
+|----------|-------|
+| Platform | codex |
+| Path | `markdown-skill.md` |
+| Tools | read, write, edit |
+| Modified | 2024-06-15 10:30:00 |
+
+### Content
+
+```
+# Markdown Skill
+
+This skill demonstrates the Markdown export format.
+
+## Features
+
+- Feature 1
+- Feature 2
+```
+

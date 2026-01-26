@@ -3,6 +3,9 @@ package export
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +13,21 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/util"
 )
+
+var updateGolden = flag.Bool("update", false, "update golden files")
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	util.SetUpdateGolden(*updateGolden)
+	os.Exit(m.Run())
+}
+
+// testdataDir returns the path to the testdata directory for golden files.
+func testdataDir() string {
+	return filepath.Join("..", "..", "testdata", "export")
+}
 
 func TestFormat_IsValid(t *testing.T) {
 	tests := []struct {
@@ -392,4 +409,176 @@ func TestExporter_MarkdownEmptyContent(t *testing.T) {
 	if !strings.Contains(buf.String(), "*No content*") {
 		t.Error("Empty content should show 'No content' message in Markdown")
 	}
+}
+
+// Golden tests for export output verification
+
+func TestExporter_JSON_Golden(t *testing.T) {
+	// Use fixed time for reproducible output
+	fixedTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	skills := []model.Skill{
+		{
+			Name:        "skill-alpha",
+			Description: "First test skill",
+			Platform:    model.ClaudeCode,
+			Path:        "skill-alpha.md",
+			Tools:       []string{"read", "write"},
+			Content:     "# Skill Alpha\n\nThis is the first skill content.",
+			ModifiedAt:  fixedTime,
+		},
+		{
+			Name:        "skill-beta",
+			Description: "Second test skill",
+			Platform:    model.Cursor,
+			Path:        "skill-beta.md",
+			Tools:       []string{"bash"},
+			Metadata:    map[string]string{"category": "testing"},
+			Content:     "# Skill Beta\n\nThis is the second skill content.",
+			ModifiedAt:  fixedTime.Add(24 * time.Hour),
+		},
+	}
+
+	opts := Options{
+		Format:          FormatJSON,
+		Pretty:          true,
+		IncludeMetadata: true,
+	}
+
+	exporter := New(opts)
+	var buf bytes.Buffer
+	err := exporter.Export(skills, &buf)
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	util.GoldenFile(t, testdataDir(), "json-pretty", buf.String())
+}
+
+func TestExporter_JSON_Compact_Golden(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:     "compact-skill",
+			Platform: model.ClaudeCode,
+			Content:  "Compact content",
+		},
+	}
+
+	opts := Options{
+		Format:          FormatJSON,
+		Pretty:          false,
+		IncludeMetadata: false,
+	}
+
+	exporter := New(opts)
+	var buf bytes.Buffer
+	err := exporter.Export(skills, &buf)
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	util.GoldenFile(t, testdataDir(), "json-compact", buf.String())
+}
+
+func TestExporter_YAML_Golden(t *testing.T) {
+	fixedTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	skills := []model.Skill{
+		{
+			Name:        "yaml-skill",
+			Description: "A YAML exported skill",
+			Platform:    model.Cursor,
+			Path:        "yaml-skill.md",
+			Tools:       []string{"read", "write", "bash"},
+			Content:     "# YAML Skill\n\nMultiline\ncontent\nhere.",
+			ModifiedAt:  fixedTime,
+		},
+	}
+
+	opts := Options{
+		Format:          FormatYAML,
+		Pretty:          true,
+		IncludeMetadata: true,
+	}
+
+	exporter := New(opts)
+	var buf bytes.Buffer
+	err := exporter.Export(skills, &buf)
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	util.GoldenFile(t, testdataDir(), "yaml-pretty", buf.String())
+}
+
+func TestExporter_Markdown_Golden(t *testing.T) {
+	fixedTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	skills := []model.Skill{
+		{
+			Name:        "markdown-skill",
+			Description: "A fully featured skill for Markdown export",
+			Platform:    model.Codex,
+			Path:        "markdown-skill.md",
+			Tools:       []string{"read", "write", "edit"},
+			Content:     "# Markdown Skill\n\nThis skill demonstrates the Markdown export format.\n\n## Features\n\n- Feature 1\n- Feature 2\n",
+			ModifiedAt:  fixedTime,
+		},
+	}
+
+	opts := Options{
+		Format:          FormatMarkdown,
+		IncludeMetadata: true,
+	}
+
+	exporter := New(opts)
+	var buf bytes.Buffer
+	err := exporter.Export(skills, &buf)
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	util.GoldenFile(t, testdataDir(), "markdown-single", buf.String())
+}
+
+func TestExporter_Markdown_Multiple_Golden(t *testing.T) {
+	fixedTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+
+	skills := []model.Skill{
+		{
+			Name:        "first-skill",
+			Description: "The first skill",
+			Platform:    model.ClaudeCode,
+			Content:     "First skill content.",
+			ModifiedAt:  fixedTime,
+		},
+		{
+			Name:        "second-skill",
+			Description: "The second skill",
+			Platform:    model.Cursor,
+			Content:     "Second skill content.",
+			ModifiedAt:  fixedTime.Add(time.Hour),
+		},
+		{
+			Name:        "third-skill",
+			Description: "The third skill",
+			Platform:    model.Codex,
+			Content:     "Third skill content.",
+			ModifiedAt:  fixedTime.Add(2 * time.Hour),
+		},
+	}
+
+	opts := Options{
+		Format:          FormatMarkdown,
+		IncludeMetadata: true,
+	}
+
+	exporter := New(opts)
+	var buf bytes.Buffer
+	err := exporter.Export(skills, &buf)
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	util.GoldenFile(t, testdataDir(), "markdown-multiple", buf.String())
 }
