@@ -29,8 +29,8 @@ func TestStrategy_IsValid(t *testing.T) {
 func TestAllStrategies(t *testing.T) {
 	strategies := AllStrategies()
 
-	if len(strategies) != 4 {
-		t.Errorf("Expected 4 strategies, got %d", len(strategies))
+	if len(strategies) != 6 {
+		t.Errorf("Expected 6 strategies, got %d", len(strategies))
 	}
 
 	// Verify all returned strategies are valid

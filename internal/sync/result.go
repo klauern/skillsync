@@ -25,6 +25,9 @@ const (
 
 	// ActionFailed indicates an error occurred processing the skill.
 	ActionFailed Action = "failed"
+
+	// ActionConflict indicates a conflict was detected that needs resolution.
+	ActionConflict Action = "conflict"
 )
 
 // SkillResult represents the outcome of syncing a single skill.
@@ -43,6 +46,9 @@ type SkillResult struct {
 
 	// Message provides additional context about the action.
 	Message string
+
+	// Conflict holds conflict details when Action is ActionConflict.
+	Conflict *Conflict
 }
 
 // Success returns true if the skill was successfully processed.
@@ -93,6 +99,16 @@ func (r *Result) Failed() []SkillResult {
 	return r.filterByAction(ActionFailed)
 }
 
+// Conflicts returns skills that have unresolved conflicts.
+func (r *Result) Conflicts() []SkillResult {
+	return r.filterByAction(ActionConflict)
+}
+
+// HasConflicts returns true if there are unresolved conflicts.
+func (r *Result) HasConflicts() bool {
+	return len(r.Conflicts()) > 0
+}
+
 // filterByAction returns skills with the given action.
 func (r *Result) filterByAction(action Action) []SkillResult {
 	var filtered []SkillResult
@@ -130,11 +146,23 @@ func (r *Result) Summary() string {
 	sb.WriteString(fmt.Sprintf("Synced %s -> %s using %s strategy\n",
 		r.Source, r.Target, r.Strategy))
 
-	sb.WriteString(fmt.Sprintf("  Created: %d\n", len(r.Created())))
-	sb.WriteString(fmt.Sprintf("  Updated: %d\n", len(r.Updated())))
-	sb.WriteString(fmt.Sprintf("  Merged:  %d\n", len(r.Merged())))
-	sb.WriteString(fmt.Sprintf("  Skipped: %d\n", len(r.Skipped())))
-	sb.WriteString(fmt.Sprintf("  Failed:  %d\n", len(r.Failed())))
+	sb.WriteString(fmt.Sprintf("  Created:   %d\n", len(r.Created())))
+	sb.WriteString(fmt.Sprintf("  Updated:   %d\n", len(r.Updated())))
+	sb.WriteString(fmt.Sprintf("  Merged:    %d\n", len(r.Merged())))
+	sb.WriteString(fmt.Sprintf("  Skipped:   %d\n", len(r.Skipped())))
+	sb.WriteString(fmt.Sprintf("  Conflicts: %d\n", len(r.Conflicts())))
+	sb.WriteString(fmt.Sprintf("  Failed:    %d\n", len(r.Failed())))
+
+	if r.HasConflicts() {
+		sb.WriteString("\nConflicts requiring resolution:\n")
+		for _, c := range r.Conflicts() {
+			sb.WriteString(fmt.Sprintf("  - %s", c.Skill.Name))
+			if c.Conflict != nil {
+				sb.WriteString(fmt.Sprintf(": %s", c.Conflict.Summary()))
+			}
+			sb.WriteString("\n")
+		}
+	}
 
 	if !r.Success() {
 		sb.WriteString("\nErrors:\n")

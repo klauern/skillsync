@@ -52,13 +52,17 @@ type Syncer interface {
 
 // Synchronizer implements the Syncer interface.
 type Synchronizer struct {
-	transformer *Transformer
+	transformer      *Transformer
+	conflictDetector *ConflictDetector
+	merger           *Merger
 }
 
 // New creates a new Synchronizer.
 func New() *Synchronizer {
 	return &Synchronizer{
-		transformer: NewTransformer(),
+		transformer:      NewTransformer(),
+		conflictDetector: NewConflictDetector(),
+		merger:           NewMerger(),
 	}
 }
 
@@ -171,12 +175,13 @@ func (s *Synchronizer) processSkill(
 	existingSkill, exists := existingSkills[source.Name]
 
 	// Determine action based on strategy
-	action, message := s.determineAction(source, existingSkill, exists, opts.Strategy)
+	action, message, conflict := s.determineAction(source, existingSkill, exists, opts.Strategy)
 	result.Action = action
 	result.Message = message
+	result.Conflict = conflict
 
-	// If skipping, we're done
-	if action == ActionSkipped {
+	// If skipping or conflict (needs external resolution), we're done
+	if action == ActionSkipped || action == ActionConflict {
 		return result
 	}
 
@@ -207,33 +212,56 @@ func (s *Synchronizer) determineAction(
 	existing model.Skill,
 	exists bool,
 	strategy Strategy,
-) (Action, string) {
+) (Action, string, *Conflict) {
 	if !exists {
-		return ActionCreated, "new skill"
+		return ActionCreated, "new skill", nil
 	}
 
 	switch strategy {
 	case StrategyOverwrite:
-		return ActionUpdated, "overwriting existing skill"
+		return ActionUpdated, "overwriting existing skill", nil
 
 	case StrategySkip:
-		return ActionSkipped, "skill already exists"
+		return ActionSkipped, "skill already exists", nil
 
 	case StrategyNewer:
 		if source.ModifiedAt.After(existing.ModifiedAt) {
 			return ActionUpdated, fmt.Sprintf("source is newer (%s > %s)",
 				source.ModifiedAt.Format(time.RFC3339),
-				existing.ModifiedAt.Format(time.RFC3339))
+				existing.ModifiedAt.Format(time.RFC3339)), nil
 		}
 		return ActionSkipped, fmt.Sprintf("target is newer or same age (%s >= %s)",
 			existing.ModifiedAt.Format(time.RFC3339),
-			source.ModifiedAt.Format(time.RFC3339))
+			source.ModifiedAt.Format(time.RFC3339)), nil
 
 	case StrategyMerge:
-		return ActionMerged, "merging with existing content"
+		return ActionMerged, "merging with existing content", nil
+
+	case StrategyThreeWay:
+		// Check for actual conflicts using the detector
+		conflict := s.conflictDetector.DetectConflict(source, existing)
+		if conflict == nil {
+			// No conflict, content is identical
+			return ActionSkipped, "content is identical", nil
+		}
+		// Attempt three-way merge
+		mergeResult := s.merger.TwoWayMerge(source, existing)
+		if mergeResult.Success {
+			return ActionMerged, "three-way merge successful", nil
+		}
+		// Has conflicts that need resolution
+		return ActionConflict, "conflict detected - needs resolution", conflict
+
+	case StrategyInteractive:
+		// Always check for conflicts with interactive strategy
+		conflict := s.conflictDetector.DetectConflict(source, existing)
+		if conflict == nil {
+			return ActionUpdated, "updating (no conflicts)", nil
+		}
+		return ActionConflict, "conflict detected - awaiting resolution", conflict
 
 	default:
-		return ActionUpdated, "updating (default strategy)"
+		return ActionUpdated, "updating (default strategy)", nil
 	}
 }
 

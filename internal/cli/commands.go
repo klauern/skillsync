@@ -167,10 +167,12 @@ func syncCommand() *cli.Command {
    Supported platforms: claudecode, cursor, codex
 
    Strategies:
-     overwrite - Replace target skills unconditionally (default)
-     skip      - Skip skills that already exist in target
-     newer     - Copy only if source is newer than target
-     merge     - Merge source and target content
+     overwrite   - Replace target skills unconditionally (default)
+     skip        - Skip skills that already exist in target
+     newer       - Copy only if source is newer than target
+     merge       - Merge source and target content
+     three-way   - Intelligent merge with conflict detection
+     interactive - Prompt for each conflict
 
    Examples:
      skillsync sync claudecode cursor
@@ -186,7 +188,7 @@ func syncCommand() *cli.Command {
 				Name:    "strategy",
 				Aliases: []string{"s"},
 				Value:   "overwrite",
-				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge",
+				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive",
 			},
 			&cli.BoolFlag{
 				Name:  "skip-backup",
@@ -244,6 +246,35 @@ func syncCommand() *cli.Command {
 				return fmt.Errorf("sync failed: %w", err)
 			}
 
+			// Handle conflicts if interactive strategy is used
+			if result.HasConflicts() && cfg.strategy == sync.StrategyInteractive {
+				resolver := NewConflictResolver()
+
+				// Gather conflicts
+				var conflicts []*sync.Conflict
+				for _, sr := range result.Conflicts() {
+					if sr.Conflict != nil {
+						conflicts = append(conflicts, sr.Conflict)
+					}
+				}
+
+				// Display summary and resolve
+				resolver.DisplayConflictSummary(conflicts)
+				resolved, err := resolver.ResolveConflicts(conflicts)
+				if err != nil {
+					return fmt.Errorf("conflict resolution failed: %w", err)
+				}
+
+				// Apply resolved content
+				if !cfg.dryRun {
+					if err := applyResolvedConflicts(result, resolved); err != nil {
+						return fmt.Errorf("failed to apply resolved conflicts: %w", err)
+					}
+				}
+
+				fmt.Printf("\nResolved %d conflict(s)\n", len(resolved))
+			}
+
 			displaySyncResults(result)
 
 			if !result.Success() {
@@ -287,7 +318,7 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 	strategyStr := cmd.String("strategy")
 	strategy := sync.Strategy(strategyStr)
 	if !strategy.IsValid() {
-		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge)", strategyStr)
+		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge, three-way, interactive)", strategyStr)
 	}
 
 	return &syncConfig{
@@ -419,6 +450,25 @@ func displaySyncResults(result *sync.Result) {
 			fmt.Println()
 		}
 	}
+}
+
+// applyResolvedConflicts writes the resolved conflict content to the target files.
+func applyResolvedConflicts(result *sync.Result, resolved map[string]string) error {
+	for i := range result.Skills {
+		sr := &result.Skills[i]
+		if sr.Action == sync.ActionConflict {
+			if content, ok := resolved[sr.Skill.Name]; ok {
+				// #nosec G306 - skill files should be readable
+				if err := os.WriteFile(sr.TargetPath, []byte(content), 0o644); err != nil {
+					return fmt.Errorf("failed to write resolved content for %s: %w", sr.Skill.Name, err)
+				}
+				// Update the action to indicate it was resolved
+				sr.Action = sync.ActionMerged
+				sr.Message = "conflict resolved by user"
+			}
+		}
+	}
+	return nil
 }
 
 // parsePlatformSkills parses skills from the given platform
