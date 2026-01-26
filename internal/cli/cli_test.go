@@ -77,19 +77,31 @@ func TestConfigureLogging(t *testing.T) {
 			err := Run(ctx, tt.args)
 
 			// Restore stderr and stdout
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close pipe writer: %v", err)
+			}
 			os.Stderr = oldStderr
-			stdoutW.Close()
+			if err := stdoutW.Close(); err != nil {
+				t.Fatalf("failed to close stdout pipe writer: %v", err)
+			}
 			os.Stdout = oldStdout
 
 			// Drain pipes to prevent test hangs
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
-			r.Close()
+			if _, err := io.Copy(&buf, r); err != nil {
+				t.Fatalf("failed to read captured stderr: %v", err)
+			}
+			if err := r.Close(); err != nil {
+				t.Fatalf("failed to close pipe reader: %v", err)
+			}
 
 			var stdoutBuf bytes.Buffer
-			io.Copy(&stdoutBuf, stdoutR)
-			stdoutR.Close()
+			if _, err := io.Copy(&stdoutBuf, stdoutR); err != nil {
+				t.Fatalf("failed to read captured stdout: %v", err)
+			}
+			if err := stdoutR.Close(); err != nil {
+				t.Fatalf("failed to close stdout pipe reader: %v", err)
+			}
 
 			if err != nil {
 				t.Fatalf("Run() error = %v", err)
