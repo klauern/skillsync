@@ -5,6 +5,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,9 @@ type Config struct {
 
 	// Backup configures backup behavior
 	Backup BackupConfig `yaml:"backup"`
+
+	// Similarity configures similarity matching thresholds
+	Similarity SimilarityConfig `yaml:"similarity"`
 }
 
 // PlatformsConfig holds platform-specific configuration.
@@ -108,6 +112,16 @@ type BackupConfig struct {
 	CleanupOnSync bool `yaml:"cleanup_on_sync"`
 }
 
+// SimilarityConfig holds similarity matching settings.
+type SimilarityConfig struct {
+	// NameThreshold is the minimum score for name similarity (0.0-1.0)
+	NameThreshold float64 `yaml:"name_threshold"`
+	// ContentThreshold is the minimum score for content similarity (0.0-1.0)
+	ContentThreshold float64 `yaml:"content_threshold"`
+	// Algorithm is the default similarity algorithm (levenshtein, jaro-winkler, combined)
+	Algorithm string `yaml:"algorithm"`
+}
+
 // Default returns the default configuration.
 func Default() *Config {
 	return &Config{
@@ -158,6 +172,11 @@ func Default() *Config {
 			Location:      util.SkillsyncBackupsPath(),
 			MaxBackups:    10,
 			CleanupOnSync: true,
+		},
+		Similarity: SimilarityConfig{
+			NameThreshold:    0.7, // 70% match required for name similarity
+			ContentThreshold: 0.6, // 60% match required for content similarity
+			Algorithm:        "combined",
 		},
 	}
 }
@@ -322,6 +341,21 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := os.Getenv("SKILLSYNC_PLUGINS_REPOSITORY"); v != "" {
 		c.Plugins.RepositoryURL = v
+	}
+
+	// Similarity settings
+	if v := os.Getenv("SKILLSYNC_SIMILARITY_NAME_THRESHOLD"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			c.Similarity.NameThreshold = f
+		}
+	}
+	if v := os.Getenv("SKILLSYNC_SIMILARITY_CONTENT_THRESHOLD"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			c.Similarity.ContentThreshold = f
+		}
+	}
+	if v := os.Getenv("SKILLSYNC_SIMILARITY_ALGORITHM"); v != "" {
+		c.Similarity.Algorithm = v
 	}
 }
 

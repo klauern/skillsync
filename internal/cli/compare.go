@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
@@ -49,14 +50,14 @@ func compareCommand() *cli.Command {
 			&cli.Float64Flag{
 				Name:    "name-threshold",
 				Aliases: []string{"n"},
-				Value:   0.7,
-				Usage:   "Minimum name similarity score (0.0-1.0)",
+				Value:   0, // 0 means "use config value"
+				Usage:   "Minimum name similarity score (0.0-1.0, default from config: 0.7)",
 			},
 			&cli.Float64Flag{
 				Name:    "content-threshold",
 				Aliases: []string{"c"},
-				Value:   0.6,
-				Usage:   "Minimum content similarity score (0.0-1.0)",
+				Value:   0, // 0 means "use config value"
+				Usage:   "Minimum content similarity score (0.0-1.0, default from config: 0.6)",
 			},
 			&cli.StringFlag{
 				Name:    "platform",
@@ -79,8 +80,8 @@ func compareCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "algorithm",
-				Value: "combined",
-				Usage: "Similarity algorithm: combined, levenshtein, jaro-winkler (for names) or combined, lcs, jaccard (for content)",
+				Value: "", // empty means "use config value"
+				Usage:   "Similarity algorithm: combined, levenshtein, jaro-winkler (for names) or combined, lcs, jaccard (for content, default from config: combined)",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -101,6 +102,13 @@ type compareConfig struct {
 }
 
 func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
+	// Load configuration for defaults
+	appConfig, err := config.Load()
+	if err != nil {
+		// If config fails to load, use hardcoded defaults
+		appConfig = config.Default()
+	}
+
 	cfg := &compareConfig{
 		nameThreshold:    cmd.Float64("name-threshold"),
 		contentThreshold: cmd.Float64("content-threshold"),
@@ -111,7 +119,19 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 		algorithm:        cmd.String("algorithm"),
 	}
 
-	// Validate thresholds
+	// Apply config defaults for unset values
+	// A value of 0 for thresholds means "use config default"
+	if cfg.nameThreshold == 0 {
+		cfg.nameThreshold = appConfig.Similarity.NameThreshold
+	}
+	if cfg.contentThreshold == 0 {
+		cfg.contentThreshold = appConfig.Similarity.ContentThreshold
+	}
+	if cfg.algorithm == "" {
+		cfg.algorithm = appConfig.Similarity.Algorithm
+	}
+
+	// Validate thresholds (now after applying defaults)
 	if cfg.nameThreshold < 0 || cfg.nameThreshold > 1 {
 		return nil, errors.New("name-threshold must be between 0.0 and 1.0")
 	}
