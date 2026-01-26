@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/klauern/skillsync/internal/backup"
+	"github.com/klauern/skillsync/internal/logging"
 )
 
 func TestVersionVariables(t *testing.T) {
@@ -24,6 +26,83 @@ func TestVersionVariables(t *testing.T) {
 	}
 	if BuildDate == "" {
 		t.Error("BuildDate should not be empty")
+	}
+}
+
+func TestConfigureLogging(t *testing.T) {
+	tests := map[string]struct {
+		args        []string
+		wantLevel   slog.Level
+		wantSource  bool
+	}{
+		"no flags uses default info level": {
+			args:       []string{"skillsync", "version"},
+			wantLevel:  slog.LevelInfo,
+			wantSource: false,
+		},
+		"verbose flag enables info level": {
+			args:       []string{"skillsync", "--verbose", "version"},
+			wantLevel:  slog.LevelInfo,
+			wantSource: false,
+		},
+		"debug flag enables debug level": {
+			args:       []string{"skillsync", "--debug", "version"},
+			wantLevel:  slog.LevelDebug,
+			wantSource: true,
+		},
+		"debug flag implies verbose": {
+			args:       []string{"skillsync", "--debug", "version"},
+			wantLevel:  slog.LevelDebug,
+			wantSource: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Capture stderr (where logs go)
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			// Also capture stdout for version output
+			oldStdout := os.Stdout
+			stdoutR, stdoutW, _ := os.Pipe()
+			os.Stdout = stdoutW
+
+			// Reset logging to default before each test
+			logging.SetDefault(logging.New(logging.DefaultOptions()))
+
+			// Run command
+			ctx := context.Background()
+			err := Run(ctx, tt.args)
+
+			// Restore stderr and stdout
+			w.Close()
+			os.Stderr = oldStderr
+			stdoutW.Close()
+			os.Stdout = oldStdout
+
+			// Drain pipes to prevent test hangs
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			r.Close()
+
+			var stdoutBuf bytes.Buffer
+			io.Copy(&stdoutBuf, stdoutR)
+			stdoutR.Close()
+
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+
+			// Verify log level by checking if debug messages would be logged
+			logger := slog.Default()
+			if logger.Enabled(context.Background(), slog.LevelDebug) != (tt.wantLevel == slog.LevelDebug) {
+				t.Errorf("Logger debug enabled = %v, want %v",
+					logger.Enabled(context.Background(), slog.LevelDebug),
+					tt.wantLevel == slog.LevelDebug)
+			}
+		})
 	}
 }
 

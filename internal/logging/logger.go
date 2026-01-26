@@ -75,7 +75,10 @@ func Default() *slog.Logger {
 }
 
 // SetDefault sets the default logger and also sets it as slog's default.
+// This also ensures the sync.Once is triggered so Default() won't override the logger.
 func SetDefault(logger *slog.Logger) {
+	// Trigger the once to prevent Default() from overwriting our logger
+	defaultOnce.Do(func() {})
 	defaultLogger = logger
 	slog.SetDefault(logger)
 }

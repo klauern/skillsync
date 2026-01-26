@@ -3,7 +3,9 @@ package cli
 
 import (
 	"context"
+	"log/slog"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/urfave/cli/v3"
 )
 
@@ -22,6 +24,19 @@ func Run(ctx context.Context, args []string) error {
 		Name:    "skillsync",
 		Usage:   "Synchronize agent skills across AI coding platforms",
 		Version: Version,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "verbose",
+				Usage: "Enable verbose output (info level logging)",
+			},
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "Enable debug output (debug level logging, implies verbose)",
+			},
+		},
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			return ctx, configureLogging(cmd)
+		},
 		Commands: []*cli.Command{
 			versionCommand(),
 			configCommand(),
@@ -37,4 +52,23 @@ func Run(ctx context.Context, args []string) error {
 		},
 	}
 	return app.Run(ctx, args)
+}
+
+// configureLogging sets up the logging level based on CLI flags.
+func configureLogging(cmd *cli.Command) error {
+	opts := logging.DefaultOptions()
+
+	if cmd.Bool("debug") {
+		opts.Level = slog.LevelDebug
+		opts.AddSource = true
+	} else if cmd.Bool("verbose") {
+		opts.Level = slog.LevelInfo
+	}
+
+	logger := logging.New(opts)
+	logging.SetDefault(logger)
+
+	logging.Debug("logging configured", slog.String("level", opts.Level.String()))
+
+	return nil
 }
