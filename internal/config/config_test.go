@@ -592,11 +592,14 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 
 	// Check Codex defaults
-	if len(cfg.Platforms.Codex.SkillsPaths) != 1 {
-		t.Errorf("expected 1 Codex skills path, got %d", len(cfg.Platforms.Codex.SkillsPaths))
+	if len(cfg.Platforms.Codex.SkillsPaths) != 2 {
+		t.Errorf("expected 2 Codex skills paths, got %d", len(cfg.Platforms.Codex.SkillsPaths))
 	}
-	if cfg.Platforms.Codex.SkillsPaths[0] != ".codex" {
-		t.Errorf("expected Codex path to be '.codex', got %q", cfg.Platforms.Codex.SkillsPaths[0])
+	if cfg.Platforms.Codex.SkillsPaths[0] != ".codex/skills" {
+		t.Errorf("expected first Codex path to be '.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[0])
+	}
+	if cfg.Platforms.Codex.SkillsPaths[1] != "~/.codex/skills" {
+		t.Errorf("expected second Codex path to be '~/.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[1])
 	}
 }
 

@@ -15,7 +15,7 @@ func TestNew(t *testing.T) {
 	}{
 		"empty path uses default": {
 			basePath:     "",
-			wantContains: ".codex",
+			wantContains: ".codex/skills",
 		},
 		"custom path preserved": {
 			basePath:     "/custom/path",
@@ -27,8 +27,8 @@ func TestNew(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p := New(tt.basePath)
 			if tt.basePath == "" {
-				// For empty path, just verify it contains .codex
-				if p.basePath == "" || !containsPath(p.basePath, tt.wantContains) {
+				// For empty path, just verify it contains .codex/skills
+				if p.basePath == "" || !containsPathSubstring(p.basePath, tt.wantContains) {
 					t.Errorf("New(%q).basePath = %q, want to contain %q", tt.basePath, p.basePath, tt.wantContains)
 				}
 			} else {
@@ -40,8 +40,9 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func containsPath(path, substr string) bool {
-	return filepath.Base(path) == substr || path == substr
+func containsPathSubstring(path, substr string) bool {
+	// Check if the path ends with the substring (e.g., ".codex/skills")
+	return len(path) >= len(substr) && path[len(path)-len(substr):] == substr
 }
 
 func TestParser_Platform(t *testing.T) {
@@ -54,8 +55,8 @@ func TestParser_Platform(t *testing.T) {
 func TestParser_DefaultPath(t *testing.T) {
 	p := New("")
 	got := p.DefaultPath()
-	if !containsPath(got, ".codex") {
-		t.Errorf("DefaultPath() = %q, want to contain .codex", got)
+	if !containsPathSubstring(got, ".codex/skills") {
+		t.Errorf("DefaultPath() = %q, want to contain .codex/skills", got)
 	}
 }
 

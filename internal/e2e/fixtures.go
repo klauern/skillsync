@@ -139,7 +139,7 @@ func (h *Harness) CodexFixture() *Fixture {
 	// Codex stores skills in the path set by SKILLSYNC_CODEX_PATH
 	skillsDir := h.env["SKILLSYNC_CODEX_PATH"]
 	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".codex")
+		skillsDir = filepath.Join(h.homeDir, ".codex", "skills")
 	}
 	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
 		h.t.Fatalf("failed to create Codex skills directory: %v", err)

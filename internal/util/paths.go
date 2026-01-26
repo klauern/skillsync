@@ -33,9 +33,14 @@ func CursorProjectSkillsPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "skills")
 }
 
-// CodexConfigPath returns the Codex config directory for a project
+// CodexConfigPath returns the Codex skills directory for a project
 func CodexConfigPath(projectDir string) string {
-	return filepath.Join(projectDir, ".codex")
+	return filepath.Join(projectDir, ".codex", "skills")
+}
+
+// CodexSkillsPath returns the default Codex skills directory (user-level)
+func CodexSkillsPath() string {
+	return filepath.Join(HomeDir(), ".codex", "skills")
 }
 
 // SkillsyncConfigPath returns the skillsync configuration directory

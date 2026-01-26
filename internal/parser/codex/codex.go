@@ -69,10 +69,10 @@ type MCPServer struct {
 }
 
 // New creates a new Codex parser
-// If basePath is empty, uses the default Codex config directory (~/.codex)
+// If basePath is empty, uses the default Codex skills directory (~/.codex/skills)
 func New(basePath string) *Parser {
 	if basePath == "" {
-		basePath = filepath.Join(util.HomeDir(), ".codex")
+		basePath = util.CodexSkillsPath()
 	}
 	return &Parser{basePath: basePath}
 }
@@ -326,7 +326,7 @@ func (p *Parser) Platform() model.Platform {
 	return model.Codex
 }
 
-// DefaultPath returns the default path for Codex configuration
+// DefaultPath returns the default path for Codex skills
 func (p *Parser) DefaultPath() string {
-	return filepath.Join(util.HomeDir(), ".codex")
+	return util.CodexSkillsPath()
 }

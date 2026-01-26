@@ -34,9 +34,18 @@ func TestCodexConfigPath(t *testing.T) {
 	projectDir := "/test/project"
 	path := CodexConfigPath(projectDir)
 
-	expected := "/test/project/.codex"
+	expected := "/test/project/.codex/skills"
 	if path != expected {
 		t.Errorf("CodexConfigPath(%q) = %q, want %q", projectDir, path, expected)
+	}
+}
+
+func TestCodexSkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".codex", "skills")
+	got := CodexSkillsPath()
+	if got != expected {
+		t.Errorf("CodexSkillsPath() = %q, want %q", got, expected)
 	}
 }
 
