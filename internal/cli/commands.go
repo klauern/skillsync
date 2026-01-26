@@ -1049,3 +1049,164 @@ func discoverSkillsForExport(platform model.Platform) ([]model.Skill, error) {
 
 	return allSkills, nil
 }
+
+func backupCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "backup",
+		Usage: "Manage skillsync backups",
+		Description: `Manage backups of skill files.
+
+   Backups are automatically created before sync operations.
+   Use these commands to view, verify, and manage backups.
+
+   Examples:
+     skillsync backup list                    # List all backups
+     skillsync backup list --platform claude-code
+     skillsync backup list --format json`,
+		Commands: []*cli.Command{
+			backupListCommand(),
+		},
+		Action: func(_ context.Context, _ *cli.Command) error {
+			// Default action: list backups
+			return listBackups("", "table", 0)
+		},
+	}
+}
+
+func backupListCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "list",
+		Aliases: []string{"ls"},
+		Usage:   "List existing backups with metadata",
+		UsageText: `skillsync backup list [options]
+   skillsync backup list --platform claude-code
+   skillsync backup list --format json
+   skillsync backup list --limit 10`,
+		Description: `List all backups with their metadata including timestamp, size, and platform.
+
+   Output includes: ID, Platform, Source File, Created At, Size
+
+   Formats: table (default), json, yaml`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Filter by platform (claude-code, cursor, codex)",
+			},
+			&cli.StringFlag{
+				Name:    "format",
+				Aliases: []string{"f"},
+				Value:   "table",
+				Usage:   "Output format: table, json, yaml",
+			},
+			&cli.IntFlag{
+				Name:    "limit",
+				Aliases: []string{"n"},
+				Value:   0,
+				Usage:   "Limit results to N most recent backups (0 = unlimited)",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			platform := cmd.String("platform")
+			format := cmd.String("format")
+			limit := cmd.Int("limit")
+			return listBackups(platform, format, int(limit))
+		},
+	}
+}
+
+// listBackups retrieves and displays backups based on filters
+func listBackups(platform, format string, limit int) error {
+	backups, err := backup.ListBackups(platform)
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	// Apply limit if specified
+	if limit > 0 && len(backups) > limit {
+		backups = backups[:limit]
+	}
+
+	return outputBackups(backups, format)
+}
+
+// outputBackups formats and prints backups in the requested format
+func outputBackups(backups []backup.Metadata, format string) error {
+	switch format {
+	case "json":
+		return outputBackupsJSON(backups)
+	case "yaml":
+		return outputBackupsYAML(backups)
+	case "table":
+		return outputBackupsTable(backups)
+	default:
+		return fmt.Errorf("unsupported format: %s (use table, json, or yaml)", format)
+	}
+}
+
+// outputBackupsJSON prints backups as JSON
+func outputBackupsJSON(backups []backup.Metadata) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(backups)
+}
+
+// outputBackupsYAML prints backups as YAML
+func outputBackupsYAML(backups []backup.Metadata) error {
+	data, err := yaml.Marshal(backups)
+	if err != nil {
+		return fmt.Errorf("failed to marshal YAML: %w", err)
+	}
+	fmt.Print(string(data))
+	return nil
+}
+
+// outputBackupsTable prints backups in a table format
+func outputBackupsTable(backups []backup.Metadata) error {
+	if len(backups) == 0 {
+		fmt.Println("No backups found.")
+		return nil
+	}
+
+	fmt.Printf("%-28s %-12s %-35s %-20s %s\n", "ID", "PLATFORM", "SOURCE", "CREATED", "SIZE")
+	fmt.Printf("%-28s %-12s %-35s %-20s %s\n", "--", "--------", "------", "-------", "----")
+
+	for _, b := range backups {
+		// Truncate source path if too long
+		source := b.SourcePath
+		if len(source) > 35 {
+			source = "..." + source[len(source)-32:]
+		}
+
+		// Format size
+		size := formatSize(b.Size)
+
+		// Format creation time
+		created := b.CreatedAt.Format("2006-01-02 15:04:05")
+
+		fmt.Printf("%-28s %-12s %-35s %-20s %s\n", b.ID, b.Platform, source, created, size)
+	}
+
+	fmt.Printf("\nTotal: %d backup(s)\n", len(backups))
+	return nil
+}
+
+// formatSize formats a byte size into a human-readable string
+func formatSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
