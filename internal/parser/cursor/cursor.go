@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/parser/skills"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -18,7 +20,9 @@ type Parser struct {
 }
 
 // New creates a new Cursor parser
-// If basePath is empty, uses the default Cursor rules directory (~/.cursor/rules)
+// If basePath is empty, uses the default Cursor skills directory (~/.cursor/skills)
+// The parser supports both the new Agent Skills Standard (SKILL.md) format and
+// legacy .cursor/rules format with .md/.mdc files.
 func New(basePath string) *Parser {
 	if basePath == "" {
 		basePath = util.CursorSkillsPath()
@@ -27,7 +31,9 @@ func New(basePath string) *Parser {
 }
 
 // Parse parses Cursor skills from markdown files with YAML frontmatter
-// Cursor uses .md and .mdc files with optional globs and alwaysApply fields
+// Supports both:
+// 1. Legacy format: .md and .mdc files with optional globs and alwaysApply fields
+// 2. Agent Skills Standard: SKILL.md files in subdirectories
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
@@ -38,7 +44,27 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		return []model.Skill{}, nil
 	}
 
-	// Discover skill files - Cursor uses .md and .mdc files
+	var allSkills []model.Skill
+	seenNames := make(map[string]bool)
+
+	// First, parse SKILL.md files (Agent Skills Standard format)
+	// These take precedence over legacy format when names collide
+	skillsParser := skills.New(p.basePath, p.Platform())
+	agentSkills, err := skillsParser.Parse()
+	if err != nil {
+		logging.Warn("failed to parse SKILL.md files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+			logging.Err(err),
+		)
+	} else {
+		for _, skill := range agentSkills {
+			seenNames[skill.Name] = true
+			allSkills = append(allSkills, skill)
+		}
+	}
+
+	// Then, discover legacy skill files - Cursor uses .md and .mdc files
 	patterns := []string{"*.md", "*.mdc", "**/*.md", "**/*.mdc"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
@@ -50,15 +76,22 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		return nil, fmt.Errorf("failed to discover skill files in %q: %w", p.basePath, err)
 	}
 
+	// Filter out SKILL.md files (already parsed by skills parser)
+	var legacyFiles []string
+	for _, f := range files {
+		if !strings.HasSuffix(f, "SKILL.md") {
+			legacyFiles = append(legacyFiles, f)
+		}
+	}
+
 	logging.Debug("discovered skill files",
 		logging.Platform(string(p.Platform())),
 		logging.Path(p.basePath),
-		logging.Count(len(files)),
+		logging.Count(len(legacyFiles)),
 	)
 
-	// Parse each skill file
-	skills := make([]model.Skill, 0, len(files))
-	for _, filePath := range files {
+	// Parse each legacy skill file
+	for _, filePath := range legacyFiles {
 		skill, err := p.parseSkillFile(filePath)
 		if err != nil {
 			logging.Warn("failed to parse skill file",
@@ -68,15 +101,24 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			)
 			continue
 		}
-		skills = append(skills, skill)
+		// Skip if a SKILL.md with the same name was already parsed
+		if seenNames[skill.Name] {
+			logging.Debug("skipping legacy skill, SKILL.md version takes precedence",
+				logging.Skill(skill.Name),
+				logging.Path(filePath),
+			)
+			continue
+		}
+		seenNames[skill.Name] = true
+		allSkills = append(allSkills, skill)
 	}
 
 	logging.Debug("completed parsing skills",
 		logging.Platform(string(p.Platform())),
-		logging.Count(len(skills)),
+		logging.Count(len(allSkills)),
 	)
 
-	return skills, nil
+	return allSkills, nil
 }
 
 // parseSkillFile parses a single Cursor skill file

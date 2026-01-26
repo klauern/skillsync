@@ -297,3 +297,109 @@ func TestFilterExistingPaths(t *testing.T) {
 		t.Errorf("FilterExistingPaths() returned wrong path: %s", filtered[0].Path)
 	}
 }
+
+func TestCursorSkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".cursor", "skills")
+	got := CursorSkillsPath()
+	if got != expected {
+		t.Errorf("CursorSkillsPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestCursorLegacySkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".cursor", "rules")
+	got := CursorLegacySkillsPath()
+	if got != expected {
+		t.Errorf("CursorLegacySkillsPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestCursorProjectSkillsPath(t *testing.T) {
+	projectDir := "/test/project"
+	expected := "/test/project/.cursor/skills"
+	got := CursorProjectSkillsPath(projectDir)
+	if got != expected {
+		t.Errorf("CursorProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
+	}
+}
+
+func TestGetTieredPaths_CursorIncludesLegacyPaths(t *testing.T) {
+	home := HomeDir()
+
+	cfg := TieredPathConfig{
+		WorkingDir: "/test/project",
+		Platform:   model.Cursor,
+	}
+
+	paths := GetTieredPaths(cfg)
+
+	// Check repo scope includes both skills and rules directories
+	repoPaths := paths[model.ScopeRepo]
+	hasSkillsPath := false
+	hasRulesPath := false
+	for _, p := range repoPaths {
+		if p == "/test/project/.cursor/skills" {
+			hasSkillsPath = true
+		}
+		if p == "/test/project/.cursor/rules" {
+			hasRulesPath = true
+		}
+	}
+	if !hasSkillsPath {
+		t.Error("GetTieredPaths() for Cursor missing repo skills path")
+	}
+	if !hasRulesPath {
+		t.Error("GetTieredPaths() for Cursor missing repo rules path (legacy)")
+	}
+
+	// Check user scope includes both skills and rules directories
+	userPaths := paths[model.ScopeUser]
+	hasUserSkillsPath := false
+	hasUserRulesPath := false
+	for _, p := range userPaths {
+		if p == filepath.Join(home, ".cursor", "skills") {
+			hasUserSkillsPath = true
+		}
+		if p == filepath.Join(home, ".cursor", "rules") {
+			hasUserRulesPath = true
+		}
+	}
+	if !hasUserSkillsPath {
+		t.Error("GetTieredPaths() for Cursor missing user skills path")
+	}
+	if !hasUserRulesPath {
+		t.Error("GetTieredPaths() for Cursor missing user rules path (legacy)")
+	}
+}
+
+func TestGetTieredPaths_OtherPlatformsNoLegacyPaths(t *testing.T) {
+	// Verify that non-Cursor platforms don't have legacy paths
+	platforms := []model.Platform{model.ClaudeCode, model.Codex}
+
+	for _, platform := range platforms {
+		t.Run(string(platform), func(t *testing.T) {
+			cfg := TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   platform,
+			}
+
+			paths := GetTieredPaths(cfg)
+
+			// Repo scope should only have skills directory
+			repoPaths := paths[model.ScopeRepo]
+			for _, p := range repoPaths {
+				if filepath.Base(p) == "rules" {
+					t.Errorf("GetTieredPaths() for %s should not include rules path: %s", platform, p)
+				}
+			}
+
+			// User scope should only have skills directory
+			userPaths := paths[model.ScopeUser]
+			if len(userPaths) != 1 {
+				t.Errorf("GetTieredPaths() for %s should have exactly 1 user path, got %d", platform, len(userPaths))
+			}
+		})
+	}
+}

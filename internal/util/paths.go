@@ -22,14 +22,26 @@ func ClaudeCodeSkillsPath() string {
 	return filepath.Join(HomeDir(), ".claude", "skills")
 }
 
-// CursorRulesPath returns the Cursor rules directory for a project
+// CursorRulesPath returns the Cursor rules directory for a project (legacy format)
 func CursorRulesPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "rules")
 }
 
-// CursorSkillsPath returns the default Cursor rules directory (global)
+// CursorSkillsPath returns the default Cursor skills directory (global)
+// This is the new Agent Skills Standard location (~/.cursor/skills)
 func CursorSkillsPath() string {
+	return filepath.Join(HomeDir(), ".cursor", "skills")
+}
+
+// CursorLegacySkillsPath returns the legacy Cursor rules directory (global)
+// This maintains backward compatibility with ~/.cursor/rules
+func CursorLegacySkillsPath() string {
 	return filepath.Join(HomeDir(), ".cursor", "rules")
+}
+
+// CursorProjectSkillsPath returns the Cursor skills directory for a project
+func CursorProjectSkillsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".cursor", "skills")
 }
 
 // CodexConfigPath returns the Codex config directory for a project
@@ -94,6 +106,7 @@ type TieredPathConfig struct {
 
 // GetTieredPaths returns paths for each scope level in precedence order (highest first).
 // This enables cascading skill discovery where repo skills override user skills, etc.
+// For Cursor, this includes both /skills and legacy /rules directories.
 func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 	paths := make(map[model.SkillScope][]string)
 
@@ -104,6 +117,12 @@ func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 		cwdPath := filepath.Join(cfg.WorkingDir, platformDir, "skills")
 		paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
 
+		// For Cursor, also check legacy /rules directory
+		if cfg.Platform == model.Cursor {
+			cwdRulesPath := filepath.Join(cfg.WorkingDir, platformDir, "rules")
+			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdRulesPath)
+		}
+
 		// Also check repo root if different from working dir
 		repoRoot := cfg.RepoRoot
 		if repoRoot == "" {
@@ -112,12 +131,24 @@ func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 		if repoRoot != "" && repoRoot != cfg.WorkingDir {
 			repoPath := filepath.Join(repoRoot, platformDir, "skills")
 			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], repoPath)
+
+			// For Cursor, also check legacy /rules directory at repo root
+			if cfg.Platform == model.Cursor {
+				repoRulesPath := filepath.Join(repoRoot, platformDir, "rules")
+				paths[model.ScopeRepo] = append(paths[model.ScopeRepo], repoRulesPath)
+			}
 		}
 	}
 
 	// User scope: ~/.{platform}/skills
 	userPath := filepath.Join(HomeDir(), platformDir, "skills")
 	paths[model.ScopeUser] = []string{userPath}
+
+	// For Cursor, also check legacy ~/.cursor/rules directory
+	if cfg.Platform == model.Cursor {
+		legacyUserPath := filepath.Join(HomeDir(), platformDir, "rules")
+		paths[model.ScopeUser] = append(paths[model.ScopeUser], legacyUserPath)
+	}
 
 	// Admin scope: optional, typically /opt/{platform}/skills
 	if cfg.AdminPath != "" {
