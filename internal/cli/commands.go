@@ -418,12 +418,13 @@ func outputTable(skills []model.Skill) error {
 	}
 
 	// Print colored headers
+	// SOURCE shows where skills come from: ~/.claude (user), .claude (repo), plugin:<name>
 	fmt.Printf("%s %s %s %s\n",
 		ui.Header(fmt.Sprintf("%-25s", "NAME")),
 		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
-		ui.Header(fmt.Sprintf("%-15s", "SCOPE")),
+		ui.Header(fmt.Sprintf("%-20s", "SOURCE")),
 		ui.Header(fmt.Sprintf("%-40s", "DESCRIPTION")))
-	fmt.Printf("%-25s %-12s %-15s %-40s\n", "----", "--------", "-----", "-----------")
+	fmt.Printf("%-25s %-12s %-20s %-40s\n", "----", "--------", "------", "-----------")
 
 	for _, skill := range skills {
 		name := skill.Name
@@ -436,16 +437,13 @@ func outputTable(skills []model.Skill) error {
 			desc = desc[:37] + "..."
 		}
 
-		// Use DisplayScope for formatted output
-		scope := skill.DisplayScope()
-		if len(scope) > 15 {
-			scope = scope[:12] + "..."
-		}
-
 		// Color platform names for visual distinction
 		platform := colorPlatform(string(skill.Platform))
 
-		fmt.Printf("%-25s %s %-15s %-40s\n", name, platform, scope, desc)
+		// Color source for visual distinction by scope type
+		source := colorSource(skill)
+
+		fmt.Printf("%-25s %s %s %-40s\n", name, platform, source, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
@@ -463,6 +461,29 @@ func colorPlatform(platform string) string {
 		return ui.Success(formatted)
 	case "codex":
 		return ui.Warning(formatted)
+	default:
+		return formatted
+	}
+}
+
+// colorSource returns a colored source string based on the skill's scope.
+// Colors: user (~/.xxx) = cyan, repo (.xxx) = green, plugin = yellow, other = dim
+func colorSource(skill model.Skill) string {
+	source := skill.DisplayScope()
+	if len(source) > 20 {
+		source = source[:17] + "..."
+	}
+	formatted := fmt.Sprintf("%-20s", source)
+
+	switch skill.Scope {
+	case model.ScopeUser:
+		return ui.Info(formatted) // cyan for user-level skills
+	case model.ScopeRepo:
+		return ui.Success(formatted) // green for repo-level skills
+	case model.ScopePlugin:
+		return ui.Warning(formatted) // yellow for plugin skills
+	case model.ScopeSystem, model.ScopeAdmin, model.ScopeBuiltin:
+		return ui.Dim(formatted) // dim for system/admin/builtin
 	default:
 		return formatted
 	}
