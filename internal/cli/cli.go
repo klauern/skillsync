@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/ui"
 )
 
 var (
@@ -34,8 +35,13 @@ func Run(ctx context.Context, args []string) error {
 				Name:  "debug",
 				Usage: "Enable debug output (debug level logging, implies verbose)",
 			},
+			&cli.BoolFlag{
+				Name:  "no-color",
+				Usage: "Disable colored output",
+			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			configureColors(cmd)
 			return ctx, configureLogging(cmd)
 		},
 		Commands: []*cli.Command{
@@ -53,6 +59,13 @@ func Run(ctx context.Context, args []string) error {
 		},
 	}
 	return app.Run(ctx, args)
+}
+
+// configureColors sets up color output based on CLI flags.
+func configureColors(cmd *cli.Command) {
+	if cmd.Bool("no-color") {
+		ui.DisableColors()
+	}
 }
 
 // configureLogging sets up the logging level based on CLI flags.
