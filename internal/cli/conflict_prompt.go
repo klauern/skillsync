@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/klauern/skillsync/internal/sync"
+	"github.com/klauern/skillsync/internal/ui"
 )
 
 // ConflictResolver handles interactive conflict resolution with users.
@@ -58,7 +59,7 @@ func (cr *ConflictResolver) ResolveConflicts(conflicts []*sync.Conflict) (map[st
 	return resolved, nil
 }
 
-// showDiffPreview displays a preview of the differences.
+// showDiffPreview displays a preview of the differences with colored output.
 func (cr *ConflictResolver) showDiffPreview(conflict *sync.Conflict) {
 	fmt.Println("Preview of changes:")
 	fmt.Println(strings.Repeat("-", 50))
@@ -72,21 +73,36 @@ func (cr *ConflictResolver) showDiffPreview(conflict *sync.Conflict) {
 			break
 		}
 
-		fmt.Printf("@@ -%d,%d +%d,%d @@\n",
+		// Hunk header in cyan
+		fmt.Println(ui.Info(fmt.Sprintf("@@ -%d,%d +%d,%d @@",
 			hunk.SourceStart, hunk.SourceCount,
-			hunk.TargetStart, hunk.TargetCount)
+			hunk.TargetStart, hunk.TargetCount)))
 
 		for _, line := range hunk.Lines {
 			if shown >= maxLines {
 				fmt.Println("... (truncated)")
 				break
 			}
-			fmt.Println(line.String())
+			// Color diff lines based on type
+			fmt.Println(formatDiffLine(line))
 			shown++
 		}
 	}
 
 	fmt.Println(strings.Repeat("-", 50))
+}
+
+// formatDiffLine returns a colored string representation of a diff line.
+func formatDiffLine(line sync.DiffLine) string {
+	lineStr := line.String()
+	switch line.Type {
+	case sync.DiffLineAdded:
+		return ui.Success(lineStr)
+	case sync.DiffLineRemoved:
+		return ui.Error(lineStr)
+	default:
+		return lineStr
+	}
 }
 
 // promptResolution asks the user to choose how to resolve a conflict.

@@ -136,7 +136,7 @@ func (f *Formatter) FormatMultiple(w io.Writer, results []*ComparisonResult) err
 	return nil
 }
 
-// formatUnified outputs in unified diff format.
+// formatUnified outputs in unified diff format with colored output.
 func (f *Formatter) formatUnified(w io.Writer, result *ComparisonResult) error {
 	// Header
 	if err := f.writeHeader(w, result); err != nil {
@@ -160,16 +160,16 @@ func (f *Formatter) formatUnified(w io.Writer, result *ComparisonResult) error {
 	}
 
 	for _, hunk := range hunksToShow {
-		// Hunk header
-		if _, err := fmt.Fprintf(w, "@@ -%d,%d +%d,%d @@\n",
+		// Hunk header in cyan
+		if _, err := fmt.Fprintln(w, ui.Info(fmt.Sprintf("@@ -%d,%d +%d,%d @@",
 			hunk.SourceStart, hunk.SourceCount,
-			hunk.TargetStart, hunk.TargetCount); err != nil {
+			hunk.TargetStart, hunk.TargetCount))); err != nil {
 			return err
 		}
 
-		// Hunk lines
+		// Hunk lines with colors
 		for _, line := range hunk.Lines {
-			if _, err := fmt.Fprintln(w, line.String()); err != nil {
+			if _, err := fmt.Fprintln(w, formatDiffLine(line)); err != nil {
 				return err
 			}
 		}
@@ -184,7 +184,20 @@ func (f *Formatter) formatUnified(w io.Writer, result *ComparisonResult) error {
 	return nil
 }
 
-// formatSideBySide outputs in side-by-side format.
+// formatDiffLine returns a colored string representation of a diff line.
+func formatDiffLine(line sync.DiffLine) string {
+	lineStr := line.String()
+	switch line.Type {
+	case sync.DiffLineAdded:
+		return ui.Success(lineStr)
+	case sync.DiffLineRemoved:
+		return ui.Error(lineStr)
+	default:
+		return lineStr
+	}
+}
+
+// formatSideBySide outputs in side-by-side format with colored diff markers.
 func (f *Formatter) formatSideBySide(w io.Writer, result *ComparisonResult) error {
 	// Header
 	if err := f.writeHeader(w, result); err != nil {
@@ -237,11 +250,13 @@ func (f *Formatter) formatSideBySide(w io.Writer, result *ComparisonResult) erro
 	for i := range maxLines {
 		var left, right string
 		var leftMarker, rightMarker string
+		var isRemoved, isAdded bool
 
 		if i < len(lines1) {
 			left = truncateString(lines1[i], contentWidth)
 			if removedLines[i] {
 				leftMarker = "-"
+				isRemoved = true
 			} else {
 				leftMarker = " "
 			}
@@ -251,6 +266,7 @@ func (f *Formatter) formatSideBySide(w io.Writer, result *ComparisonResult) erro
 			right = truncateString(lines2[i], contentWidth)
 			if addedLines[i] {
 				rightMarker = "+"
+				isAdded = true
 			} else {
 				rightMarker = " "
 			}
@@ -270,13 +286,34 @@ func (f *Formatter) formatSideBySide(w io.Writer, result *ComparisonResult) erro
 			} else {
 				rightNum = strings.Repeat(" ", lineNumWidth)
 			}
-			_, err = fmt.Fprintf(w, "%s%s %-*s | %s%s %s\n",
-				leftNum, leftMarker, contentWidth, left,
-				rightNum, rightMarker, right)
+
+			// Format left side with color
+			leftContent := fmt.Sprintf("%s%s %-*s", leftNum, leftMarker, contentWidth, left)
+			if isRemoved {
+				leftContent = ui.Error(leftContent)
+			}
+
+			// Format right side with color
+			rightContent := fmt.Sprintf("%s%s %s", rightNum, rightMarker, right)
+			if isAdded {
+				rightContent = ui.Success(rightContent)
+			}
+
+			_, err = fmt.Fprintf(w, "%s | %s\n", leftContent, rightContent)
 		} else {
-			_, err = fmt.Fprintf(w, "%s%-*s | %s%s\n",
-				leftMarker, halfWidth-1, left,
-				rightMarker, right)
+			// Format left side with color
+			leftContent := fmt.Sprintf("%s%-*s", leftMarker, halfWidth-1, left)
+			if isRemoved {
+				leftContent = ui.Error(leftContent)
+			}
+
+			// Format right side with color
+			rightContent := fmt.Sprintf("%s%s", rightMarker, right)
+			if isAdded {
+				rightContent = ui.Success(rightContent)
+			}
+
+			_, err = fmt.Fprintf(w, "%s | %s\n", leftContent, rightContent)
 		}
 		if err != nil {
 			return err
@@ -286,20 +323,20 @@ func (f *Formatter) formatSideBySide(w io.Writer, result *ComparisonResult) erro
 	return nil
 }
 
-// formatSummary outputs only summary statistics.
+// formatSummary outputs only summary statistics with colored output.
 func (f *Formatter) formatSummary(w io.Writer, result *ComparisonResult) error {
 	if err := f.writeHeader(w, result); err != nil {
 		return err
 	}
 
-	// Statistics
+	// Statistics with colors
 	if _, err := fmt.Fprintf(w, "%-20s %s\n", "Hunks:", fmt.Sprintf("%d", len(result.Hunks))); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "%-20s %s\n", "Lines added:", fmt.Sprintf("+%d", result.LinesAdded)); err != nil {
+	if _, err := fmt.Fprintf(w, "%-20s %s\n", "Lines added:", ui.Success(fmt.Sprintf("+%d", result.LinesAdded))); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "%-20s %s\n", "Lines removed:", fmt.Sprintf("-%d", result.LinesRemoved)); err != nil {
+	if _, err := fmt.Fprintf(w, "%-20s %s\n", "Lines removed:", ui.Error(fmt.Sprintf("-%d", result.LinesRemoved))); err != nil {
 		return err
 	}
 
@@ -318,9 +355,10 @@ func (f *Formatter) formatSummary(w io.Writer, result *ComparisonResult) error {
 				}
 				break
 			}
-			if _, err := fmt.Fprintf(w, "  @@ -%d,%d +%d,%d @@\n",
+			// Hunk header in cyan
+			if _, err := fmt.Fprintln(w, "  "+ui.Info(fmt.Sprintf("@@ -%d,%d +%d,%d @@",
 				hunk.SourceStart, hunk.SourceCount,
-				hunk.TargetStart, hunk.TargetCount); err != nil {
+				hunk.TargetStart, hunk.TargetCount))); err != nil {
 				return err
 			}
 		}
