@@ -39,6 +39,28 @@ func TestAllPlatforms(t *testing.T) {
 	}
 }
 
+func TestPlatformShort(t *testing.T) {
+	tests := map[string]struct {
+		platform Platform
+		want     string
+	}{
+		"claude code": {platform: ClaudeCode, want: "cc"},
+		"cursor":      {platform: Cursor, want: "cur"},
+		"codex":       {platform: Codex, want: "cdx"},
+		"unknown":     {platform: "unknown", want: "unknown"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.platform.Short()
+			if got != tt.want {
+				t.Errorf("Platform(%q).Short() = %q, want %q",
+					tt.platform, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParsePlatform(t *testing.T) {
 	tests := map[string]struct {
 		input   string

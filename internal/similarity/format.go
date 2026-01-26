@@ -470,9 +470,9 @@ func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 
 	// Rows
 	for _, r := range results {
-		// Format skill names with scope inline: "name (scope)"
-		skill1Display := formatSkillWithScope(r.Skill1.Name, r.Skill1.Scope.String(), skillColWidth)
-		skill2Display := formatSkillWithScope(r.Skill2.Name, r.Skill2.Scope.String(), skillColWidth)
+		// Format skill names with platform and scope inline: "name (platform/scope)"
+		skill1Display := formatSkillWithPlatformAndScope(r.Skill1.Name, r.Skill1.Platform.Short(), r.Skill1.Scope.String(), skillColWidth)
+		skill2Display := formatSkillWithPlatformAndScope(r.Skill2.Name, r.Skill2.Platform.Short(), r.Skill2.Scope.String(), skillColWidth)
 
 		nameScore := "-"
 		contentScore := "-"
@@ -497,24 +497,21 @@ func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 	return nil
 }
 
-// formatSkillWithScope formats a skill name with scope inline: "name (scope)".
-// Truncates if needed to fit within maxWidth.
-func formatSkillWithScope(name, scope string, maxWidth int) string {
-	if scope == "" {
-		return truncateString(name, maxWidth)
-	}
-	// Format: "name (scope)"
-	full := fmt.Sprintf("%s (%s)", name, scope)
+// formatSkillWithPlatformAndScope formats a skill name with platform and scope inline: "name (platform/scope)".
+// Truncates name if needed to fit within maxWidth while preserving the platform/scope suffix.
+func formatSkillWithPlatformAndScope(name, platform, scope string, maxWidth int) string {
+	// Format: "name (platform/scope)"
+	suffix := fmt.Sprintf(" (%s/%s)", platform, scope)
+	full := name + suffix
 	if len(full) <= maxWidth {
 		return full
 	}
-	// Truncate name to fit, preserving scope
-	scopePart := fmt.Sprintf(" (%s)", scope)
-	availableForName := maxWidth - len(scopePart)
+	// Truncate name to fit, preserving platform/scope suffix
+	availableForName := maxWidth - len(suffix)
 	if availableForName < 4 { // Need at least "a..."
 		return truncateString(full, maxWidth)
 	}
-	return truncateString(name, availableForName) + scopePart
+	return truncateString(name, availableForName) + suffix
 }
 
 // formatNameWithScope returns "name (scope)" if scope is non-empty, otherwise just "name".

@@ -43,6 +43,21 @@ func (p Platform) ConfigDir() string {
 	}
 }
 
+// Short returns an abbreviated platform name for compact display.
+// Returns "cc" for ClaudeCode, "cur" for Cursor, "cdx" for Codex.
+func (p Platform) Short() string {
+	switch p {
+	case ClaudeCode:
+		return "cc"
+	case Cursor:
+		return "cur"
+	case Codex:
+		return "cdx"
+	default:
+		return string(p)
+	}
+}
+
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
 	return []Platform{ClaudeCode, Cursor, Codex}
