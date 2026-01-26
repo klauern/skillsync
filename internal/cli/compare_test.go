@@ -195,71 +195,71 @@ func TestInvalidOutputFormat(t *testing.T) {
 func TestParseCompareConfigValidation(t *testing.T) {
 	// Test config parsing logic directly using mock command data
 	tests := []struct {
-		name            string
-		nameThreshold   float64
+		name             string
+		nameThreshold    float64
 		contentThreshold float64
-		nameOnly        bool
-		contentOnly     bool
-		format          string
-		wantErr         bool
+		nameOnly         bool
+		contentOnly      bool
+		format           string
+		wantErr          bool
 	}{
 		{
-			name:            "valid default config",
-			nameThreshold:   0.7,
+			name:             "valid default config",
+			nameThreshold:    0.7,
 			contentThreshold: 0.6,
-			format:          "table",
-			wantErr:         false,
+			format:           "table",
+			wantErr:          false,
 		},
 		{
-			name:            "invalid name threshold too high",
-			nameThreshold:   1.5,
+			name:             "invalid name threshold too high",
+			nameThreshold:    1.5,
 			contentThreshold: 0.6,
-			format:          "table",
-			wantErr:         true,
+			format:           "table",
+			wantErr:          true,
 		},
 		{
-			name:            "invalid name threshold negative",
-			nameThreshold:   -0.1,
+			name:             "invalid name threshold negative",
+			nameThreshold:    -0.1,
 			contentThreshold: 0.6,
-			format:          "table",
-			wantErr:         true,
+			format:           "table",
+			wantErr:          true,
 		},
 		{
-			name:            "invalid content threshold",
-			nameThreshold:   0.7,
+			name:             "invalid content threshold",
+			nameThreshold:    0.7,
 			contentThreshold: 2.0,
-			format:          "table",
-			wantErr:         true,
+			format:           "table",
+			wantErr:          true,
 		},
 		{
-			name:            "conflicting name-only and content-only",
-			nameThreshold:   0.7,
+			name:             "conflicting name-only and content-only",
+			nameThreshold:    0.7,
 			contentThreshold: 0.6,
-			nameOnly:        true,
-			contentOnly:     true,
-			format:          "table",
-			wantErr:         true,
+			nameOnly:         true,
+			contentOnly:      true,
+			format:           "table",
+			wantErr:          true,
 		},
 		{
-			name:            "invalid format",
-			nameThreshold:   0.7,
+			name:             "invalid format",
+			nameThreshold:    0.7,
 			contentThreshold: 0.6,
-			format:          "invalid",
-			wantErr:         true,
+			format:           "invalid",
+			wantErr:          true,
 		},
 		{
-			name:            "valid unified format",
-			nameThreshold:   0.7,
+			name:             "valid unified format",
+			nameThreshold:    0.7,
 			contentThreshold: 0.6,
-			format:          "unified",
-			wantErr:         false,
+			format:           "unified",
+			wantErr:          false,
 		},
 		{
-			name:            "valid side-by-side format",
-			nameThreshold:   0.7,
+			name:             "valid side-by-side format",
+			nameThreshold:    0.7,
 			contentThreshold: 0.6,
-			format:          "side-by-side",
-			wantErr:         false,
+			format:           "side-by-side",
+			wantErr:          false,
 		},
 	}
 

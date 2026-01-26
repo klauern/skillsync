@@ -28,6 +28,7 @@ func Run(ctx context.Context, args []string) error {
 			syncCommand(),
 			discoveryCommand(),
 			compareCommand(),
+			dedupeCommand(),
 			exportCommand(),
 			backupCommand(),
 			promoteCommand(),
