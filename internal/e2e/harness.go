@@ -57,10 +57,15 @@ func NewHarness(t *testing.T) *Harness {
 	h.SetEnv("SKILLSYNC_HOME", homeDir)
 
 	// Set platform paths to use test directories
-	// These environment variables are respected by config.applyEnvironment()
+	// Set BOTH old (deprecated) and new env vars for compatibility:
+	// - Old vars (SKILLSYNC_*_PATH) are used by validation.GetPlatformPath() and sync package
+	// - New vars (SKILLSYNC_*_SKILLS_PATHS) are used by config.applyEnvironment() and tiered parser
 	h.SetEnv("SKILLSYNC_CLAUDE_CODE_PATH", homeDir+"/.claude/commands")
 	h.SetEnv("SKILLSYNC_CURSOR_PATH", homeDir+"/.cursor/rules")
 	h.SetEnv("SKILLSYNC_CODEX_PATH", homeDir+"/.codex")
+	h.SetEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", homeDir+"/.claude/commands")
+	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
+	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
 
 	return h
 }
@@ -96,20 +101,32 @@ func (h *Harness) Run(args ...string) *Result {
 	}
 	os.Stdout = stdoutW
 
+	// Read stdout concurrently to avoid pipe buffer deadlock.
+	// If the command outputs more than the pipe buffer size (~64KB),
+	// it will block waiting for the buffer to drain. We must read
+	// concurrently while the command runs.
+	var stdoutBuf bytes.Buffer
+	var copyErr error
+	copyDone := make(chan struct{})
+	go func() {
+		defer close(copyDone)
+		_, copyErr = io.Copy(&stdoutBuf, stdoutR)
+	}()
+
 	// Run the command
 	ctx := context.Background()
 	cmdErr := cli.Run(ctx, args)
 
-	// Restore stdout and close writer
+	// Restore stdout and close writer to signal EOF to the reader goroutine
 	if err := stdoutW.Close(); err != nil {
 		h.t.Fatalf("failed to close stdout pipe writer: %v", err)
 	}
 	os.Stdout = oldStdout
 
-	// Read captured stdout
-	var stdoutBuf bytes.Buffer
-	if _, err := io.Copy(&stdoutBuf, stdoutR); err != nil {
-		h.t.Fatalf("failed to read captured stdout: %v", err)
+	// Wait for the reader goroutine to complete
+	<-copyDone
+	if copyErr != nil {
+		h.t.Fatalf("failed to read captured stdout: %v", copyErr)
 	}
 
 	// Determine exit code
@@ -162,21 +179,33 @@ func (h *Harness) RunWithStdin(stdin string, args ...string) *Result {
 	}
 	os.Stdout = stdoutW
 
+	// Read stdout concurrently to avoid pipe buffer deadlock.
+	// If the command outputs more than the pipe buffer size (~64KB),
+	// it will block waiting for the buffer to drain. We must read
+	// concurrently while the command runs.
+	var stdoutBuf bytes.Buffer
+	var copyErr error
+	copyDone := make(chan struct{})
+	go func() {
+		defer close(copyDone)
+		_, copyErr = io.Copy(&stdoutBuf, stdoutR)
+	}()
+
 	// Run the command
 	ctx := context.Background()
 	cmdErr := cli.Run(ctx, args)
 
-	// Restore stdin and stdout
+	// Restore stdin and stdout, close writer to signal EOF to reader goroutine
 	if err := stdoutW.Close(); err != nil {
 		h.t.Fatalf("failed to close stdout pipe writer: %v", err)
 	}
 	os.Stdin = oldStdin
 	os.Stdout = oldStdout
 
-	// Read captured stdout
-	var stdoutBuf bytes.Buffer
-	if _, err := io.Copy(&stdoutBuf, stdoutR); err != nil {
-		h.t.Fatalf("failed to read captured stdout: %v", err)
+	// Wait for the reader goroutine to complete
+	<-copyDone
+	if copyErr != nil {
+		h.t.Fatalf("failed to read captured stdout: %v", copyErr)
 	}
 
 	// Determine exit code

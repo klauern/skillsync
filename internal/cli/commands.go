@@ -19,11 +19,8 @@ import (
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/export"
 	"github.com/klauern/skillsync/internal/model"
-	parsercli "github.com/klauern/skillsync/internal/parser"
-	"github.com/klauern/skillsync/internal/parser/claude"
-	"github.com/klauern/skillsync/internal/parser/codex"
-	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/plugin"
+	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
@@ -254,6 +251,11 @@ func discoveryCommand() *cli.Command {
 				Usage:   "Filter by platform (claude-code, cursor, codex)",
 			},
 			&cli.StringFlag{
+				Name:    "scope",
+				Aliases: []string{"s"},
+				Usage:   "Filter by scope (repo, user, admin, system, builtin, all). Comma-separated for multiple.",
+			},
+			&cli.StringFlag{
 				Name:    "format",
 				Aliases: []string{"f"},
 				Value:   "table",
@@ -274,6 +276,7 @@ func discoveryCommand() *cli.Command {
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			platform := cmd.String("platform")
+			scopeStr := cmd.String("scope")
 			format := cmd.String("format")
 			includePlugins := cmd.Bool("plugins")
 			repoURL := cmd.String("repo")
@@ -282,6 +285,18 @@ func discoveryCommand() *cli.Command {
 			// --repo implies --plugins
 			if repoURL != "" {
 				includePlugins = true
+			}
+
+			// Parse scope filter
+			var scopeFilter []model.SkillScope
+			if scopeStr != "" && scopeStr != "all" {
+				for _, s := range strings.Split(scopeStr, ",") {
+					scope, err := model.ParseScope(strings.TrimSpace(s))
+					if err != nil {
+						return fmt.Errorf("invalid scope: %w", err)
+					}
+					scopeFilter = append(scopeFilter, scope)
+				}
 			}
 
 			// Determine which platforms to scan
@@ -299,7 +314,7 @@ func discoveryCommand() *cli.Command {
 			// Discover skills from each platform
 			var allSkills []model.Skill
 			for _, p := range platforms {
-				skills, err := parsePlatformSkills(p)
+				skills, err := parsePlatformSkillsWithScope(p, scopeFilter)
 				if err != nil {
 					// Log error but continue with other platforms
 					fmt.Printf("Warning: failed to parse %s: %v\n", p, err)
@@ -405,8 +420,8 @@ func outputTable(skills []model.Skill) error {
 		return nil
 	}
 
-	fmt.Printf("%-25s %-12s %-50s\n", "NAME", "PLATFORM", "DESCRIPTION")
-	fmt.Printf("%-25s %-12s %-50s\n", "----", "--------", "-----------")
+	fmt.Printf("%-25s %-12s %-8s %-45s\n", "NAME", "PLATFORM", "SCOPE", "DESCRIPTION")
+	fmt.Printf("%-25s %-12s %-8s %-45s\n", "----", "--------", "-----", "-----------")
 
 	for _, skill := range skills {
 		name := skill.Name
@@ -415,11 +430,16 @@ func outputTable(skills []model.Skill) error {
 		}
 
 		desc := skill.Description
-		if len(desc) > 50 {
-			desc = desc[:47] + "..."
+		if len(desc) > 45 {
+			desc = desc[:42] + "..."
 		}
 
-		fmt.Printf("%-25s %-12s %-50s\n", name, skill.Platform, desc)
+		scope := string(skill.Scope)
+		if scope == "" {
+			scope = "-"
+		}
+
+		fmt.Printf("%-25s %-12s %-8s %-45s\n", name, skill.Platform, scope, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
@@ -446,7 +466,9 @@ func syncCommand() *cli.Command {
    Examples:
      skillsync sync claudecode cursor
      skillsync sync --dry-run cursor codex
-     skillsync sync --strategy=skip claude-code cursor`,
+     skillsync sync --strategy=skip claude-code cursor
+     skillsync sync cursor claude-code --source-scope user
+     skillsync sync cursor claude-code --source-scope repo --target-scope user`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "dry-run",
@@ -458,6 +480,14 @@ func syncCommand() *cli.Command {
 				Aliases: []string{"s"},
 				Value:   "overwrite",
 				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive",
+			},
+			&cli.StringFlag{
+				Name:  "source-scope",
+				Usage: "Filter source skills by scope (repo, user, admin, system, builtin). Comma-separated for multiple.",
+			},
+			&cli.StringFlag{
+				Name:  "target-scope",
+				Usage: "Target scope for synced skills (repo, user). Determines where skills are written.",
 			},
 			&cli.BoolFlag{
 				Name:  "skip-backup",
@@ -561,6 +591,8 @@ type syncConfig struct {
 	targetPlatform model.Platform
 	dryRun         bool
 	strategy       sync.Strategy
+	sourceScopes   []model.SkillScope // Filter source skills by scope
+	targetScope    model.SkillScope   // Target scope for synced skills
 	skipBackup     bool
 	skipValidation bool
 	yesFlag        bool
@@ -594,11 +626,40 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge, three-way, interactive)", strategyStr)
 	}
 
+	// Parse source scopes filter
+	var sourceScopes []model.SkillScope
+	sourceScopeStr := cmd.String("source-scope")
+	if sourceScopeStr != "" {
+		for _, s := range strings.Split(sourceScopeStr, ",") {
+			scope, err := model.ParseScope(strings.TrimSpace(s))
+			if err != nil {
+				return nil, fmt.Errorf("invalid source-scope: %w", err)
+			}
+			sourceScopes = append(sourceScopes, scope)
+		}
+	}
+
+	// Parse target scope (optional, defaults to user scope)
+	var targetScope model.SkillScope
+	targetScopeStr := cmd.String("target-scope")
+	if targetScopeStr != "" {
+		targetScope, err = model.ParseScope(targetScopeStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid target-scope: %w", err)
+		}
+		// Only allow repo or user as target scopes (writable locations)
+		if targetScope != model.ScopeRepo && targetScope != model.ScopeUser {
+			return nil, fmt.Errorf("target-scope must be 'repo' or 'user', got %q", targetScopeStr)
+		}
+	}
+
 	return &syncConfig{
 		sourcePlatform: sourcePlatform,
 		targetPlatform: targetPlatform,
 		dryRun:         cmd.Bool("dry-run"),
 		strategy:       strategy,
+		sourceScopes:   sourceScopes,
+		targetScope:    targetScope,
 		skipBackup:     cmd.Bool("skip-backup"),
 		skipValidation: cmd.Bool("skip-validation"),
 		yesFlag:        cmd.Bool("yes"),
@@ -611,7 +672,7 @@ func validateSourceSkills(cfg *syncConfig) error {
 	fmt.Println("Validating source skills...")
 
 	var err error
-	cfg.sourceSkills, err = parsePlatformSkills(cfg.sourcePlatform)
+	cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourcePlatform, cfg.sourceScopes)
 	if err != nil {
 		return fmt.Errorf("failed to parse source skills: %w", err)
 	}
@@ -658,10 +719,26 @@ func showSyncSummaryAndConfirm(cfg *syncConfig) (bool, error) {
 	fmt.Printf("Target: %s\n", cfg.targetPlatform)
 	fmt.Printf("Strategy: %s (%s)\n", cfg.strategy, cfg.strategy.Description())
 
+	if len(cfg.sourceScopes) > 0 {
+		scopeStrs := make([]string, len(cfg.sourceScopes))
+		for i, s := range cfg.sourceScopes {
+			scopeStrs[i] = string(s)
+		}
+		fmt.Printf("Source scope filter: %s\n", strings.Join(scopeStrs, ", "))
+	}
+
+	if cfg.targetScope != "" {
+		fmt.Printf("Target scope: %s\n", cfg.targetScope)
+	}
+
 	if len(cfg.sourceSkills) > 0 {
 		fmt.Printf("Skills to sync: %d\n", len(cfg.sourceSkills))
 		for i, skill := range cfg.sourceSkills {
-			fmt.Printf("  %d. %s\n", i+1, skill.Name)
+			scopeStr := string(skill.Scope)
+			if scopeStr == "" {
+				scopeStr = "-"
+			}
+			fmt.Printf("  %d. %s [%s]\n", i+1, skill.Name, scopeStr)
 		}
 	}
 
@@ -746,20 +823,28 @@ func applyResolvedConflicts(result *sync.Result, resolved map[string]string) err
 
 // parsePlatformSkills parses skills from the given platform
 func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
-	var parserInstance parsercli.Parser
+	return parsePlatformSkillsWithScope(platform, nil)
+}
 
-	switch platform {
-	case model.ClaudeCode:
-		parserInstance = claude.New("")
-	case model.Cursor:
-		parserInstance = cursor.New("")
-	case model.Codex:
-		parserInstance = codex.New("")
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", platform)
+// parsePlatformSkillsWithScope parses skills from the given platform with optional scope filtering.
+// If scopeFilter is nil or empty, all scopes are included.
+func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope) ([]model.Skill, error) {
+	// Use tiered parser for scope-aware discovery
+	tieredParser, err := tiered.NewForPlatform(platform)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tiered parser for %s: %w", platform, err)
 	}
 
-	skills, err := parserInstance.Parse()
+	var skills []model.Skill
+
+	if len(scopeFilter) > 0 {
+		// Parse with scope filter
+		skills, err = tieredParser.ParseWithScopeFilter(scopeFilter)
+	} else {
+		// Parse all scopes
+		skills, err = tieredParser.Parse()
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse skills from %s: %w", platform, err)
 	}
@@ -1033,19 +1118,7 @@ func discoverSkillsForExport(platform model.Platform) ([]model.Skill, error) {
 
 	var allSkills []model.Skill
 	for _, p := range platforms {
-		var parser parsercli.Parser
-		switch p {
-		case model.ClaudeCode:
-			parser = claude.New("")
-		case model.Cursor:
-			parser = cursor.New("")
-		case model.Codex:
-			parser = codex.New("")
-		default:
-			continue
-		}
-
-		skills, err := parser.Parse()
+		skills, err := parsePlatformSkills(p)
 		if err != nil {
 			// Log warning but continue with other platforms
 			fmt.Fprintf(os.Stderr, "Warning: failed to parse %s: %v\n", p, err)
