@@ -5,8 +5,9 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/klauern/skillsync/internal/logging"
 	"github.com/urfave/cli/v3"
+
+	"github.com/klauern/skillsync/internal/logging"
 )
 
 var (

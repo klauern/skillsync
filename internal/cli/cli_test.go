@@ -31,9 +31,9 @@ func TestVersionVariables(t *testing.T) {
 
 func TestConfigureLogging(t *testing.T) {
 	tests := map[string]struct {
-		args        []string
-		wantLevel   slog.Level
-		wantSource  bool
+		args       []string
+		wantLevel  slog.Level
+		wantSource bool
 	}{
 		"no flags uses default info level": {
 			args:       []string{"skillsync", "version"},

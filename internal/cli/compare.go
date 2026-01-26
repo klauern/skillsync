@@ -81,7 +81,7 @@ func compareCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "algorithm",
 				Value: "", // empty means "use config value"
-				Usage:   "Similarity algorithm: combined, levenshtein, jaro-winkler (for names) or combined, lcs, jaccard (for content, default from config: combined)",
+				Usage: "Similarity algorithm: combined, levenshtein, jaro-winkler (for names) or combined, lcs, jaccard (for content, default from config: combined)",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
