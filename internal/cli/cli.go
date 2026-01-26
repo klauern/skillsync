@@ -27,6 +27,7 @@ func Run(ctx context.Context, args []string) error {
 			configCommand(),
 			syncCommand(),
 			discoveryCommand(),
+			compareCommand(),
 			exportCommand(),
 			backupCommand(),
 			promoteCommand(),
