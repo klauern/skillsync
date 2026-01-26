@@ -8,6 +8,7 @@ import (
 
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/sync"
+	"github.com/klauern/skillsync/internal/ui"
 )
 
 // OutputFormat specifies the format for comparison output.
@@ -402,16 +403,20 @@ func ComputeDiff(skill1, skill2 model.Skill, nameScore, contentScore float64) *C
 	return result
 }
 
-// FormatComparisonTable formats multiple comparison results as a table.
+// FormatComparisonTable formats multiple comparison results as a table with colored output.
 func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 	if len(results) == 0 {
 		_, err := fmt.Fprintln(w, "No similar skills found.")
 		return err
 	}
 
-	// Header
-	if _, err := fmt.Fprintf(w, "%-25s %-25s %-8s %-8s %-15s\n",
-		"SKILL 1", "SKILL 2", "NAME %", "CONTENT %", "CHANGES"); err != nil {
+	// Colored header
+	if _, err := fmt.Fprintf(w, "%s %s %s %s %s\n",
+		ui.Header(fmt.Sprintf("%-25s", "SKILL 1")),
+		ui.Header(fmt.Sprintf("%-25s", "SKILL 2")),
+		ui.Header(fmt.Sprintf("%-8s", "NAME %")),
+		ui.Header(fmt.Sprintf("%-8s", "CONTENT %")),
+		ui.Header(fmt.Sprintf("%-15s", "CHANGES"))); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "%-25s %-25s %-8s %-8s %-15s\n",
@@ -431,11 +436,37 @@ func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 		if r.ContentScore > 0 {
 			contentScore = fmt.Sprintf("%.0f%%", r.ContentScore*100)
 		}
+
+		// Color scores based on similarity level
+		coloredNameScore := colorScore(nameScore)
+		coloredContentScore := colorScore(contentScore)
+
 		changes := r.DiffSummary()
-		if _, err := fmt.Fprintf(w, "%-25s %-25s %-8s %-8s %-15s\n",
-			name1, name2, nameScore, contentScore, changes); err != nil {
+		if _, err := fmt.Fprintf(w, "%-25s %-25s %s %s %-15s\n",
+			name1, name2, coloredNameScore, coloredContentScore, changes); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// colorScore returns a colored score string based on the percentage value.
+func colorScore(score string) string {
+	formatted := fmt.Sprintf("%-8s", score)
+	if score == "-" {
+		return ui.Dim(formatted)
+	}
+	// Parse percentage to determine color
+	var pct float64
+	if _, err := fmt.Sscanf(score, "%f%%", &pct); err == nil {
+		switch {
+		case pct >= 80:
+			return ui.Success(formatted)
+		case pct >= 50:
+			return ui.Warning(formatted)
+		default:
+			return ui.Error(formatted)
+		}
+	}
+	return formatted
 }

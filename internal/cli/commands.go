@@ -22,6 +22,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/sync"
+	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -410,14 +411,19 @@ func outputYAML(skills []model.Skill) error {
 	return nil
 }
 
-// outputTable prints skills in a table format
+// outputTable prints skills in a table format with colored output
 func outputTable(skills []model.Skill) error {
 	if len(skills) == 0 {
 		fmt.Println("No skills found.")
 		return nil
 	}
 
-	fmt.Printf("%-25s %-12s %-8s %-45s\n", "NAME", "PLATFORM", "SCOPE", "DESCRIPTION")
+	// Print colored headers
+	fmt.Printf("%s %s %s %s\n",
+		ui.Header(fmt.Sprintf("%-25s", "NAME")),
+		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
+		ui.Header(fmt.Sprintf("%-8s", "SCOPE")),
+		ui.Header(fmt.Sprintf("%-45s", "DESCRIPTION")))
 	fmt.Printf("%-25s %-12s %-8s %-45s\n", "----", "--------", "-----", "-----------")
 
 	for _, skill := range skills {
@@ -436,11 +442,30 @@ func outputTable(skills []model.Skill) error {
 			scope = "-"
 		}
 
-		fmt.Printf("%-25s %-12s %-8s %-45s\n", name, skill.Platform, scope, desc)
+		// Color platform names for visual distinction
+		platform := colorPlatform(string(skill.Platform))
+
+		fmt.Printf("%-25s %s %-8s %-45s\n", name, platform, scope, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
 	return nil
+}
+
+// colorPlatform returns a colored platform name for visual distinction
+func colorPlatform(platform string) string {
+	// Use consistent width formatting with colors
+	formatted := fmt.Sprintf("%-12s", platform)
+	switch platform {
+	case "claudecode":
+		return ui.Info(formatted)
+	case "cursor":
+		return ui.Success(formatted)
+	case "codex":
+		return ui.Warning(formatted)
+	default:
+		return formatted
+	}
 }
 
 func syncCommand() *cli.Command {
@@ -1697,14 +1722,20 @@ func outputBackupsYAML(backups []backup.Metadata) error {
 	return nil
 }
 
-// outputBackupsTable prints backups in a table format
+// outputBackupsTable prints backups in a table format with colored output
 func outputBackupsTable(backups []backup.Metadata) error {
 	if len(backups) == 0 {
 		fmt.Println("No backups found.")
 		return nil
 	}
 
-	fmt.Printf("%-28s %-12s %-35s %-20s %s\n", "ID", "PLATFORM", "SOURCE", "CREATED", "SIZE")
+	// Print colored headers
+	fmt.Printf("%s %s %s %s %s\n",
+		ui.Header(fmt.Sprintf("%-28s", "ID")),
+		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
+		ui.Header(fmt.Sprintf("%-35s", "SOURCE")),
+		ui.Header(fmt.Sprintf("%-20s", "CREATED")),
+		ui.Header("SIZE"))
 	fmt.Printf("%-28s %-12s %-35s %-20s %s\n", "--", "--------", "------", "-------", "----")
 
 	for _, b := range backups {
@@ -1720,7 +1751,10 @@ func outputBackupsTable(backups []backup.Metadata) error {
 		// Format creation time
 		created := b.CreatedAt.Format("2006-01-02 15:04:05")
 
-		fmt.Printf("%-28s %-12s %-35s %-20s %s\n", b.ID, b.Platform, source, created, size)
+		// Color platform names for visual distinction
+		platform := colorPlatform(string(b.Platform))
+
+		fmt.Printf("%-28s %s %-35s %-20s %s\n", b.ID, platform, source, created, size)
 	}
 
 	fmt.Printf("\nTotal: %d backup(s)\n", len(backups))

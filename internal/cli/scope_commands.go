@@ -14,6 +14,7 @@ import (
 
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/tiered"
+	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -509,15 +510,21 @@ func runScopeList(cmd *cli.Command, skillName string) error {
 		return outputAnyYAML(locations)
 	case "table":
 		fmt.Printf("\nLocations for skill %q:\n\n", skillName)
-		fmt.Printf("%-12s %-8s %-6s %s\n", "PLATFORM", "SCOPE", "ACTIVE", "PATH")
+		fmt.Printf("%s %s %s %s\n",
+			ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
+			ui.Header(fmt.Sprintf("%-8s", "SCOPE")),
+			ui.Header(fmt.Sprintf("%-6s", "ACTIVE")),
+			ui.Header("PATH"))
 		fmt.Printf("%-12s %-8s %-6s %s\n", "--------", "-----", "------", "----")
 
 		for _, loc := range locations {
 			activeStr := ""
 			if loc.Active {
-				activeStr = "✓"
+				activeStr = ui.Success("✓")
 			}
-			fmt.Printf("%-12s %-8s %-6s %s\n", loc.Platform, loc.Scope, activeStr, loc.Path)
+			// Color platform names for visual distinction
+			platform := colorPlatform(string(loc.Platform))
+			fmt.Printf("%s %-8s %-6s %s\n", platform, loc.Scope, activeStr, loc.Path)
 		}
 		fmt.Printf("\nFound %d location(s)\n", len(locations))
 	default:
@@ -586,7 +593,11 @@ func runScopeListAll(cmd *cli.Command) error {
 	case "yaml":
 		return outputAnyYAML(allSkills)
 	case "table":
-		fmt.Printf("%-12s %-8s %-25s %s\n", "PLATFORM", "SCOPE", "NAME", "PATH")
+		fmt.Printf("%s %s %s %s\n",
+			ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
+			ui.Header(fmt.Sprintf("%-8s", "SCOPE")),
+			ui.Header(fmt.Sprintf("%-25s", "NAME")),
+			ui.Header("PATH"))
 		fmt.Printf("%-12s %-8s %-25s %s\n", "--------", "-----", "----", "----")
 
 		for _, s := range allSkills {
@@ -594,7 +605,9 @@ func runScopeListAll(cmd *cli.Command) error {
 			if len(name) > 25 {
 				name = name[:22] + "..."
 			}
-			fmt.Printf("%-12s %-8s %-25s %s\n", s.Platform, s.Scope, name, s.Path)
+			// Color platform names for visual distinction
+			platform := colorPlatform(string(s.Platform))
+			fmt.Printf("%s %-8s %-25s %s\n", platform, s.Scope, name, s.Path)
 		}
 		fmt.Printf("\nTotal: %d skill(s)\n", len(allSkills))
 	default:
