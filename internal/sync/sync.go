@@ -2,10 +2,12 @@ package sync
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
@@ -68,6 +70,14 @@ func New() *Synchronizer {
 
 // Sync performs synchronization from source to target platform.
 func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Result, error) {
+	logging.Debug("starting sync operation",
+		logging.Platform(string(source)),
+		logging.Operation("sync"),
+		slog.String("target", string(target)),
+		slog.String(logging.KeyStrategy, string(opts.Strategy)),
+		slog.Bool("dry_run", opts.DryRun),
+	)
+
 	result := &Result{
 		Source:   source,
 		Target:   target,
@@ -84,10 +94,23 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	// Parse source skills
 	sourceSkills, err := s.parseSkills(source, opts.SourcePath)
 	if err != nil {
+		logging.Error("failed to parse source skills",
+			logging.Platform(string(source)),
+			logging.Operation("sync"),
+			logging.Err(err),
+		)
 		return result, fmt.Errorf("failed to parse source skills: %w", err)
 	}
 
+	logging.Debug("parsed source skills",
+		logging.Platform(string(source)),
+		logging.Count(len(sourceSkills)),
+	)
+
 	if len(sourceSkills) == 0 {
+		logging.Debug("no skills to sync",
+			logging.Platform(string(source)),
+		)
 		return result, nil // Nothing to sync
 	}
 
@@ -103,8 +126,17 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	// Parse existing target skills for conflict detection
 	targetSkills, err := s.parseSkills(target, opts.TargetPath)
 	if err != nil {
+		logging.Debug("target skills not found, starting fresh",
+			logging.Platform(string(target)),
+			logging.Err(err),
+		)
 		// Target may not exist yet, which is okay
 		targetSkills = []model.Skill{}
+	} else {
+		logging.Debug("parsed target skills",
+			logging.Platform(string(target)),
+			logging.Count(len(targetSkills)),
+		)
 	}
 
 	// Build a map of existing target skills by name
@@ -116,8 +148,15 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	// Ensure target directory exists (unless dry run)
 	if !opts.DryRun {
 		if err := os.MkdirAll(targetPath, 0o750); err != nil {
+			logging.Error("failed to create target directory",
+				logging.Path(targetPath),
+				logging.Err(err),
+			)
 			return result, fmt.Errorf("failed to create target directory: %w", err)
 		}
+		logging.Debug("ensured target directory exists",
+			logging.Path(targetPath),
+		)
 	}
 
 	// Process each source skill
@@ -125,6 +164,12 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		skillResult := s.processSkill(sourceSkill, target, targetPath, targetSkillMap, opts)
 		result.Skills = append(result.Skills, skillResult)
 	}
+
+	logging.Debug("sync operation completed",
+		logging.Platform(string(source)),
+		slog.String("target", string(target)),
+		logging.Count(len(result.Skills)),
+	)
 
 	return result, nil
 }
@@ -155,6 +200,12 @@ func (s *Synchronizer) processSkill(
 	existingSkills map[string]model.Skill,
 	opts Options,
 ) SkillResult {
+	logging.Debug("processing skill",
+		logging.Skill(source.Name),
+		logging.Platform(string(source.Platform)),
+		slog.String("target", string(targetPlatform)),
+	)
+
 	result := SkillResult{
 		Skill: source,
 	}
@@ -162,10 +213,19 @@ func (s *Synchronizer) processSkill(
 	// Transform the skill for the target platform
 	transformed, err := s.transformer.Transform(source, targetPlatform)
 	if err != nil {
+		logging.Warn("transformation failed",
+			logging.Skill(source.Name),
+			logging.Err(err),
+		)
 		result.Action = ActionFailed
 		result.Error = fmt.Errorf("transformation failed: %w", err)
 		return result
 	}
+
+	logging.Debug("skill transformed",
+		logging.Skill(source.Name),
+		logging.Path(transformed.Path),
+	)
 
 	// Determine target file path
 	targetFilePath := filepath.Join(targetPath, transformed.Path)
@@ -180,6 +240,13 @@ func (s *Synchronizer) processSkill(
 	result.Message = message
 	result.Conflict = conflict
 
+	logging.Debug("action determined",
+		logging.Skill(source.Name),
+		slog.String("action", string(action)),
+		slog.String("message", message),
+		slog.Bool("has_conflict", conflict != nil),
+	)
+
 	// If skipping or conflict (needs external resolution), we're done
 	if action == ActionSkipped || action == ActionConflict {
 		return result
@@ -190,6 +257,9 @@ func (s *Synchronizer) processSkill(
 
 	// Handle merge strategy
 	if action == ActionMerged && exists {
+		logging.Debug("merging content",
+			logging.Skill(source.Name),
+		)
 		content = s.transformer.MergeContent(transformed.Content, existingSkill.Content, source.Name)
 	}
 
@@ -197,10 +267,19 @@ func (s *Synchronizer) processSkill(
 	if !opts.DryRun {
 		// #nosec G306 - skill files should be readable
 		if err := os.WriteFile(targetFilePath, []byte(content), 0o644); err != nil {
+			logging.Error("failed to write skill file",
+				logging.Skill(source.Name),
+				logging.Path(targetFilePath),
+				logging.Err(err),
+			)
 			result.Action = ActionFailed
 			result.Error = fmt.Errorf("failed to write file: %w", err)
 			return result
 		}
+		logging.Debug("wrote skill file",
+			logging.Skill(source.Name),
+			logging.Path(targetFilePath),
+		)
 	}
 
 	return result
@@ -213,6 +292,12 @@ func (s *Synchronizer) determineAction(
 	exists bool,
 	strategy Strategy,
 ) (Action, string, *Conflict) {
+	logging.Debug("determining action",
+		logging.Skill(source.Name),
+		slog.String(logging.KeyStrategy, string(strategy)),
+		slog.Bool("exists", exists),
+	)
+
 	if !exists {
 		return ActionCreated, "new skill", nil
 	}
@@ -226,10 +311,20 @@ func (s *Synchronizer) determineAction(
 
 	case StrategyNewer:
 		if source.ModifiedAt.After(existing.ModifiedAt) {
+			logging.Debug("source is newer",
+				logging.Skill(source.Name),
+				slog.Time("source_modified", source.ModifiedAt),
+				slog.Time("existing_modified", existing.ModifiedAt),
+			)
 			return ActionUpdated, fmt.Sprintf("source is newer (%s > %s)",
 				source.ModifiedAt.Format(time.RFC3339),
 				existing.ModifiedAt.Format(time.RFC3339)), nil
 		}
+		logging.Debug("target is newer or same age",
+			logging.Skill(source.Name),
+			slog.Time("source_modified", source.ModifiedAt),
+			slog.Time("existing_modified", existing.ModifiedAt),
+		)
 		return ActionSkipped, fmt.Sprintf("target is newer or same age (%s >= %s)",
 			existing.ModifiedAt.Format(time.RFC3339),
 			source.ModifiedAt.Format(time.RFC3339)), nil
@@ -242,14 +337,28 @@ func (s *Synchronizer) determineAction(
 		conflict := s.conflictDetector.DetectConflict(source, existing)
 		if conflict == nil {
 			// No conflict, content is identical
+			logging.Debug("no conflict detected, content identical",
+				logging.Skill(source.Name),
+			)
 			return ActionSkipped, "content is identical", nil
 		}
 		// Attempt three-way merge
+		logging.Debug("attempting three-way merge",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
 		mergeResult := s.merger.TwoWayMerge(source, existing)
 		if mergeResult.Success {
+			logging.Debug("three-way merge successful",
+				logging.Skill(source.Name),
+			)
 			return ActionMerged, "three-way merge successful", nil
 		}
 		// Has conflicts that need resolution
+		logging.Debug("conflict requires manual resolution",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
 		return ActionConflict, "conflict detected - needs resolution", conflict
 
 	case StrategyInteractive:
@@ -258,6 +367,10 @@ func (s *Synchronizer) determineAction(
 		if conflict == nil {
 			return ActionUpdated, "updating (no conflicts)", nil
 		}
+		logging.Debug("conflict detected for interactive resolution",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
 		return ActionConflict, "conflict detected - awaiting resolution", conflict
 
 	default:
@@ -272,6 +385,14 @@ func (s *Synchronizer) SyncWithSkills(
 	target model.Platform,
 	opts Options,
 ) (*Result, error) {
+	logging.Debug("starting sync with pre-parsed skills",
+		logging.Platform(string(target)),
+		logging.Operation("sync"),
+		logging.Count(len(skills)),
+		slog.String(logging.KeyStrategy, string(opts.Strategy)),
+		slog.Bool("dry_run", opts.DryRun),
+	)
+
 	result := &Result{
 		Source:   skills[0].Platform, // Assume all skills are from same platform
 		Target:   target,
@@ -281,6 +402,7 @@ func (s *Synchronizer) SyncWithSkills(
 	}
 
 	if len(skills) == 0 {
+		logging.Debug("no skills provided to sync")
 		return result, nil
 	}
 
@@ -295,6 +417,10 @@ func (s *Synchronizer) SyncWithSkills(
 		var err error
 		targetPath, err = validation.GetPlatformPath(target)
 		if err != nil {
+			logging.Error("failed to get target path",
+				logging.Platform(string(target)),
+				logging.Err(err),
+			)
 			return result, fmt.Errorf("failed to get target path: %w", err)
 		}
 	}
@@ -302,7 +428,16 @@ func (s *Synchronizer) SyncWithSkills(
 	// Parse existing target skills
 	targetSkills, err := s.parseSkills(target, opts.TargetPath)
 	if err != nil {
+		logging.Debug("target skills not found, starting fresh",
+			logging.Platform(string(target)),
+			logging.Err(err),
+		)
 		targetSkills = []model.Skill{}
+	} else {
+		logging.Debug("parsed existing target skills",
+			logging.Platform(string(target)),
+			logging.Count(len(targetSkills)),
+		)
 	}
 
 	targetSkillMap := make(map[string]model.Skill)
@@ -313,6 +448,10 @@ func (s *Synchronizer) SyncWithSkills(
 	// Ensure target directory exists
 	if !opts.DryRun {
 		if err := os.MkdirAll(targetPath, 0o750); err != nil {
+			logging.Error("failed to create target directory",
+				logging.Path(targetPath),
+				logging.Err(err),
+			)
 			return result, fmt.Errorf("failed to create target directory: %w", err)
 		}
 	}
@@ -322,6 +461,11 @@ func (s *Synchronizer) SyncWithSkills(
 		skillResult := s.processSkill(skill, target, targetPath, targetSkillMap, opts)
 		result.Skills = append(result.Skills, skillResult)
 	}
+
+	logging.Debug("sync with skills completed",
+		logging.Platform(string(target)),
+		logging.Count(len(result.Skills)),
+	)
 
 	return result, nil
 }

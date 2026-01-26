@@ -3,12 +3,14 @@ package sync
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"maps"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 )
 
@@ -22,21 +24,42 @@ func NewTransformer() *Transformer {
 
 // Transform converts a skill from source to target platform format.
 func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform) (model.Skill, error) {
+	logging.Debug("transforming skill",
+		logging.Skill(skill.Name),
+		logging.Platform(string(skill.Platform)),
+		slog.String("target", string(targetPlatform)),
+		logging.Operation("transform"),
+	)
+
 	transformed := skill
 	transformed.Platform = targetPlatform
 
 	// Update path for target platform
 	transformed.Path = t.transformPath(skill, targetPlatform)
+	logging.Debug("transformed path",
+		logging.Skill(skill.Name),
+		slog.String("original_path", skill.Path),
+		logging.Path(transformed.Path),
+	)
 
 	// Transform content based on target platform requirements
 	content, err := t.transformContent(skill, targetPlatform)
 	if err != nil {
+		logging.Warn("content transformation failed",
+			logging.Skill(skill.Name),
+			logging.Err(err),
+		)
 		return model.Skill{}, fmt.Errorf("failed to transform content: %w", err)
 	}
 	transformed.Content = content
 
 	// Transform metadata for platform-specific fields
 	transformed.Metadata = t.transformMetadata(skill, targetPlatform)
+
+	logging.Debug("skill transformation completed",
+		logging.Skill(skill.Name),
+		slog.String("target", string(targetPlatform)),
+	)
 
 	return transformed, nil
 }
@@ -176,6 +199,11 @@ func (t *Transformer) CanTransform(source, target model.Platform) bool {
 
 // MergeContent merges source and target content with clear separation.
 func (t *Transformer) MergeContent(sourceContent, targetContent string, sourceName string) string {
+	logging.Debug("merging content with separator",
+		logging.Skill(sourceName),
+		logging.Operation("merge_content"),
+	)
+
 	var sb strings.Builder
 
 	// Add existing target content first

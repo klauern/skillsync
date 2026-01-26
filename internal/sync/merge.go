@@ -1,8 +1,10 @@
 package sync
 
 import (
+	"log/slog"
 	"strings"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 )
 
@@ -63,15 +65,30 @@ func NewMerger() *Merger {
 // ThreeWayMerge performs a three-way merge between source, target, and base versions.
 // If base is nil, it falls back to a two-way merge.
 func (m *Merger) ThreeWayMerge(source, target model.Skill, base *model.Skill) MergeResult {
+	hasBase := base != nil
+	logging.Debug("starting three-way merge",
+		logging.Skill(source.Name),
+		logging.Operation("merge"),
+		slog.Bool("has_base", hasBase),
+	)
+
 	sourceLines := strings.Split(source.Content, "\n")
 	targetLines := strings.Split(target.Content, "\n")
 
 	var baseLines []string
-	if base != nil {
+	if hasBase {
 		baseLines = strings.Split(base.Content, "\n")
 	}
 
 	result := m.mergeLines(sourceLines, targetLines, baseLines)
+
+	logging.Debug("three-way merge completed",
+		logging.Skill(source.Name),
+		slog.Bool("success", result.Success),
+		slog.Bool("has_conflict_markers", result.HasConflictMarkers),
+		logging.Count(len(result.Conflicts)),
+	)
+
 	return result
 }
 
@@ -93,6 +110,12 @@ func (m *Merger) mergeLines(source, target, base []string) MergeResult {
 
 // twoWayMerge merges source and target without a common base.
 func (m *Merger) twoWayMerge(source, target []string) MergeResult {
+	logging.Debug("starting two-way merge",
+		logging.Operation("merge"),
+		slog.Int("source_lines", len(source)),
+		slog.Int("target_lines", len(target)),
+	)
+
 	result := MergeResult{
 		Success:            true,
 		HasConflictMarkers: false,
@@ -388,17 +411,38 @@ func (m *Merger) longestCommonSubsequence(a, b []string) []string {
 
 // ResolveWithChoice resolves a conflict using the specified choice.
 func (m *Merger) ResolveWithChoice(conflict *Conflict, choice ResolutionChoice) string {
+	logging.Debug("resolving conflict with choice",
+		logging.Skill(conflict.SkillName),
+		logging.Operation("resolve"),
+		slog.String("choice", string(choice)),
+	)
+
 	switch choice {
 	case ResolutionUseSource:
+		logging.Debug("using source content",
+			logging.Skill(conflict.SkillName),
+		)
 		return conflict.Source.Content
 	case ResolutionUseTarget:
+		logging.Debug("using target content",
+			logging.Skill(conflict.SkillName),
+		)
 		return conflict.Target.Content
 	case ResolutionMerge:
+		logging.Debug("merging content",
+			logging.Skill(conflict.SkillName),
+		)
 		result := m.TwoWayMerge(conflict.Source, conflict.Target)
 		return result.Content
 	case ResolutionSkip:
+		logging.Debug("skipping, keeping target content",
+			logging.Skill(conflict.SkillName),
+		)
 		return conflict.Target.Content // Keep existing
 	default:
+		logging.Debug("using source content (default)",
+			logging.Skill(conflict.SkillName),
+		)
 		return conflict.Source.Content
 	}
 }
