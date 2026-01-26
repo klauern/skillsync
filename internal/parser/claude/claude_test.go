@@ -555,3 +555,187 @@ This skill has tools.`
 		}
 	})
 }
+
+// TestParser_BackwardCompatibility tests backward compatibility with legacy formats
+func TestParser_BackwardCompatibility(t *testing.T) {
+	t.Run("legacy flat file without frontmatter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create legacy file with no frontmatter
+		content := `# No Frontmatter Skill
+
+This skill has no YAML frontmatter at all.
+The name should be derived from the filename.
+
+Content without any metadata.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "no-frontmatter.md"), []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		// Name should be derived from filename
+		if skills[0].Name != "no-frontmatter" {
+			t.Errorf("Name = %q, want %q (derived from filename)", skills[0].Name, "no-frontmatter")
+		}
+	})
+
+	t.Run("legacy flat file with minimal frontmatter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create legacy file with only name in frontmatter
+		content := `---
+name: minimal-frontmatter
+---
+# Minimal Frontmatter Skill
+
+This skill has only a name in frontmatter (no description).`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "minimal.md"), []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		if skills[0].Name != "minimal-frontmatter" {
+			t.Errorf("Name = %q, want %q", skills[0].Name, "minimal-frontmatter")
+		}
+		if skills[0].Description != "" {
+			t.Errorf("Description = %q, want empty string", skills[0].Description)
+		}
+	})
+
+	t.Run("legacy file with plus delimiter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create legacy file using +++ delimiter
+		content := `+++
+name: plus-delimiter
+description: Skill using +++ delimiter instead of ---
++++
+# Plus Delimiter Skill
+
+This skill uses the alternative +++ frontmatter delimiter.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "plus-delimiter.md"), []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		if skills[0].Name != "plus-delimiter" {
+			t.Errorf("Name = %q, want %q", skills[0].Name, "plus-delimiter")
+		}
+		if skills[0].Description != "Skill using +++ delimiter instead of ---" {
+			t.Errorf("Description = %q, want %q", skills[0].Description, "Skill using +++ delimiter instead of ---")
+		}
+	})
+
+	t.Run("legacy file coexists with SKILL.md format", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create legacy file
+		legacyContent := `---
+name: legacy-format
+description: Legacy flat file skill
+---
+Legacy skill content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "legacy-format.md"), []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("failed to write legacy file: %v", err)
+		}
+
+		// Create SKILL.md format skill
+		skillDir := filepath.Join(tmpDir, "modern-format")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+		skillMdContent := `---
+name: modern-format
+description: Agent Skills Standard format skill
+---
+Modern skill content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMdContent), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should have both skills
+		if len(skills) != 2 {
+			t.Fatalf("expected 2 skills, got %d", len(skills))
+		}
+
+		// Verify both are present
+		names := make(map[string]bool)
+		for _, s := range skills {
+			names[s.Name] = true
+		}
+		if !names["legacy-format"] {
+			t.Error("missing legacy-format skill")
+		}
+		if !names["modern-format"] {
+			t.Error("missing modern-format skill")
+		}
+	})
+
+	t.Run("Windows line endings in legacy file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create file with Windows line endings
+		content := "---\r\nname: windows-legacy\r\ndescription: Windows line endings\r\n---\r\n# Windows Legacy\r\n\r\nContent with CRLF.\r\n"
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "windows-legacy.md"), []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		if skills[0].Name != "windows-legacy" {
+			t.Errorf("Name = %q, want %q", skills[0].Name, "windows-legacy")
+		}
+		// Content should have normalized line endings
+		if skills[0].Content != "# Windows Legacy\n\nContent with CRLF." {
+			t.Errorf("Content not properly normalized, got %q", skills[0].Content)
+		}
+	})
+}

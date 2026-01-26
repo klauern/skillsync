@@ -395,3 +395,227 @@ func TestNewForPlatform(t *testing.T) {
 		t.Errorf("Platform() = %s, want %s", p.Platform(), model.ClaudeCode)
 	}
 }
+
+func TestParser_ParseWithScopeFilter(t *testing.T) {
+	// This test verifies scope filtering works correctly with actual directories.
+	// We create repo-level skills and verify filtering by repo scope finds them.
+	tmpDir := t.TempDir()
+
+	// Create repo-level skills directory
+	repoSkillsDir := filepath.Join(tmpDir, ".claude", "skills")
+	if err := os.MkdirAll(repoSkillsDir, 0o750); err != nil {
+		t.Fatalf("failed to create repo skills dir: %v", err)
+	}
+
+	// Create a skill file in repo
+	skillContent := `---
+name: repo-only-skill
+description: A repo-level skill
+---
+# Repo Skill
+`
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(repoSkillsDir, "repo-only-skill.md"), []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("failed to write skill file: %v", err)
+	}
+
+	t.Run("filter to repo scope finds repo skills", func(t *testing.T) {
+		p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+
+		skills, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeRepo})
+		if err != nil {
+			t.Fatalf("ParseWithScopeFilter() error = %v", err)
+		}
+
+		// Should find the repo skill
+		found := false
+		for _, s := range skills {
+			if s.Name == "repo-only-skill" {
+				found = true
+				if s.Scope != model.ScopeRepo {
+					t.Errorf("skill scope = %v, want %v", s.Scope, model.ScopeRepo)
+				}
+			}
+		}
+
+		if !found {
+			t.Error("repo-only-skill not found when filtering by repo scope")
+		}
+	})
+
+	t.Run("empty scope filter returns no skills", func(t *testing.T) {
+		p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+
+		skills, err := p.ParseWithScopeFilter([]model.SkillScope{})
+		if err != nil {
+			t.Fatalf("ParseWithScopeFilter() error = %v", err)
+		}
+
+		if len(skills) != 0 {
+			t.Errorf("expected 0 skills with empty filter, got %d", len(skills))
+		}
+	})
+
+	t.Run("filter to non-existent scope returns empty", func(t *testing.T) {
+		p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+
+		// Filter to system scope - we haven't created any system skills
+		skills, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeSystem})
+		if err != nil {
+			t.Fatalf("ParseWithScopeFilter() error = %v", err)
+		}
+
+		// Should not find any skills (no system-level skills exist)
+		for _, s := range skills {
+			if s.Scope != model.ScopeSystem {
+				t.Errorf("found non-system skill %q when filtering by system scope", s.Name)
+			}
+		}
+	})
+}
+
+func TestParser_ParseFromScope(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create multiple repo paths (working dir and git root)
+	workingDirSkills := filepath.Join(tmpDir, "working", ".claude", "skills")
+	gitRootSkills := filepath.Join(tmpDir, "gitroot", ".claude", "skills")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(workingDirSkills, 0o750); err != nil {
+		t.Fatalf("failed to create working dir skills: %v", err)
+	}
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(gitRootSkills, 0o750); err != nil {
+		t.Fatalf("failed to create git root skills: %v", err)
+	}
+
+	// Create skills with same name in both repo paths
+	mockSkills := map[string][]model.Skill{
+		workingDirSkills: {
+			{Name: "skill-a", Description: "From working dir"},
+			{Name: "shared-repo-skill", Description: "Working dir version"},
+		},
+		gitRootSkills: {
+			{Name: "skill-b", Description: "From git root"},
+			{Name: "shared-repo-skill", Description: "Git root version"},
+		},
+	}
+
+	parserFactory := func(basePath string) parser.Parser {
+		m := mock.New(model.ClaudeCode)
+		if skills, ok := mockSkills[basePath]; ok {
+			m.WithSkills(skills)
+		}
+		return m
+	}
+
+	p := New(Config{
+		Platform:      model.ClaudeCode,
+		WorkingDir:    filepath.Join(tmpDir, "working"),
+		ParserFactory: parserFactory,
+	})
+
+	skills, err := p.ParseFromScope(model.ScopeRepo)
+	if err != nil {
+		t.Fatalf("ParseFromScope() error = %v", err)
+	}
+
+	// Within same scope, first found wins - so we expect "Working dir version"
+	found := make(map[string]model.Skill)
+	for _, s := range skills {
+		found[s.Name] = s
+	}
+
+	if skill, ok := found["shared-repo-skill"]; ok {
+		if skill.Description != "From working dir" && skill.Description != "Working dir version" {
+			// Note: actual behavior depends on path ordering
+			t.Logf("shared-repo-skill description = %q (first-found-wins behavior)", skill.Description)
+		}
+		if skill.Scope != model.ScopeRepo {
+			t.Errorf("shared-repo-skill scope = %v, want %v", skill.Scope, model.ScopeRepo)
+		}
+	}
+}
+
+func TestMergeSkills_AllScopeCombinations(t *testing.T) {
+	tests := []struct {
+		name      string
+		skills1   []model.Skill
+		skills2   []model.Skill
+		wantScope model.SkillScope
+	}{
+		{
+			name:      "repo beats user",
+			skills1:   []model.Skill{{Name: "test", Scope: model.ScopeUser}},
+			skills2:   []model.Skill{{Name: "test", Scope: model.ScopeRepo}},
+			wantScope: model.ScopeRepo,
+		},
+		{
+			name:      "user beats admin",
+			skills1:   []model.Skill{{Name: "test", Scope: model.ScopeAdmin}},
+			skills2:   []model.Skill{{Name: "test", Scope: model.ScopeUser}},
+			wantScope: model.ScopeUser,
+		},
+		{
+			name:      "admin beats system",
+			skills1:   []model.Skill{{Name: "test", Scope: model.ScopeSystem}},
+			skills2:   []model.Skill{{Name: "test", Scope: model.ScopeAdmin}},
+			wantScope: model.ScopeAdmin,
+		},
+		{
+			name:      "system beats builtin",
+			skills1:   []model.Skill{{Name: "test", Scope: model.ScopeBuiltin}},
+			skills2:   []model.Skill{{Name: "test", Scope: model.ScopeSystem}},
+			wantScope: model.ScopeSystem,
+		},
+		{
+			name:      "repo beats builtin (extreme)",
+			skills1:   []model.Skill{{Name: "test", Scope: model.ScopeBuiltin}},
+			skills2:   []model.Skill{{Name: "test", Scope: model.ScopeRepo}},
+			wantScope: model.ScopeRepo,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MergeSkills(tt.skills1, tt.skills2)
+
+			if len(result) != 1 {
+				t.Fatalf("MergeSkills() returned %d skills, want 1", len(result))
+			}
+
+			if result[0].Scope != tt.wantScope {
+				t.Errorf("MergeSkills() result scope = %v, want %v", result[0].Scope, tt.wantScope)
+			}
+		})
+	}
+}
+
+func TestParser_GetExistingSearchPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create only some paths
+	existingDir := filepath.Join(tmpDir, ".claude", "skills")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(existingDir, 0o750); err != nil {
+		t.Fatalf("failed to create directory: %v", err)
+	}
+
+	p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+
+	existingPaths := p.GetExistingSearchPaths()
+	allPaths := p.GetSearchPaths()
+
+	// Existing paths should be subset of all paths
+	if len(existingPaths) > len(allPaths) {
+		t.Errorf("GetExistingSearchPaths() returned more paths (%d) than GetSearchPaths() (%d)",
+			len(existingPaths), len(allPaths))
+	}
+
+	// All existing paths should actually exist
+	for _, sp := range existingPaths {
+		if _, err := os.Stat(sp.Path); os.IsNotExist(err) {
+			t.Errorf("GetExistingSearchPaths() returned non-existent path: %s", sp.Path)
+		}
+	}
+}

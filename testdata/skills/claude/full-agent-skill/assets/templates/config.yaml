@@ -1,0 +1,4 @@
+# Configuration template
+settings:
+  enabled: true
+  debug: false

@@ -1,0 +1,6 @@
+[skill]
+name = "codex-structured"
+enabled = true
+
+[settings]
+debug = false
