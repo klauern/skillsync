@@ -178,6 +178,15 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]model.Skill, error) {
 	var p parser.Parser
 
+	// If basePath is empty, get the default path which respects env var overrides
+	if basePath == "" {
+		defaultPath, err := validation.GetPlatformPath(platform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get platform path: %w", err)
+		}
+		basePath = defaultPath
+	}
+
 	switch platform {
 	case model.ClaudeCode:
 		p = claude.New(basePath)

@@ -581,6 +581,10 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		return nil, fmt.Errorf("invalid target platform: %w", err)
 	}
 
+	if sourcePlatform == targetPlatform {
+		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourcePlatform)
+	}
+
 	strategyStr := cmd.String("strategy")
 	strategy := sync.Strategy(strategyStr)
 	if !strategy.IsValid() {

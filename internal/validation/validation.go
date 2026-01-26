@@ -476,13 +476,26 @@ func ValidatePath(path string, _ model.Platform) error {
 }
 
 // GetPlatformPath returns the default path for a platform.
+// It respects environment variable overrides:
+//   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
+//   - SKILLSYNC_CURSOR_PATH for Cursor
+//   - SKILLSYNC_CODEX_PATH for Codex
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
 	case model.ClaudeCode:
+		if envPath := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); envPath != "" {
+			return envPath, nil
+		}
 		return util.ClaudeCodeSkillsPath(), nil
 	case model.Cursor:
+		if envPath := os.Getenv("SKILLSYNC_CURSOR_PATH"); envPath != "" {
+			return envPath, nil
+		}
 		return util.CursorSkillsPath(), nil
 	case model.Codex:
+		if envPath := os.Getenv("SKILLSYNC_CODEX_PATH"); envPath != "" {
+			return envPath, nil
+		}
 		// Codex is project-specific, use current directory
 		cwd, err := os.Getwd()
 		if err != nil {
