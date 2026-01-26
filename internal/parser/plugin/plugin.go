@@ -325,6 +325,7 @@ func (p *Parser) parseSkillFile(filePath string, pluginManifest *Manifest, repoN
 		Metadata:    metadata,
 		Content:     normalizedContent,
 		ModifiedAt:  fileInfo.ModTime(),
+		Scope:       model.ScopePlugin,
 	}, nil
 }
 

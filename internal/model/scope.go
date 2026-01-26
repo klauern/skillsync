@@ -24,6 +24,9 @@ const (
 
 	// ScopeRepo represents repository-level skills local to a specific project.
 	ScopeRepo SkillScope = "repo"
+
+	// ScopePlugin represents skills installed from Claude Code plugins.
+	ScopePlugin SkillScope = "plugin"
 )
 
 // scopePrecedence defines the order of precedence for skill scopes.
@@ -34,6 +37,7 @@ var scopePrecedence = map[SkillScope]int{
 	ScopeAdmin:   2,
 	ScopeUser:    3,
 	ScopeRepo:    4,
+	ScopePlugin:  5, // Plugin skills have highest precedence
 }
 
 // IsValid returns true if the scope is recognized.
@@ -44,7 +48,7 @@ func (s SkillScope) IsValid() bool {
 
 // AllScopes returns all supported skill scopes in precedence order (lowest to highest).
 func AllScopes() []SkillScope {
-	return []SkillScope{ScopeBuiltin, ScopeSystem, ScopeAdmin, ScopeUser, ScopeRepo}
+	return []SkillScope{ScopeBuiltin, ScopeSystem, ScopeAdmin, ScopeUser, ScopeRepo, ScopePlugin}
 }
 
 // String returns the string representation of the scope.
@@ -65,6 +69,8 @@ func (s SkillScope) Description() string {
 		return "User-level skills in the user's home directory"
 	case ScopeRepo:
 		return "Repository-level skills local to a specific project"
+	case ScopePlugin:
+		return "Skills installed from Claude Code plugins"
 	default:
 		return "Unknown scope"
 	}
@@ -108,7 +114,9 @@ func ParseScope(s string) (SkillScope, error) {
 		return ScopeSystem, nil
 	case "default", "built-in":
 		return ScopeBuiltin, nil
+	case "plugins":
+		return ScopePlugin, nil
 	default:
-		return "", fmt.Errorf("unknown scope %q (valid: builtin, system, admin, user, repo)", s)
+		return "", fmt.Errorf("unknown scope %q (valid: builtin, system, admin, user, repo, plugin)", s)
 	}
 }

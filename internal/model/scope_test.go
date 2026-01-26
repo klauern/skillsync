@@ -12,6 +12,7 @@ func TestSkillScopeValidation(t *testing.T) {
 		"admin valid":   {scope: ScopeAdmin, valid: true},
 		"user valid":    {scope: ScopeUser, valid: true},
 		"repo valid":    {scope: ScopeRepo, valid: true},
+		"plugin valid":  {scope: ScopePlugin, valid: true},
 		"empty invalid": {scope: "", valid: false},
 		"unknown":       {scope: "unknown", valid: false},
 	}
@@ -30,8 +31,8 @@ func TestSkillScopeValidation(t *testing.T) {
 func TestAllScopes(t *testing.T) {
 	scopes := AllScopes()
 
-	if len(scopes) != 5 {
-		t.Errorf("AllScopes() returned %d scopes, want 5", len(scopes))
+	if len(scopes) != 6 {
+		t.Errorf("AllScopes() returned %d scopes, want 6", len(scopes))
 	}
 
 	for _, s := range scopes {
@@ -41,7 +42,7 @@ func TestAllScopes(t *testing.T) {
 	}
 
 	// Verify precedence order (lowest to highest)
-	expectedOrder := []SkillScope{ScopeBuiltin, ScopeSystem, ScopeAdmin, ScopeUser, ScopeRepo}
+	expectedOrder := []SkillScope{ScopeBuiltin, ScopeSystem, ScopeAdmin, ScopeUser, ScopeRepo, ScopePlugin}
 	for i, s := range scopes {
 		if s != expectedOrder[i] {
 			t.Errorf("AllScopes()[%d] = %q, want %q", i, s, expectedOrder[i])
@@ -60,6 +61,8 @@ func TestParseScope(t *testing.T) {
 		"admin exact":          {input: "admin", want: ScopeAdmin, wantErr: false},
 		"user exact":           {input: "user", want: ScopeUser, wantErr: false},
 		"repo exact":           {input: "repo", want: ScopeRepo, wantErr: false},
+		"plugin exact":         {input: "plugin", want: ScopePlugin, wantErr: false},
+		"plugins alias":        {input: "plugins", want: ScopePlugin, wantErr: false},
 		"repository alias":     {input: "repository", want: ScopeRepo, wantErr: false},
 		"project alias":        {input: "project", want: ScopeRepo, wantErr: false},
 		"local alias":          {input: "local", want: ScopeRepo, wantErr: false},
@@ -100,6 +103,7 @@ func TestSkillScopeString(t *testing.T) {
 		"admin":   {scope: ScopeAdmin, want: "admin"},
 		"user":    {scope: ScopeUser, want: "user"},
 		"repo":    {scope: ScopeRepo, want: "repo"},
+		"plugin":  {scope: ScopePlugin, want: "plugin"},
 	}
 
 	for name, tt := range tests {
@@ -136,7 +140,8 @@ func TestSkillScopePrecedence(t *testing.T) {
 		"system is 1":        {scope: ScopeSystem, precedence: 1},
 		"admin is 2":         {scope: ScopeAdmin, precedence: 2},
 		"user is 3":          {scope: ScopeUser, precedence: 3},
-		"repo is highest":    {scope: ScopeRepo, precedence: 4},
+		"repo is 4":          {scope: ScopeRepo, precedence: 4},
+		"plugin is highest":  {scope: ScopePlugin, precedence: 5},
 		"invalid returns -1": {scope: "invalid", precedence: -1},
 	}
 
@@ -156,14 +161,17 @@ func TestSkillScopeIsHigherPrecedence(t *testing.T) {
 		other  SkillScope
 		higher bool
 	}{
+		"plugin > repo":     {scope: ScopePlugin, other: ScopeRepo, higher: true},
 		"repo > user":       {scope: ScopeRepo, other: ScopeUser, higher: true},
 		"user > admin":      {scope: ScopeUser, other: ScopeAdmin, higher: true},
 		"admin > system":    {scope: ScopeAdmin, other: ScopeSystem, higher: true},
 		"system > builtin":  {scope: ScopeSystem, other: ScopeBuiltin, higher: true},
 		"repo > builtin":    {scope: ScopeRepo, other: ScopeBuiltin, higher: true},
-		"builtin not > any": {scope: ScopeBuiltin, other: ScopeRepo, higher: false},
+		"plugin > builtin":  {scope: ScopePlugin, other: ScopeBuiltin, higher: true},
+		"builtin not > any": {scope: ScopeBuiltin, other: ScopePlugin, higher: false},
 		"same scope":        {scope: ScopeUser, other: ScopeUser, higher: false},
 		"user not > repo":   {scope: ScopeUser, other: ScopeRepo, higher: false},
+		"repo not > plugin": {scope: ScopeRepo, other: ScopePlugin, higher: false},
 	}
 
 	for name, tt := range tests {

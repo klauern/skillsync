@@ -28,6 +28,21 @@ func (p Platform) IsValid() bool {
 	}
 }
 
+// ConfigDir returns the platform's config directory name (without leading dot).
+// Returns "claude" for ClaudeCode, "cursor" for Cursor, "codex" for Codex.
+func (p Platform) ConfigDir() string {
+	switch p {
+	case ClaudeCode:
+		return "claude"
+	case Cursor:
+		return "cursor"
+	case Codex:
+		return "codex"
+	default:
+		return string(p)
+	}
+}
+
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
 	return []Platform{ClaudeCode, Cursor, Codex}

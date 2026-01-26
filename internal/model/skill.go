@@ -27,3 +27,33 @@ type Skill struct {
 func (s Skill) IsHigherPrecedence(other Skill) bool {
 	return s.Scope.IsHigherPrecedence(other.Scope)
 }
+
+// DisplayScope returns a formatted scope string for table output.
+// For user/repo scopes, shows the platform-specific path (~/.claude, .cursor, etc).
+// For plugin scope, shows plugin:<name> using metadata.
+func (s Skill) DisplayScope() string {
+	platformDir := s.Platform.ConfigDir()
+
+	switch s.Scope {
+	case ScopeUser:
+		return "~/." + platformDir
+	case ScopeRepo:
+		return "." + platformDir
+	case ScopePlugin:
+		if name := s.Metadata["plugin"]; name != "" {
+			return "plugin:" + name
+		}
+		return "plugin"
+	case ScopeSystem:
+		return "system"
+	case ScopeAdmin:
+		return "admin"
+	case ScopeBuiltin:
+		return "builtin"
+	default:
+		if s.Scope == "" {
+			return "-"
+		}
+		return string(s.Scope)
+	}
+}

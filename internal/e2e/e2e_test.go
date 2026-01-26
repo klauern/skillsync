@@ -644,7 +644,7 @@ func TestDiscoverHelp(t *testing.T) {
 	e2e.AssertOutputContains(t, result, "USAGE")
 	e2e.AssertOutputContains(t, result, "--platform")
 	e2e.AssertOutputContains(t, result, "--format")
-	e2e.AssertOutputContains(t, result, "--plugins")
+	e2e.AssertOutputContains(t, result, "--no-plugins")
 	e2e.AssertOutputContains(t, result, "--repo")
 	e2e.AssertOutputContains(t, result, "--no-cache")
 }

@@ -231,15 +231,16 @@ func discoveryCommand() *cli.Command {
 		Usage:   "Discover and list skills across platforms",
 		UsageText: `skillsync discover [options]
    skillsync discover --platform claude-code
-   skillsync discover --plugins
-   skillsync discover --plugins --repo https://github.com/user/plugins
+   skillsync discover --no-plugins
+   skillsync discover --repo https://github.com/user/plugins
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
    Supported platforms: claude-code, cursor, codex
 
-   Plugin discovery: Use --plugins to scan installed Claude Code plugins
-   from ~/.skillsync/plugins/ or specify a Git repository with --repo.
+   Plugin discovery: By default, skills from installed Claude Code plugins
+   are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
+   or specify a Git repository with --repo to fetch plugins from.
 
    Output formats: table (default), json, yaml`,
 		Flags: []cli.Flag{
@@ -251,7 +252,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "scope",
 				Aliases: []string{"s"},
-				Usage:   "Filter by scope (repo, user, admin, system, builtin, all). Comma-separated for multiple.",
+				Usage:   "Filter by scope (repo, user, admin, system, builtin, plugin, all). Comma-separated for multiple.",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -260,12 +261,12 @@ func discoveryCommand() *cli.Command {
 				Usage:   "Output format: table, json, yaml",
 			},
 			&cli.BoolFlag{
-				Name:  "plugins",
-				Usage: "Include skills from installed Claude Code plugins",
+				Name:  "no-plugins",
+				Usage: "Exclude skills from installed Claude Code plugins",
 			},
 			&cli.StringFlag{
 				Name:  "repo",
-				Usage: "Git repository URL to discover plugins from (implies --plugins)",
+				Usage: "Git repository URL to discover plugins from",
 			},
 			&cli.BoolFlag{
 				Name:  "no-cache",
@@ -276,14 +277,12 @@ func discoveryCommand() *cli.Command {
 			platform := cmd.String("platform")
 			scopeStr := cmd.String("scope")
 			format := cmd.String("format")
-			includePlugins := cmd.Bool("plugins")
+			excludePlugins := cmd.Bool("no-plugins")
 			repoURL := cmd.String("repo")
 			noCache := cmd.Bool("no-cache")
 
-			// --repo implies --plugins
-			if repoURL != "" {
-				includePlugins = true
-			}
+			// Include plugins by default unless --no-plugins is set
+			includePlugins := !excludePlugins
 
 			// Parse scope filter
 			var scopeFilter []model.SkillScope
@@ -422,9 +421,9 @@ func outputTable(skills []model.Skill) error {
 	fmt.Printf("%s %s %s %s\n",
 		ui.Header(fmt.Sprintf("%-25s", "NAME")),
 		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
-		ui.Header(fmt.Sprintf("%-8s", "SCOPE")),
-		ui.Header(fmt.Sprintf("%-45s", "DESCRIPTION")))
-	fmt.Printf("%-25s %-12s %-8s %-45s\n", "----", "--------", "-----", "-----------")
+		ui.Header(fmt.Sprintf("%-15s", "SCOPE")),
+		ui.Header(fmt.Sprintf("%-40s", "DESCRIPTION")))
+	fmt.Printf("%-25s %-12s %-15s %-40s\n", "----", "--------", "-----", "-----------")
 
 	for _, skill := range skills {
 		name := skill.Name
@@ -433,19 +432,20 @@ func outputTable(skills []model.Skill) error {
 		}
 
 		desc := skill.Description
-		if len(desc) > 45 {
-			desc = desc[:42] + "..."
+		if len(desc) > 40 {
+			desc = desc[:37] + "..."
 		}
 
-		scope := string(skill.Scope)
-		if scope == "" {
-			scope = "-"
+		// Use DisplayScope for formatted output
+		scope := skill.DisplayScope()
+		if len(scope) > 15 {
+			scope = scope[:12] + "..."
 		}
 
 		// Color platform names for visual distinction
 		platform := colorPlatform(string(skill.Platform))
 
-		fmt.Printf("%-25s %s %-8s %-45s\n", name, platform, scope, desc)
+		fmt.Printf("%-25s %s %-15s %-40s\n", name, platform, scope, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
