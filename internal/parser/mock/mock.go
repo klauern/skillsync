@@ -7,11 +7,11 @@ import (
 
 // Parser is a mock implementation of parser.Parser for testing.
 type Parser struct {
-	platform     model.Platform
-	defaultPath  string
-	skills       []model.Skill
-	parseError   error
-	parseCalled  int
+	platform    model.Platform
+	defaultPath string
+	skills      []model.Skill
+	parseError  error
+	parseCalled int
 }
 
 // New creates a new mock parser.
