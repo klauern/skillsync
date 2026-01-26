@@ -47,8 +47,6 @@ type PlatformConfig struct {
 	// SkillsPaths is an ordered list of paths to search for skills (project → user → system)
 	// Paths can use ~ for home directory or be relative (resolved from working directory)
 	SkillsPaths []string `yaml:"skills_paths,omitempty"`
-	// LegacyPath is an optional path for backward compatibility (e.g., ~/.cursor/rules)
-	LegacyPath string `yaml:"legacy_path,omitempty"`
 	// BackupEnabled indicates whether to backup this platform's skills
 	BackupEnabled bool `yaml:"backup_enabled"`
 
@@ -126,7 +124,6 @@ func Default() *Config {
 					".cursor/skills",   // Project (relative)
 					"~/.cursor/skills", // User (absolute)
 				},
-				LegacyPath:    "~/.cursor/rules", // Backward compat
 				BackupEnabled: true,
 			},
 			Codex: PlatformConfig{
@@ -371,14 +368,6 @@ func (pc *PlatformConfig) GetSkillsPaths(baseDir string) []string {
 		expanded := util.ExpandPath(pc.SkillsPath, baseDir)
 		if expanded != "" {
 			paths = []string{expanded}
-		}
-	}
-
-	// Include legacy path if set (typically for Cursor's ~/.cursor/rules)
-	if pc.LegacyPath != "" {
-		expanded := util.ExpandPath(pc.LegacyPath, baseDir)
-		if expanded != "" {
-			paths = append(paths, expanded)
 		}
 	}
 

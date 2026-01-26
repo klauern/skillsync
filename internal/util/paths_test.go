@@ -30,16 +30,6 @@ func TestClaudeCodeSkillsPath(t *testing.T) {
 	}
 }
 
-func TestCursorRulesPath(t *testing.T) {
-	projectDir := "/test/project"
-	path := CursorRulesPath(projectDir)
-
-	expected := "/test/project/.cursor/rules"
-	if path != expected {
-		t.Errorf("CursorRulesPath(%q) = %q, want %q", projectDir, path, expected)
-	}
-}
-
 func TestCodexConfigPath(t *testing.T) {
 	projectDir := "/test/project"
 	path := CodexConfigPath(projectDir)
@@ -307,15 +297,6 @@ func TestCursorSkillsPath(t *testing.T) {
 	}
 }
 
-func TestCursorLegacySkillsPath(t *testing.T) {
-	home := HomeDir()
-	expected := filepath.Join(home, ".cursor", "rules")
-	got := CursorLegacySkillsPath()
-	if got != expected {
-		t.Errorf("CursorLegacySkillsPath() = %q, want %q", got, expected)
-	}
-}
-
 func TestCursorProjectSkillsPath(t *testing.T) {
 	projectDir := "/test/project"
 	expected := "/test/project/.cursor/skills"
@@ -325,58 +306,9 @@ func TestCursorProjectSkillsPath(t *testing.T) {
 	}
 }
 
-func TestGetTieredPaths_CursorIncludesLegacyPaths(t *testing.T) {
-	home := HomeDir()
-
-	cfg := TieredPathConfig{
-		WorkingDir: "/test/project",
-		Platform:   model.Cursor,
-	}
-
-	paths := GetTieredPaths(cfg)
-
-	// Check repo scope includes both skills and rules directories
-	repoPaths := paths[model.ScopeRepo]
-	hasSkillsPath := false
-	hasRulesPath := false
-	for _, p := range repoPaths {
-		if p == "/test/project/.cursor/skills" {
-			hasSkillsPath = true
-		}
-		if p == "/test/project/.cursor/rules" {
-			hasRulesPath = true
-		}
-	}
-	if !hasSkillsPath {
-		t.Error("GetTieredPaths() for Cursor missing repo skills path")
-	}
-	if !hasRulesPath {
-		t.Error("GetTieredPaths() for Cursor missing repo rules path (legacy)")
-	}
-
-	// Check user scope includes both skills and rules directories
-	userPaths := paths[model.ScopeUser]
-	hasUserSkillsPath := false
-	hasUserRulesPath := false
-	for _, p := range userPaths {
-		if p == filepath.Join(home, ".cursor", "skills") {
-			hasUserSkillsPath = true
-		}
-		if p == filepath.Join(home, ".cursor", "rules") {
-			hasUserRulesPath = true
-		}
-	}
-	if !hasUserSkillsPath {
-		t.Error("GetTieredPaths() for Cursor missing user skills path")
-	}
-	if !hasUserRulesPath {
-		t.Error("GetTieredPaths() for Cursor missing user rules path (legacy)")
-	}
-}
-
-func TestGetTieredPaths_OtherPlatformsNoLegacyPaths(t *testing.T) {
-	// Verify that non-Cursor platforms don't have legacy paths
-	platforms := []model.Platform{model.ClaudeCode, model.Codex}
+func TestGetTieredPaths_NoLegacyPaths(t *testing.T) {
+	// Verify that all platforms only have skills paths (no legacy rules paths)
+	platforms := model.AllPlatforms()
 
 	for _, platform := range platforms {
 		t.Run(string(platform), func(t *testing.T) {

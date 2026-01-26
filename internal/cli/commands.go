@@ -182,9 +182,6 @@ func showConfigPaths() error {
 	fmt.Println("\nPlatform paths:")
 	fmt.Printf("  Claude Code:     %v\n", cfg.Platforms.ClaudeCode.SkillsPaths)
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
-	if cfg.Platforms.Cursor.LegacyPath != "" {
-		fmt.Printf("    (legacy):      %s\n", cfg.Platforms.Cursor.LegacyPath)
-	}
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
 
 	fmt.Println("\nData paths:")

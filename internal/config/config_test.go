@@ -435,10 +435,9 @@ func TestGetSkillsPaths(t *testing.T) {
 			expectedLen: 1,
 		},
 		{
-			name: "with legacy_path included",
+			name: "with multiple skills_paths",
 			config: PlatformConfig{
-				SkillsPaths: []string{"~/.cursor/skills"},
-				LegacyPath:  "~/.cursor/rules",
+				SkillsPaths: []string{"~/.cursor/skills", "~/.cursor/rules"},
 			},
 			baseDir:     tmpDir,
 			expectedLen: 2,
@@ -581,12 +580,15 @@ func TestDefaultSkillsPaths(t *testing.T) {
 		t.Errorf("expected second Claude Code path to be '~/.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[1])
 	}
 
-	// Check Cursor defaults with legacy path
+	// Check Cursor defaults
 	if len(cfg.Platforms.Cursor.SkillsPaths) != 2 {
 		t.Errorf("expected 2 Cursor skills paths, got %d", len(cfg.Platforms.Cursor.SkillsPaths))
 	}
-	if cfg.Platforms.Cursor.LegacyPath != "~/.cursor/rules" {
-		t.Errorf("expected Cursor legacy path '~/.cursor/rules', got %q", cfg.Platforms.Cursor.LegacyPath)
+	if cfg.Platforms.Cursor.SkillsPaths[0] != ".cursor/skills" {
+		t.Errorf("expected first Cursor path to be '.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[0])
+	}
+	if cfg.Platforms.Cursor.SkillsPaths[1] != "~/.cursor/skills" {
+		t.Errorf("expected second Cursor path to be '~/.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[1])
 	}
 
 	// Check Codex defaults
