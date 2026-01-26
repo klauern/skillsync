@@ -14,12 +14,14 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/backup"
+	"github.com/klauern/skillsync/internal/cache"
 	"github.com/klauern/skillsync/internal/export"
 	"github.com/klauern/skillsync/internal/model"
 	parsercli "github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -45,10 +47,15 @@ func discoveryCommand() *cli.Command {
 		Usage:   "Discover and list skills across platforms",
 		UsageText: `skillsync discover [options]
    skillsync discover --platform claude-code
+   skillsync discover --plugins
+   skillsync discover --plugins --repo https://github.com/user/plugins
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
    Supported platforms: claude-code, cursor, codex
+
+   Plugin discovery: Use --plugins to scan installed Claude Code plugins
+   from ~/.skillsync/plugins/ or specify a Git repository with --repo.
 
    Output formats: table (default), json, yaml`,
 		Flags: []cli.Flag{
@@ -63,10 +70,30 @@ func discoveryCommand() *cli.Command {
 				Value:   "table",
 				Usage:   "Output format: table, json, yaml",
 			},
+			&cli.BoolFlag{
+				Name:  "plugins",
+				Usage: "Include skills from installed Claude Code plugins",
+			},
+			&cli.StringFlag{
+				Name:  "repo",
+				Usage: "Git repository URL to discover plugins from (implies --plugins)",
+			},
+			&cli.BoolFlag{
+				Name:  "no-cache",
+				Usage: "Disable plugin skill caching",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			platform := cmd.String("platform")
 			format := cmd.String("format")
+			includePlugins := cmd.Bool("plugins")
+			repoURL := cmd.String("repo")
+			noCache := cmd.Bool("no-cache")
+
+			// --repo implies --plugins
+			if repoURL != "" {
+				includePlugins = true
+			}
 
 			// Determine which platforms to scan
 			var platforms []model.Platform
@@ -92,10 +119,63 @@ func discoveryCommand() *cli.Command {
 				allSkills = append(allSkills, skills...)
 			}
 
+			// Discover plugin skills if requested
+			if includePlugins {
+				pluginSkills, err := discoverPluginSkills(repoURL, !noCache)
+				if err != nil {
+					fmt.Printf("Warning: failed to discover plugins: %v\n", err)
+				} else {
+					allSkills = append(allSkills, pluginSkills...)
+				}
+			}
+
 			// Output results
 			return outputSkills(allSkills, format)
 		},
 	}
+}
+
+// discoverPluginSkills discovers skills from Claude Code plugins with optional caching
+func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) {
+	var pluginParser *plugin.Parser
+
+	if repoURL != "" {
+		pluginParser = plugin.NewWithRepo(repoURL)
+	} else {
+		pluginParser = plugin.New("")
+	}
+
+	// Try to use cache for local plugins (not for remote repos which need git pull)
+	if useCache && repoURL == "" {
+		skillCache, err := cache.New("plugins")
+		if err == nil && skillCache.Size() > 0 && !skillCache.IsStale(cache.DefaultTTL) {
+			// Return cached skills
+			var skills []model.Skill
+			for _, entry := range skillCache.Entries {
+				skills = append(skills, entry.Skill)
+			}
+			return skills, nil
+		}
+	}
+
+	// Parse plugins
+	skills, err := pluginParser.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the results for local plugins
+	if useCache && repoURL == "" && len(skills) > 0 {
+		skillCache, err := cache.New("plugins")
+		if err == nil {
+			for _, skill := range skills {
+				skillCache.Set(skill.Name, skill)
+			}
+			_ = skillCache.Save()
+		}
+	}
+
+	return skills, nil
 }
 
 // outputSkills formats and prints skills in the requested format
