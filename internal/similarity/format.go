@@ -143,11 +143,11 @@ func (f *Formatter) formatUnified(w io.Writer, result *ComparisonResult) error {
 		return err
 	}
 
-	// Diff header
-	if _, err := fmt.Fprintf(w, "--- %s (%s)\n", result.Skill1.Name, result.Skill1.Platform); err != nil {
+	// Diff header with platform and scope (if scope is present)
+	if _, err := fmt.Fprintf(w, "--- %s\n", formatDiffHeader(result.Skill1.Name, string(result.Skill1.Platform), result.Skill1.Scope.String())); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "+++ %s (%s)\n", result.Skill2.Name, result.Skill2.Platform); err != nil {
+	if _, err := fmt.Fprintf(w, "+++ %s\n", formatDiffHeader(result.Skill2.Name, string(result.Skill2.Platform), result.Skill2.Scope.String())); err != nil {
 		return err
 	}
 
@@ -369,7 +369,10 @@ func (f *Formatter) formatSummary(w io.Writer, result *ComparisonResult) error {
 
 // writeHeader writes the common header for all formats.
 func (f *Formatter) writeHeader(w io.Writer, result *ComparisonResult) error {
-	if _, err := fmt.Fprintf(w, "Comparing: %s <-> %s\n", result.Skill1.Name, result.Skill2.Name); err != nil {
+	// Include scope inline with skill name if present: "garden (plugin)"
+	skill1Display := formatNameWithScope(result.Skill1.Name, result.Skill1.Scope.String())
+	skill2Display := formatNameWithScope(result.Skill2.Name, result.Skill2.Scope.String())
+	if _, err := fmt.Fprintf(w, "Comparing: %s <-> %s\n", skill1Display, skill2Display); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(w, strings.Repeat("-", 50)); err != nil {
@@ -448,24 +451,29 @@ func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 		return err
 	}
 
+	// Column width for skill names with scope (e.g., "garden (plugin)")
+	const skillColWidth = 30
+
 	// Colored header
 	if _, err := fmt.Fprintf(w, "%s %s %s %s %s\n",
-		ui.Header(fmt.Sprintf("%-25s", "SKILL 1")),
-		ui.Header(fmt.Sprintf("%-25s", "SKILL 2")),
+		ui.Header(fmt.Sprintf("%-*s", skillColWidth, "SKILL 1")),
+		ui.Header(fmt.Sprintf("%-*s", skillColWidth, "SKILL 2")),
 		ui.Header(fmt.Sprintf("%-8s", "NAME %")),
 		ui.Header(fmt.Sprintf("%-8s", "CONTENT %")),
 		ui.Header(fmt.Sprintf("%-15s", "CHANGES"))); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "%-25s %-25s %-8s %-8s %-15s\n",
-		"-------", "-------", "------", "---------", "-------"); err != nil {
+	if _, err := fmt.Fprintf(w, "%-*s %-*s %-8s %-8s %-15s\n",
+		skillColWidth, "-------", skillColWidth, "-------", "------", "---------", "-------"); err != nil {
 		return err
 	}
 
 	// Rows
 	for _, r := range results {
-		name1 := truncateString(r.Skill1.Name, 25)
-		name2 := truncateString(r.Skill2.Name, 25)
+		// Format skill names with scope inline: "name (scope)"
+		skill1Display := formatSkillWithScope(r.Skill1.Name, r.Skill1.Scope.String(), skillColWidth)
+		skill2Display := formatSkillWithScope(r.Skill2.Name, r.Skill2.Scope.String(), skillColWidth)
+
 		nameScore := "-"
 		contentScore := "-"
 		if r.NameScore > 0 {
@@ -480,12 +488,49 @@ func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 		coloredContentScore := colorScore(contentScore)
 
 		changes := r.DiffSummary()
-		if _, err := fmt.Fprintf(w, "%-25s %-25s %s %s %-15s\n",
-			name1, name2, coloredNameScore, coloredContentScore, changes); err != nil {
+		if _, err := fmt.Fprintf(w, "%-*s %-*s %s %s %-15s\n",
+			skillColWidth, skill1Display, skillColWidth, skill2Display,
+			coloredNameScore, coloredContentScore, changes); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// formatSkillWithScope formats a skill name with scope inline: "name (scope)".
+// Truncates if needed to fit within maxWidth.
+func formatSkillWithScope(name, scope string, maxWidth int) string {
+	if scope == "" {
+		return truncateString(name, maxWidth)
+	}
+	// Format: "name (scope)"
+	full := fmt.Sprintf("%s (%s)", name, scope)
+	if len(full) <= maxWidth {
+		return full
+	}
+	// Truncate name to fit, preserving scope
+	scopePart := fmt.Sprintf(" (%s)", scope)
+	availableForName := maxWidth - len(scopePart)
+	if availableForName < 4 { // Need at least "a..."
+		return truncateString(full, maxWidth)
+	}
+	return truncateString(name, availableForName) + scopePart
+}
+
+// formatNameWithScope returns "name (scope)" if scope is non-empty, otherwise just "name".
+func formatNameWithScope(name, scope string) string {
+	if scope == "" {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", name, scope)
+}
+
+// formatDiffHeader formats a diff header line: "name (platform, scope)" or "name (platform)" if no scope.
+func formatDiffHeader(name, platform, scope string) string {
+	if scope == "" {
+		return fmt.Sprintf("%s (%s)", name, platform)
+	}
+	return fmt.Sprintf("%s (%s, %s)", name, platform, scope)
 }
 
 // colorScore returns a colored score string based on the percentage value.

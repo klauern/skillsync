@@ -355,8 +355,10 @@ func outputCompareSummary(results []*similarity.ComparisonResult) error {
 // comparisonOutput represents the JSON/YAML output structure.
 type comparisonOutput struct {
 	Skill1       string  `json:"skill1" yaml:"skill1"`
+	Scope1       string  `json:"scope1" yaml:"scope1"`
 	Platform1    string  `json:"platform1" yaml:"platform1"`
 	Skill2       string  `json:"skill2" yaml:"skill2"`
+	Scope2       string  `json:"scope2" yaml:"scope2"`
 	Platform2    string  `json:"platform2" yaml:"platform2"`
 	NameScore    float64 `json:"name_score,omitempty" yaml:"name_score,omitempty"`
 	ContentScore float64 `json:"content_score,omitempty" yaml:"content_score,omitempty"`
@@ -370,8 +372,10 @@ func toComparisonOutputs(results []*similarity.ComparisonResult) []comparisonOut
 	for i, r := range results {
 		outputs[i] = comparisonOutput{
 			Skill1:       r.Skill1.Name,
+			Scope1:       r.Skill1.Scope.String(),
 			Platform1:    string(r.Skill1.Platform),
 			Skill2:       r.Skill2.Name,
+			Scope2:       r.Skill2.Scope.String(),
 			Platform2:    string(r.Skill2.Platform),
 			NameScore:    r.NameScore,
 			ContentScore: r.ContentScore,
