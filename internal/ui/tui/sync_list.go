@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -139,6 +140,11 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncL
 		{Title: "Scope", Width: 12},
 		{Title: "Description", Width: 50},
 	}
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
 
 	// Initialize all skills as selected by default
 	selected := make(map[string]bool)
