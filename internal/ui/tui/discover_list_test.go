@@ -504,7 +504,6 @@ func TestDiscoverListModel_WindowResize(t *testing.T) {
 
 func TestRunDiscoverList_EmptySkills(t *testing.T) {
 	result, err := RunDiscoverList([]model.Skill{})
-
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}

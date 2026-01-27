@@ -486,7 +486,6 @@ func TestSyncListModel_WindowResize(t *testing.T) {
 
 func TestRunSyncList_EmptySkills(t *testing.T) {
 	result, err := RunSyncList([]model.Skill{}, model.ClaudeCode, model.Cursor)
-
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}

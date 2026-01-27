@@ -656,7 +656,6 @@ func TestParser_parseMarketplace_PluginParsingFailure(t *testing.T) {
 
 	p := New(tmpDir)
 	skills, err := p.parseMarketplace(tmpDir)
-
 	// Should not error - failed plugins are logged and skipped
 	if err != nil {
 		t.Fatalf("parseMarketplace() error = %v", err)
@@ -685,7 +684,6 @@ func TestParser_parsePlugin_NoSkillFiles(t *testing.T) {
 
 	p := New(tmpDir)
 	skills, err := p.parsePlugin(pluginDir, "test-repo")
-
 	// Should succeed but return no skills
 	if err != nil {
 		t.Fatalf("parsePlugin() error = %v", err)
@@ -713,7 +711,6 @@ func TestParser_parsePlugin_InvalidSkillFiles(t *testing.T) {
 
 	p := New(tmpDir)
 	skills, err := p.parsePlugin(pluginDir, "test-repo")
-
 	// Should succeed - invalid skills are logged and skipped
 	if err != nil {
 		t.Fatalf("parsePlugin() error = %v", err)
@@ -796,7 +793,6 @@ func TestParser_scanForPlugins_NestedPlugins(t *testing.T) {
 
 	p := New(tmpDir)
 	skills, err := p.scanForPlugins(tmpDir)
-
 	if err != nil {
 		t.Fatalf("scanForPlugins() error = %v", err)
 	}
@@ -830,7 +826,6 @@ func TestParser_scanForPlugins_MultiplePlugins(t *testing.T) {
 
 	p := New(tmpDir)
 	skills, err := p.scanForPlugins(tmpDir)
-
 	if err != nil {
 		t.Fatalf("scanForPlugins() error = %v", err)
 	}
@@ -869,7 +864,6 @@ func TestParser_Parse_FallbackToScanWhenMarketplaceEmpty(t *testing.T) {
 
 	p := New(tmpDir)
 	skills, err := p.Parse()
-
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}

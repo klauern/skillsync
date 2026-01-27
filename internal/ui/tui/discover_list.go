@@ -82,17 +82,17 @@ func defaultDiscoverListKeyMap() discoverListKeyMap {
 
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
-	table    table.Model
-	skills   []model.Skill
-	filtered []model.Skill
-	keys     discoverListKeyMap
-	result   DiscoverListResult
-	filter   string
+	table     table.Model
+	skills    []model.Skill
+	filtered  []model.Skill
+	keys      discoverListKeyMap
+	result    DiscoverListResult
+	filter    string
 	filtering bool
-	showHelp bool
-	width    int
-	height   int
-	quitting bool
+	showHelp  bool
+	width     int
+	height    int
+	quitting  bool
 }
 
 // Styles for the discover list TUI.

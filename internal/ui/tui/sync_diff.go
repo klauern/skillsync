@@ -33,12 +33,12 @@ type SyncDiffResult struct {
 
 // syncDiffKeyMap defines the key bindings for the diff viewer.
 type syncDiffKeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Back   key.Binding
-	Sync   key.Binding
-	Help   key.Binding
-	Quit   key.Binding
+	Up   key.Binding
+	Down key.Binding
+	Back key.Binding
+	Sync key.Binding
+	Help key.Binding
+	Quit key.Binding
 }
 
 func defaultSyncDiffKeyMap() syncDiffKeyMap {

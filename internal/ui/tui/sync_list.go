@@ -134,7 +134,7 @@ var syncListStyles = struct {
 // NewSyncListModel creates a new sync list model.
 func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncListModel {
 	columns := []table.Column{
-		{Title: " ", Width: 3},  // Checkbox column
+		{Title: " ", Width: 3}, // Checkbox column
 		{Title: "Name", Width: 25},
 		{Title: "Scope", Width: 12},
 		{Title: "Description", Width: 50},
