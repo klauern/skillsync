@@ -1,24 +1,26 @@
 ---
 alwaysApply: true
 ---
-# SkillSync Overview
+# SkillSync
 
 Sync AI coding skills (Claude Code, Cursor, Codex) across platforms.
 
-**Tech**: Go 1.25.4, urfave/cli v3
-**Structure**: cmd/ for binaries, internal/ for private packages
+**Stack**: Go 1.25.4, urfave/cli v3
 
-## Quick Commands
-- Build: `make build` → bin/skillsync
-- Test: `make test` (coverage: make test-coverage)
-- Run: `make run`
+## Architecture
+```mermaid
+graph LR
+    CLI[cli/] --> Model[model/]
+    CLI --> Parser[parser/]
+    CLI --> Sync[sync/]
+    Parser --> Model
+    Sync --> Model
+```
+
+## Commands
+- Build: `make build` | Test: `make test` | Audit: `make audit`
+- Run: `./bin/skillsync --help`
 
 ## Issue Tracking
-Track work in beads issues:
-```bash
-bd ready              # Find available work
-bd show <id>          # View details
-bd update <id> --status in_progress
-bd close <id>         # Complete work
-```
-**Session completion**: Always `bd sync` && `git push`
+`bd ready` → `bd show <id>` → `bd close <id>`
+Session end: `bd sync && git push`

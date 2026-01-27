@@ -4,17 +4,16 @@ globs: ["*.go"]
 # Go Conventions
 
 ## Tooling
-- Format: `make fmt` (gofumpt + goimports, see Makefile:36)
-- Lint: `make lint` (golangci-lint, config: .golangci.yml:1)
-- Audit: `make audit` (tidy, fmt, vet, lint, test)
+- Format: `make fmt` (gofumpt + goimports)
+- Lint: `make lint` (see [.golangci.yml](mdc:.golangci.yml))
+- Audit: `make audit` (all checks)
 
-## Code Quality
-- Always check errors (errcheck enabled: .golangci.yml:6)
-- Max cyclomatic complexity: 15 (.golangci.yml:25)
-- Use gofumpt (stricter than gofmt)
-- Run goimports to manage imports
+## Code Patterns
+- Errors: Always check (errcheck enabled)
+- Complexity: Max cyclomatic 15
+- Interfaces: Define in consuming package
 
-## References
-- CLI commands: internal/cli/commands.go:1
-- Version info: internal/cli/version.go:1
-- Platform model: internal/model/platform.go:1
+## Key Types
+- Platform: [model/platform.go](mdc:internal/model/platform.go) (ClaudeCode, Cursor, Codex)
+- Skill: [model/skill.go](mdc:internal/model/skill.go)
+- Parser: [parser/parser.go](mdc:internal/parser/parser.go)

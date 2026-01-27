@@ -1,0 +1,29 @@
+---
+description: Implementing new platform parsers
+---
+# Parser Development
+
+## Adding a New Platform
+
+1. Add platform constant to [model/platform.go](mdc:internal/model/platform.go)
+2. Create parser in `internal/parser/<platform>/`
+3. Implement `Parser` interface from [parser/parser.go](mdc:internal/parser/parser.go)
+4. Register in [parser/tiered/factories.go](mdc:internal/parser/tiered/factories.go)
+
+## Parser Interface
+```go
+type Parser interface {
+    Parse() ([]model.Skill, error)
+    Platform() model.Platform
+    DefaultPath() string
+}
+```
+
+## Example: Claude Parser
+See [parser/claude/claude.go](mdc:internal/parser/claude/claude.go)
+
+## Test Data
+Add fixtures to `testdata/skills/<platform>/`
+- Basic skill
+- Skill with assets
+- Edge cases (no frontmatter, etc.)
