@@ -61,6 +61,29 @@ func TestPlatformShort(t *testing.T) {
 	}
 }
 
+func TestPlatformConfigDir(t *testing.T) {
+	tests := map[string]struct {
+		platform Platform
+		want     string
+	}{
+		"claude code":     {platform: ClaudeCode, want: "claude"},
+		"cursor":          {platform: Cursor, want: "cursor"},
+		"codex":           {platform: Codex, want: "codex"},
+		"unknown returns": {platform: "unknown", want: "unknown"},
+		"empty":           {platform: "", want: ""},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.platform.ConfigDir()
+			if got != tt.want {
+				t.Errorf("Platform(%q).ConfigDir() = %q, want %q",
+					tt.platform, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParsePlatform(t *testing.T) {
 	tests := map[string]struct {
 		input   string

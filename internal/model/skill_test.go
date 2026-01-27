@@ -123,6 +123,83 @@ func TestSkillAgentSkillsFields(t *testing.T) {
 	}
 }
 
+func TestSkillDisplayScope(t *testing.T) {
+	tests := map[string]struct {
+		skill Skill
+		want  string
+	}{
+		"user scope claude": {
+			skill: Skill{Platform: ClaudeCode, Scope: ScopeUser},
+			want:  "~/.claude",
+		},
+		"user scope cursor": {
+			skill: Skill{Platform: Cursor, Scope: ScopeUser},
+			want:  "~/.cursor",
+		},
+		"user scope codex": {
+			skill: Skill{Platform: Codex, Scope: ScopeUser},
+			want:  "~/.codex",
+		},
+		"repo scope claude": {
+			skill: Skill{Platform: ClaudeCode, Scope: ScopeRepo},
+			want:  ".claude",
+		},
+		"repo scope cursor": {
+			skill: Skill{Platform: Cursor, Scope: ScopeRepo},
+			want:  ".cursor",
+		},
+		"plugin scope with name": {
+			skill: Skill{
+				Platform: ClaudeCode,
+				Scope:    ScopePlugin,
+				Metadata: map[string]string{"plugin": "my-plugin"},
+			},
+			want: "plugin:my-plugin",
+		},
+		"plugin scope without name": {
+			skill: Skill{Platform: ClaudeCode, Scope: ScopePlugin},
+			want:  "plugin",
+		},
+		"plugin scope empty metadata": {
+			skill: Skill{
+				Platform: ClaudeCode,
+				Scope:    ScopePlugin,
+				Metadata: map[string]string{},
+			},
+			want: "plugin",
+		},
+		"system scope": {
+			skill: Skill{Platform: ClaudeCode, Scope: ScopeSystem},
+			want:  "system",
+		},
+		"admin scope": {
+			skill: Skill{Platform: ClaudeCode, Scope: ScopeAdmin},
+			want:  "admin",
+		},
+		"builtin scope": {
+			skill: Skill{Platform: ClaudeCode, Scope: ScopeBuiltin},
+			want:  "builtin",
+		},
+		"empty scope": {
+			skill: Skill{Platform: ClaudeCode, Scope: ""},
+			want:  "-",
+		},
+		"unknown scope": {
+			skill: Skill{Platform: ClaudeCode, Scope: "custom"},
+			want:  "custom",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.skill.DisplayScope()
+			if got != tt.want {
+				t.Errorf("Skill.DisplayScope() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSkillZeroValues(t *testing.T) {
 	// Test that a skill with zero values for new fields works correctly
 	skill := Skill{
