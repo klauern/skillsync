@@ -2110,6 +2110,11 @@ func outputBackupsTable(backups []backup.Metadata) error {
 		return nil
 	}
 
+	// Sort by creation time (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].CreatedAt.After(backups[j].CreatedAt)
+	})
+
 	// Print colored headers
 	fmt.Printf("%s %s %s %s %s\n",
 		ui.Header(fmt.Sprintf("%-28s", "ID")),
