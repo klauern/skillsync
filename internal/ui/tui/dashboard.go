@@ -26,8 +26,10 @@ const (
 	DashboardViewCompare
 	// DashboardViewConfig opens the config management view.
 	DashboardViewConfig
-	// DashboardViewExport opens the import/export view.
+	// DashboardViewExport opens the export view.
 	DashboardViewExport
+	// DashboardViewImport opens the import view.
+	DashboardViewImport
 	// DashboardViewScope opens the scope management view.
 	DashboardViewScope
 	// DashboardViewPromote opens the promote/demote view.
@@ -137,9 +139,14 @@ func defaultMenuItems() []MenuItem {
 			View:        DashboardViewCompare,
 		},
 		{
-			Title:       "Import / Export",
-			Description: "Export skills to file or import from backup",
+			Title:       "Export Skills",
+			Description: "Export skills to file in various formats",
 			View:        DashboardViewExport,
+		},
+		{
+			Title:       "Import Skills",
+			Description: "Import skills from files or directories",
+			View:        DashboardViewImport,
 		},
 		{
 			Title:       "Scope Management",

@@ -2070,6 +2070,11 @@ func runTUI() error {
 				return err
 			}
 
+		case tui.DashboardViewImport:
+			if err := runImportTUI(); err != nil {
+				return err
+			}
+
 		case tui.DashboardViewScope:
 			ui.Warning("Scope management TUI is not yet implemented")
 
@@ -2176,6 +2181,73 @@ func executeExport(result tui.ExportListResult) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "\nExported %d skill(s) as %s\n", len(result.SelectedSkills), result.Format)
+	return nil
+}
+
+// runImportTUI runs the import skills TUI view.
+func runImportTUI() error {
+	result, err := tui.RunImportList()
+	if err != nil {
+		return fmt.Errorf("import TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.ImportActionNone {
+		return nil
+	}
+
+	if result.Action == tui.ImportActionImport {
+		return executeImport(result)
+	}
+
+	return nil
+}
+
+// executeImport performs the actual import based on TUI result.
+func executeImport(result tui.ImportListResult) error {
+	if len(result.SelectedSkills) == 0 {
+		ui.Info("No skills selected for import")
+		return nil
+	}
+
+	// Create synchronizer for the import operation
+	syncer := sync.New()
+	opts := sync.Options{
+		Strategy:    sync.StrategyOverwrite,
+		DryRun:      false,
+		TargetScope: result.TargetScope,
+	}
+
+	// Perform the import (sync from source to target)
+	syncResult, err := syncer.SyncWithSkills(result.SelectedSkills, result.TargetPlatform, opts)
+	if err != nil {
+		return fmt.Errorf("import failed: %w", err)
+	}
+
+	// Report results
+	var imported, skipped, failed int
+	for _, skill := range syncResult.Skills {
+		switch skill.Action {
+		case sync.ActionCreated, sync.ActionUpdated:
+			imported++
+		case sync.ActionSkipped:
+			skipped++
+		case sync.ActionFailed:
+			failed++
+			ui.Error(fmt.Sprintf("Failed to import %s: %s", skill.Skill.Name, skill.Error))
+		}
+	}
+
+	if imported > 0 {
+		ui.Success(fmt.Sprintf("Imported %d skill(s) to %s (%s)", imported, result.TargetPlatform, result.TargetScope))
+	}
+	if skipped > 0 {
+		ui.Info(fmt.Sprintf("Skipped %d skill(s) (already up to date)", skipped))
+	}
+	if failed > 0 {
+		ui.Warning(fmt.Sprintf("%d skill(s) failed to import", failed))
+	}
+
 	return nil
 }
 
