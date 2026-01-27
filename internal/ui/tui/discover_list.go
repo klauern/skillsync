@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -118,6 +119,11 @@ func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 		{Title: "Scope", Width: 15},
 		{Title: "Description", Width: 45},
 	}
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
 
 	rows := skillsToRows(skills)
 
