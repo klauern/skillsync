@@ -237,3 +237,146 @@ type testError struct {
 func (e *testError) Error() string {
 	return e.msg
 }
+
+func TestCount(t *testing.T) {
+	attr := logging.Count(42)
+	if attr.Key != "count" {
+		t.Errorf("expected key 'count', got %q", attr.Key)
+	}
+	if attr.Value.Int64() != 42 {
+		t.Errorf("expected value 42, got %d", attr.Value.Int64())
+	}
+}
+
+func TestNew_NilOutput(t *testing.T) {
+	// When Output is nil, New should default to os.Stderr
+	// We can't easily capture os.Stderr, but we can verify
+	// the logger is created successfully and doesn't panic
+	logger := logging.New(logging.Options{
+		Level:  logging.LevelInfo,
+		Output: nil,
+	})
+
+	if logger == nil {
+		t.Error("expected non-nil logger when Output is nil")
+	}
+}
+
+func TestNew_AddSource(t *testing.T) {
+	var buf bytes.Buffer
+	logger := logging.New(logging.Options{
+		Level:     logging.LevelInfo,
+		Output:    &buf,
+		AddSource: true,
+	})
+
+	logger.Info("test with source")
+
+	output := buf.String()
+	// When AddSource is true, output should contain source location
+	if !strings.Contains(output, "source=") {
+		t.Errorf("expected output to contain source info, got: %s", output)
+	}
+}
+
+func TestPackageLevelLogging(t *testing.T) {
+	var buf bytes.Buffer
+	testLogger := logging.New(logging.Options{
+		Level:  logging.LevelDebug,
+		Output: &buf,
+	})
+	logging.SetDefault(testLogger)
+
+	// Test all package-level logging functions
+	logging.Debug("debug message", "key", "debug-val")
+	logging.Info("info message", "key", "info-val")
+	logging.Warn("warn message", "key", "warn-val")
+	logging.Error("error message", "key", "error-val")
+
+	output := buf.String()
+
+	if !strings.Contains(output, "debug message") {
+		t.Error("expected Debug() to write debug message")
+	}
+	if !strings.Contains(output, "info message") {
+		t.Error("expected Info() to write info message")
+	}
+	if !strings.Contains(output, "warn message") {
+		t.Error("expected Warn() to write warn message")
+	}
+	if !strings.Contains(output, "error message") {
+		t.Error("expected Error() to write error message")
+	}
+}
+
+func TestDefault(t *testing.T) {
+	// Default() returns the default logger (or creates one via sync.Once)
+	// Since other tests may have called SetDefault, we can verify
+	// that Default() returns a non-nil logger
+	logger := logging.Default()
+	if logger == nil {
+		t.Error("expected Default() to return non-nil logger")
+	}
+
+	// Calling Default() multiple times should return the same logger
+	logger2 := logging.Default()
+	if logger != logger2 {
+		t.Error("expected Default() to return same logger on multiple calls")
+	}
+}
+
+func TestWithContext_UsesContextLogger(t *testing.T) {
+	var buf bytes.Buffer
+	contextLogger := logging.New(logging.Options{
+		Level:  logging.LevelInfo,
+		Output: &buf,
+	})
+
+	ctx := logging.NewContext(context.Background(), contextLogger)
+	logger := logging.WithContext(ctx)
+
+	logger.Info("context logger message")
+
+	if !strings.Contains(buf.String(), "context logger message") {
+		t.Error("expected WithContext to use logger from context")
+	}
+}
+
+func TestWithContext_FallsBackToDefault(t *testing.T) {
+	var buf bytes.Buffer
+	defaultLogger := logging.New(logging.Options{
+		Level:  logging.LevelInfo,
+		Output: &buf,
+	})
+	logging.SetDefault(defaultLogger)
+
+	// Empty context without logger
+	ctx := context.Background()
+	logger := logging.WithContext(ctx)
+
+	logger.Info("default fallback message")
+
+	if !strings.Contains(buf.String(), "default fallback message") {
+		t.Error("expected WithContext to fall back to default logger")
+	}
+}
+
+func TestWith_UsesDefaultLogger(t *testing.T) {
+	var buf bytes.Buffer
+	defaultLogger := logging.New(logging.Options{
+		Level:  logging.LevelInfo,
+		Output: &buf,
+	})
+	logging.SetDefault(defaultLogger)
+
+	childLogger := logging.With("test-attr", "test-value")
+	childLogger.Info("with attrs message")
+
+	output := buf.String()
+	if !strings.Contains(output, "with attrs message") {
+		t.Error("expected With() to return working logger")
+	}
+	if !strings.Contains(output, "test-attr=test-value") {
+		t.Error("expected With() to include attributes")
+	}
+}
