@@ -6,11 +6,11 @@ import (
 
 func TestParsePlatformSpec(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
+		name         string
+		input        string
 		wantPlatform Platform
-		wantScopes  []SkillScope
-		wantErr     bool
+		wantScopes   []SkillScope
+		wantErr      bool
 	}{
 		// Valid cases - platform only
 		{

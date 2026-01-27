@@ -20,6 +20,9 @@ import (
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/export"
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser/claude"
+	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/sync"
@@ -553,8 +556,14 @@ func syncCommand() *cli.Command {
 				return err
 			}
 
-			// Always parse source skills
-			cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes)
+			// Always parse source skills (use tiered parser for scope filtering)
+			if cfg.sourceSpec.HasScopes() {
+				// User specified scopes - use tiered parser for scope filtering
+				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes)
+			} else {
+				// No scopes specified - use basic parser (respects env vars for E2E tests)
+				cfg.sourceSkills, err = parsePlatformSkills(cfg.sourceSpec.Platform)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to parse source skills: %w", err)
 			}
@@ -833,9 +842,29 @@ func applyResolvedConflicts(result *sync.Result, resolved map[string]string) err
 	return nil
 }
 
-// parsePlatformSkills parses skills from the given platform
+// parsePlatformSkills parses skills from the given platform using env-var-respecting paths.
+// This is used by the sync command when no specific scopes are requested.
 func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
-	return parsePlatformSkillsWithScope(platform, nil)
+	// Get path from validation which respects env vars
+	basePath, err := validation.GetPlatformPath(platform)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get platform path for %s: %w", platform, err)
+	}
+
+	// Create a direct parser for this path
+	var parser interface{ Parse() ([]model.Skill, error) }
+	switch platform {
+	case model.ClaudeCode:
+		parser = claude.New(basePath)
+	case model.Cursor:
+		parser = cursor.New(basePath)
+	case model.Codex:
+		parser = codex.New(basePath)
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	return parser.Parse()
 }
 
 // parsePlatformSkillsWithScope parses skills from the given platform with optional scope filtering.
