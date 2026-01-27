@@ -1253,3 +1253,49 @@ func TestSyncCommandArguments(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateTargetPath(t *testing.T) {
+	// Create a temp directory for testing
+	tempDir := t.TempDir()
+
+	tests := map[string]struct {
+		setup   func() string
+		wantErr bool
+	}{
+		"existing writable directory": {
+			setup: func() string {
+				dir := filepath.Join(tempDir, "existing")
+				if err := os.MkdirAll(dir, 0o750); err != nil {
+					t.Fatalf("failed to create test dir: %v", err)
+				}
+				return dir
+			},
+			wantErr: false,
+		},
+		"non-existing with writable parent": {
+			setup: func() string {
+				parent := filepath.Join(tempDir, "writable-parent")
+				if err := os.MkdirAll(parent, 0o750); err != nil {
+					t.Fatalf("failed to create test dir: %v", err)
+				}
+				return filepath.Join(parent, "new-dir")
+			},
+			wantErr: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := tt.setup()
+
+			// Set environment variable to override platform path
+			t.Setenv("SKILLSYNC_CURSOR_PATH", path)
+
+			err := validateTargetPath(model.Cursor)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateTargetPath() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -746,8 +747,11 @@ func validateSourceSkills(cfg *syncConfig) error {
 		fmt.Printf("  Found %d valid skill(s)\n", len(cfg.sourceSkills))
 	}
 
-	// Validate paths and permissions
-	if err := validateSyncPaths(cfg.sourcePlatform, cfg.targetPlatform); err != nil {
+	// Validate target path and permissions
+	// Note: Skip source path validation since skills were already successfully parsed
+	// from potentially multiple scopes (project, user, admin, system). The primary
+	// platform path may not exist, but that's fine if other scopes have skills.
+	if err := validateTargetPath(cfg.targetPlatform); err != nil {
 		return err
 	}
 
@@ -925,18 +929,8 @@ func formatValidationError(err error, skills []model.Skill) string {
 	return err.Error()
 }
 
-// validateSyncPaths validates source and target paths before sync
-func validateSyncPaths(sourcePlatform, targetPlatform model.Platform) error {
-	// Validate source path exists
-	sourcePath, err := validation.GetPlatformPath(sourcePlatform)
-	if err != nil {
-		return fmt.Errorf("source path error: %w", err)
-	}
-
-	if err := validation.ValidatePath(sourcePath, sourcePlatform); err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
-	}
-
+// validateTargetPath validates the target path before sync
+func validateTargetPath(targetPlatform model.Platform) error {
 	// Validate target path (or parent if it doesn't exist)
 	targetPath, err := validation.GetPlatformPath(targetPlatform)
 	if err != nil {
@@ -945,9 +939,9 @@ func validateSyncPaths(sourcePlatform, targetPlatform model.Platform) error {
 
 	if err := validation.ValidatePath(targetPath, targetPlatform); err != nil {
 		var vErr *validation.Error
-		if errors.As(err, &vErr) && vErr.Message == "path does not exist" {
+		if errors.As(err, &vErr) && strings.Contains(vErr.Message, "path does not exist") {
 			// Target doesn't exist - validate parent directory is writable
-			parentDir := targetPath[:len(targetPath)-1]
+			parentDir := filepath.Dir(targetPath)
 			if err := validation.ValidatePath(parentDir, targetPlatform); err != nil {
 				return fmt.Errorf("target parent directory validation failed: %w", err)
 			}
