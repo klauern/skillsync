@@ -2079,7 +2079,9 @@ func runTUI() error {
 			ui.Warning("Scope management TUI is not yet implemented")
 
 		case tui.DashboardViewPromote:
-			ui.Warning("Promote/Demote TUI is not yet implemented")
+			if err := runPromoteDemoteTUI(); err != nil {
+				return err
+			}
 
 		case tui.DashboardViewDelete:
 			if err := runDeleteTUI(); err != nil {
@@ -2327,6 +2329,132 @@ func executeDelete(result tui.DeleteListResult) error {
 			ui.Error(fmt.Sprintf("Failed: %s", e))
 		}
 		return fmt.Errorf("some deletions failed")
+	}
+
+	return nil
+}
+
+// runPromoteDemoteTUI runs the promote/demote skills TUI view.
+func runPromoteDemoteTUI() error {
+	// Discover skills from all platforms
+	var allSkills []model.Skill
+	for _, p := range model.AllPlatforms() {
+		skills, err := parsePlatformSkillsWithScope(p, nil)
+		if err != nil {
+			// Log error but continue with other platforms
+			continue
+		}
+		allSkills = append(allSkills, skills...)
+	}
+
+	if len(allSkills) == 0 {
+		ui.Info("No skills found")
+		return nil
+	}
+
+	result, err := tui.RunPromoteDemoteList(allSkills)
+	if err != nil {
+		return fmt.Errorf("promote/demote TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.PromoteDemoteActionNone {
+		return nil
+	}
+
+	return executePromoteDemote(result)
+}
+
+// executePromoteDemote performs the actual promote/demote based on TUI result.
+func executePromoteDemote(result tui.PromoteDemoteListResult) error {
+	if len(result.SelectedSkills) == 0 {
+		ui.Info("No skills selected")
+		return nil
+	}
+
+	isPromotion := result.Action == tui.PromoteDemoteActionPromote
+	operation := "Demote"
+	if isPromotion {
+		operation = "Promote"
+	}
+
+	var processed int
+	var errors []string
+
+	for _, skill := range result.SelectedSkills {
+		// Determine source and target scopes based on operation type
+		var fromScope, toScope model.SkillScope
+		if isPromotion {
+			// Promote: repo -> user
+			if skill.Scope != model.ScopeRepo {
+				continue // Skip skills that can't be promoted
+			}
+			fromScope = model.ScopeRepo
+			toScope = model.ScopeUser
+		} else {
+			// Demote: user -> repo
+			if skill.Scope != model.ScopeUser {
+				continue // Skip skills that can't be demoted
+			}
+			fromScope = model.ScopeUser
+			toScope = model.ScopeRepo
+		}
+
+		// Get target path
+		targetPath, err := getSkillPathForScope(skill.Platform, toScope, skill.Name)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("%s: failed to determine target path: %v", skill.Name, err))
+			continue
+		}
+
+		// Ensure target directory exists
+		// #nosec G301 - skill directories need to be readable by the platform
+		targetDir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(targetDir, 0o750); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: failed to create target directory: %v", skill.Name, err))
+			continue
+		}
+
+		// Read source content
+		// #nosec G304 - skill.Path comes from parsed skill files
+		content, err := os.ReadFile(skill.Path)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("%s: failed to read source: %v", skill.Name, err))
+			continue
+		}
+
+		// Write to target
+		// #nosec G306 - skill files should be readable
+		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: failed to write to target: %v", skill.Name, err))
+			continue
+		}
+
+		// Remove source if requested
+		if result.RemoveSource {
+			if err := os.Remove(skill.Path); err != nil {
+				errors = append(errors, fmt.Sprintf("%s: copied but failed to remove source: %v", skill.Name, err))
+				// Don't continue - the copy was successful
+			}
+		}
+
+		processed++
+		_ = fromScope // Used for clarity in logic above
+	}
+
+	if processed > 0 {
+		modeText := "copied"
+		if result.RemoveSource {
+			modeText = "moved"
+		}
+		ui.Success(fmt.Sprintf("%sd %d skill(s) (%s)", operation, processed, modeText))
+	}
+
+	if len(errors) > 0 {
+		for _, e := range errors {
+			ui.Error(fmt.Sprintf("Failed: %s", e))
+		}
+		return fmt.Errorf("some operations failed")
 	}
 
 	return nil
