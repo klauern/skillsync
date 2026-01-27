@@ -2061,7 +2061,7 @@ func runTUI() error {
 			}
 
 		case tui.DashboardViewCompare:
-			if err := runDedupeTUI(); err != nil {
+			if err := runCompareTUI(); err != nil {
 				return err
 			}
 
@@ -2443,8 +2443,8 @@ func runConflictsTUI() error {
 	return nil
 }
 
-// runDedupeTUI runs the dedupe/compare TUI view.
-func runDedupeTUI() error {
+// runCompareTUI runs the compare skills TUI view with side-by-side comparison.
+func runCompareTUI() error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
@@ -2468,29 +2468,28 @@ func runDedupeTUI() error {
 	}
 
 	// Find similar skills using default thresholds
-	duplicates, err := findDuplicatesForTUI(allSkills, appConfig)
+	comparisons, err := findDuplicatesForTUI(allSkills, appConfig)
 	if err != nil {
-		return fmt.Errorf("failed to find duplicates: %w", err)
+		return fmt.Errorf("failed to find similar skills: %w", err)
 	}
 
-	if len(duplicates) == 0 {
-		ui.Info("No duplicate or similar skills found")
+	if len(comparisons) == 0 {
+		ui.Info("No similar skills found to compare")
 		return nil
 	}
 
-	result, err := tui.RunDedupeList(duplicates)
+	result, err := tui.RunCompareList(comparisons)
 	if err != nil {
-		return fmt.Errorf("dedupe TUI error: %w", err)
+		return fmt.Errorf("compare TUI error: %w", err)
 	}
 
 	// Handle the result
-	if result.Action == tui.DedupeActionNone {
+	if result.Action == tui.CompareActionNone {
 		return nil
 	}
 
-	if result.Action == tui.DedupeActionDelete {
-		return executeDedupe(result)
-	}
+	// For CompareActionView, the TUI already displayed the comparison
+	// No additional action needed
 
 	return nil
 }
@@ -2569,52 +2568,6 @@ func makeDupePairKey(s1, s2 model.Skill) string {
 		return key1 + "|" + key2
 	}
 	return key2 + "|" + key1
-}
-
-// executeDedupe performs the actual deletion based on dedupe TUI result.
-func executeDedupe(result tui.DedupeListResult) error {
-	if len(result.SelectedSkills) == 0 {
-		ui.Info("No skills selected for deletion")
-		return nil
-	}
-
-	// Delete each selected skill
-	var deleted int
-	var errors []string
-	for _, skill := range result.SelectedSkills {
-		// Verify the skill is in a writable scope
-		if skill.Scope != model.ScopeRepo && skill.Scope != model.ScopeUser {
-			errors = append(errors, fmt.Sprintf("%s: scope %q is not writable", skill.Name, skill.Scope))
-			continue
-		}
-
-		// Delete the skill file
-		if err := os.Remove(skill.Path); err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", skill.Name, err))
-			continue
-		}
-
-		// Try to remove the parent directory if it's empty (for directory-based skills)
-		if strings.HasSuffix(skill.Path, "/SKILL.md") {
-			parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
-			_ = os.Remove(parentDir) // Ignore error - directory may not be empty
-		}
-
-		deleted++
-	}
-
-	if deleted > 0 {
-		ui.Success(fmt.Sprintf("Deleted %d duplicate skill(s)", deleted))
-	}
-
-	if len(errors) > 0 {
-		for _, e := range errors {
-			ui.Error(fmt.Sprintf("Failed: %s", e))
-		}
-		return fmt.Errorf("some deletions failed")
-	}
-
-	return nil
 }
 
 // runPromoteDemoteTUI runs the promote/demote skills TUI view.
