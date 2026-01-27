@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -169,6 +170,15 @@ func NewConfigListModel(cfg *config.Config) ConfigListModel {
 	}
 
 	m.items = m.buildConfigItems()
+
+	// Sort items alphabetically by section, then by key within section (case-insensitive)
+	sort.Slice(m.items, func(i, j int) bool {
+		if !strings.EqualFold(m.items[i].Section, m.items[j].Section) {
+			return strings.ToLower(m.items[i].Section) < strings.ToLower(m.items[j].Section)
+		}
+		return strings.ToLower(m.items[i].Key) < strings.ToLower(m.items[j].Key)
+	})
+
 	m.filtered = m.items
 	rows := m.itemsToRows(m.items)
 
