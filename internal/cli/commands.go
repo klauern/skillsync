@@ -27,6 +27,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/ui"
+	"github.com/klauern/skillsync/internal/ui/tui"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -1195,6 +1196,7 @@ func backupListCommand() *cli.Command {
 		Aliases: []string{"ls"},
 		Usage:   "List existing backups with metadata",
 		UsageText: `skillsync backup list [options]
+   skillsync backup list --interactive       # Interactive TUI mode
    skillsync backup list --platform claude-code
    skillsync backup list --format json
    skillsync backup list --limit 10`,
@@ -1202,8 +1204,15 @@ func backupListCommand() *cli.Command {
 
    Output includes: ID, Platform, Source File, Created At, Size
 
-   Formats: table (default), json, yaml`,
+   Formats: table (default), json, yaml
+
+   Use --interactive (-i) for a TUI with keyboard navigation and actions.`,
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "interactive",
+				Aliases: []string{"i"},
+				Usage:   "Interactive TUI mode with keyboard navigation",
+			},
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
@@ -1226,6 +1235,11 @@ func backupListCommand() *cli.Command {
 			platform := cmd.String("platform")
 			format := cmd.String("format")
 			limit := cmd.Int("limit")
+			interactive := cmd.Bool("interactive")
+
+			if interactive {
+				return listBackupsInteractive(platform)
+			}
 			return listBackups(platform, format, int(limit))
 		},
 	}
@@ -1286,6 +1300,42 @@ func listBackups(platform, format string, limit int) error {
 	}
 
 	return outputBackups(backups, format)
+}
+
+// listBackupsInteractive runs the interactive TUI for backup management
+func listBackupsInteractive(platform string) error {
+	backups, err := backup.ListBackups(platform)
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	if len(backups) == 0 {
+		fmt.Println("No backups found.")
+		return nil
+	}
+
+	result, err := tui.RunBackupList(backups)
+	if err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	// Handle the selected action
+	switch result.Action {
+	case tui.ActionRestore:
+		fmt.Printf("\nRestoring backup: %s\n", result.BackupID)
+		return restoreBackup(result.BackupID, "", false)
+	case tui.ActionDelete:
+		fmt.Printf("\nDeleting backup: %s\n", result.BackupID)
+		return deleteBackupsByID([]string{result.BackupID}, true) // force=true since already confirmed in TUI
+	case tui.ActionVerify:
+		fmt.Printf("\nVerifying backup: %s\n", result.BackupID)
+		return verifyBackupsByID([]string{result.BackupID})
+	case tui.ActionNone:
+		// User quit without action
+		return nil
+	}
+
+	return nil
 }
 
 // restoreBackup restores a backup to the original or specified target path
