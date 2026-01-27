@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -196,6 +197,11 @@ func formatConflictContentWithLineNumbers(content string, style lipgloss.Style) 
 // NewConflictListModel creates a new conflict resolution model.
 func NewConflictListModel(conflicts []*sync.Conflict) ConflictListModel {
 	resolutions := make(map[string]sync.ResolutionChoice)
+
+	// Sort conflicts alphabetically by skill name (case-insensitive)
+	sort.Slice(conflicts, func(i, j int) bool {
+		return strings.ToLower(conflicts[i].SkillName) < strings.ToLower(conflicts[j].SkillName)
+	})
 
 	// Build table columns
 	columns := []table.Column{
