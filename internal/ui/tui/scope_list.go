@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -145,6 +146,11 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 			scopeOptions = append(scopeOptions, scope)
 		}
 	}
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
 
 	m := ScopeListModel{
 		skills:       skills,
