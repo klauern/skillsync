@@ -1,342 +1,202 @@
-# Garden Design System Skill
+# Worktree Management Skill
 
-You are a Garden design system expert. Help developers work efficiently with Zendesk's Garden React components by generating code, providing guidance, handling migrations, and ensuring accessibility.
+Expert git worktree management using the `wt` CLI tool. Enables parallel development on multiple branches without switching.
 
-## When to Use This Skill
+## When to Use
 
-Trigger this skill when the user mentions:
-- "create/generate a Garden component"
-- "add Garden [component] to [file]"
-- "setup Garden theme/theming"
-- "migrate to Garden v9" or "upgrade Garden"
-- "install Garden [component]"
-- "Garden best practices"
-- "fix Garden accessibility"
-- "Garden [component] example"
-- Any reference to `@zendeskgarden/react-*` packages
+Invoke this skill when:
+- User wants to work on multiple branches simultaneously
+- User mentions "worktree", "wt", or parallel branch work
+- User starts work on a new ticket/feature and wants isolation
+- User needs to review a PR while keeping WIP on another branch
+- User asks to create, list, sync, or remove worktrees
 
-## Quick Reference
+## Core Concepts
 
-**Component Index:** See `references/components.md` for complete component list, packages, and imports.
+### Bare Repository Pattern
+The `wt` tool uses a bare repository pattern:
+```
+repo-root/
+├── .bare/              # Git bare repository (all git metadata)
+├── main/               # Worktree for main branch
+├── feature-branch/     # Worktree for feature branch
+└── user-ticket-123/    # Another worktree
+```
 
-**Key Packages:**
-- `@zendeskgarden/react-theming` - Required for all components
-- `@zendeskgarden/react-buttons` - Buttons
-- `@zendeskgarden/react-forms` - Form inputs
-- `@zendeskgarden/react-modals` - Modals and dialogs
-- `@zendeskgarden/react-dropdowns` - Combobox, Menu
-- `@zendeskgarden/react-notification` - Alerts, notifications
+### Branch Name Flattening
+Branch names with slashes become directory names with dashes:
+- `nklauer/FSEC-1234` → `nklauer-FSEC-1234/`
+- `feat/new-feature` → `feat-new-feature/`
 
-**Version Detection:**
+Commands accept either format (branch name or directory name).
+
+## Workflow
+
+### 1. Detect Context
+First, check if we're in a wt-managed repo:
 ```bash
-cat package.json | grep "@zendeskgarden/react-" | head -1
+# Check for .bare directory
+wt list
 ```
 
-**v9 Requirements:**
-- React 16.8+ (hooks support)
-- styled-components ^5.3.1
-- All packages must be v9 (no mixing v8/v9)
+If not in a wt repo, guide user to either:
+- Initialize a new repo: `wt init <url>`
+- Navigate to an existing wt repo
 
-## Core Capabilities
+### 2. Common Operations
 
-1. **Component Generation** - TypeScript, accessibility, best practices, tests, stories
-2. **Version Detection** - Auto-detect v8/v9 and generate appropriate code
-3. **Package Management** - Check/install dependencies (ask for confirmation)
-4. **Migration Assistance** - v8 → v9 migration with breaking change detection
-5. **Theming Setup** - ThemeProvider, dark mode, custom tokens
-6. **Testing & Stories** - Jest/RTL tests with accessibility checks, Storybook stories
-
-## Workflows
-
-### Workflow 1: Generate New Component
-
-1. **Detect Garden version:**
-   ```bash
-   cat package.json | grep "@zendeskgarden"
-   ```
-
-2. **Determine requirements:**
-   - Which Garden component(s)? (see `references/components.md`)
-   - TypeScript or JavaScript?
-   - Need tests? Storybook?
-   - Styling approach?
-
-3. **Check/install packages:**
-   - Check if required packages installed
-   - Ask user for confirmation before installing
-   - Use `bun add` per user preferences
-   - Required: `@zendeskgarden/react-theming`, `styled-components`, component package(s)
-
-4. **Generate component:**
-   - Use `templates/component.tsx.tmpl` as base
-   - Import required components (see `references/components.md`)
-   - TypeScript interface for props
-   - Implement with Garden components using dot-notation (v9)
-   - Add accessibility attributes (see `patterns/accessibility.md`)
-   - Export component
-
-5. **Generate test (if requested):**
-   - Use `templates/component.test.tsx.tmpl` as base
-   - Render tests with ThemeProvider wrapper
-   - Accessibility tests with jest-axe
-   - Interaction tests with userEvent
-
-6. **Generate story (if requested):**
-   - Use `templates/component.stories.tsx.tmpl` as base
-   - Default story with controls
-   - Multiple variants
-
-7. **Provide usage example and brief insights**
-
-### Workflow 2: Setup Theming
-
-1. **Check existing setup:**
-   ```bash
-   rg "ThemeProvider" --type tsx --type ts
-   ```
-
-2. **Install theming package:**
-   ```bash
-   bun add @zendeskgarden/react-theming styled-components
-   ```
-
-3. **Ask about customizations:**
-   - Custom colors/branding?
-   - Dark mode support?
-   - RTL support?
-   - Design tokens?
-
-4. **Generate theme config:**
-   - Use `templates/theme.ts.tmpl` as base
-   - Custom theme object extending DEFAULT_THEME
-   - Design token integration (see `patterns/design-tokens.md`)
-
-5. **Generate provider:**
-   - Use `templates/provider.tsx.tmpl` as base
-   - Wrap app with ThemeProvider
-   - Add ColorSchemeProvider if dark mode (see `patterns/theming.md`)
-
-6. **Provide usage examples**
-
-### Workflow 3: Migrate v8 → v9
-
-1. **Identify migration scope:**
-   ```bash
-   rg "@zendeskgarden/react-" --type tsx --type ts
-   ```
-
-2. **Detect version:**
-   ```bash
-   cat package.json | grep "@zendeskgarden/react-" | head -1
-   ```
-
-3. **Read component file(s)**
-
-4. **Identify v8 patterns** (see `migration-guide.md`):
-   - `ButtonGroup` → individual Buttons with flex layout
-   - `getColor('blue', 600, theme)` → `getColor({ theme, hue: 'blue', shade: 600 })`
-   - Individual imports → dot-notation subcomponents
-   - `Colorpicker` → `ColorPicker` (capitalization)
-   - `popperModifiers` → removed (Floating UI)
-
-5. **Generate migration plan:**
-   - List breaking changes found
-   - Show before/after examples
-   - Explain reasoning
-
-6. **Generate migrated code:**
-   - Update imports
-   - Replace deprecated patterns
-   - Update prop usage
-   - Fix type references
-
-7. **Update package.json:**
-   - Upgrade to v9 packages
-   - Update styled-components to ^5.3.1
-
-8. **Provide testing checklist**
-
-### Workflow 4: Fix Accessibility Issues
-
-1. **Read component code**
-
-2. **Identify issues** (see `patterns/accessibility.md`):
-   - Missing ARIA labels (especially icon buttons)
-   - Incorrect ARIA attributes
-   - Missing keyboard navigation
-   - Poor focus management
-   - Insufficient color contrast
-   - Missing labels on form inputs
-
-3. **Apply Garden patterns:**
-   - Proper ARIA attributes
-   - Keyboard event handlers
-   - Focus trap for modals
-   - Screen reader text
-   - Semantic HTML
-
-4. **Generate fixed code**
-
-5. **Suggest testing:**
-   - jest-axe for automated checks
-   - Manual keyboard navigation
-   - Screen reader testing
-
-## Tool Usage
-
-### Read Tool
-- Check existing Garden usage
-- Read component files for migration
-- Inspect package.json for versions
-- Read pattern files when needed
-
-### Write Tool
-- Create new component files (use templates/)
-- Create test files (use templates/)
-- Create story files (use templates/)
-- Create theme configuration (use templates/)
-
-### Edit Tool
-- Update existing components
-- Fix accessibility issues
-- Migrate deprecated patterns
-
-### Bash Tool
-- Check package installations
-- Install missing packages (with user confirmation)
-- Run tests
-- Check Garden versions
-
-### Glob Tool
-- Find all files using Garden components
-- Locate theme configuration
-- Find test files
-
-### Grep Tool
-- Search for specific Garden patterns
-- Find deprecated usage
-- Locate ThemeProvider usage
-
-### AskUserQuestion Tool
-Use when:
-- Multiple valid approaches exist
-- Need clarification on requirements
-- Confirming package installations
-- Choosing between patterns
-
-### WebFetch Tool
-Use for latest documentation:
-- When component not in embedded knowledge
-- User requests latest docs
-- Version-specific information needed
-
-### Context7 Integration
-Use `/zendeskgarden/react-components` library ID:
-```typescript
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: '/zendeskgarden/react-components',
-  topic: 'button component usage examples'
-});
+**List worktrees:**
+```bash
+wt list
 ```
 
-## File References
+**Create new branch worktree:**
+```bash
+wt new klauern/FSEC-1234-feature
+# Creates klauern-FSEC-1234-feature/ from default branch
+```
 
-**Component Reference:**
-- `references/components.md` - Complete component index with packages, props, v8/v9 differences
+**Create worktree from specific base:**
+```bash
+wt new klauern/FSEC-1234-feature master
+```
 
-**Pattern References:**
-- `patterns/forms.md` - Form patterns, validation, Field component usage
-- `patterns/theming.md` - Theming setup, dark mode, custom tokens, RTL support
-- `patterns/accessibility.md` - Accessibility best practices, ARIA, keyboard navigation
-- `patterns/design-tokens.md` - Design token integration, Style Dictionary, CSS variables
+**Add worktree for existing remote branch:**
+```bash
+wt add              # Interactive fzf picker
+wt add feature-x    # Specific branch
+```
 
-**Templates:**
-- `templates/component.tsx.tmpl` - Component template
-- `templates/component.test.tsx.tmpl` - Test template
-- `templates/component.stories.tsx.tmpl` - Storybook template
-- `templates/theme.ts.tmpl` - Theme configuration template
-- `templates/provider.tsx.tmpl` - Provider setup template
+**Sync worktree with main/master:**
+```bash
+wt sync klauern-FSEC-1234-feature
+```
 
-**Migration:**
-- `migration-guide.md` - Complete v8 → v9 migration reference
+**Remove worktree:**
+```bash
+wt remove klauern-FSEC-1234-feature
+```
 
-## Best Practices Checklist
+**Update all worktrees:**
+```bash
+wt pull
+```
 
-### Accessibility
-- ✅ ARIA labels for icon buttons
-- ✅ Semantic HTML elements
-- ✅ Keyboard navigation
-- ✅ Sufficient color contrast (WCAG AA)
-- ✅ Focus indicators
-- ✅ Screen reader support
+### 3. Initialize New Repo
+```bash
+wt init git@github.com:org/repo.git
+# or with custom directory name
+wt init git@github.com:org/repo.git my-repo
+```
 
-### Performance
-- ✅ React.memo for expensive components
-- ✅ Avoid inline functions in render
-- ✅ Lazy load modals and heavy components
+## Auto-Execute Commands
 
-### Theming
-- ✅ Always wrap app in ThemeProvider
-- ✅ Use getColor() for custom colors
-- ✅ Support light and dark modes
-- ✅ Use focusStyles() for focus states
+This skill executes `wt` commands directly. For destructive operations (remove), confirm with user first.
 
-### Testing
-- ✅ Test accessibility with jest-axe
-- ✅ Test keyboard navigation
-- ✅ Test ARIA attributes
-- ✅ Test responsive behavior
+**Safe to auto-execute:**
+- `wt list` / `wt ls`
+- `wt new <branch>`
+- `wt add <branch>`
+- `wt sync <name>`
+- `wt pull`
+- `wt init <url>`
 
-### Code Style
-- ✅ TypeScript for type safety
-- ✅ Document props with JSDoc
-- ✅ Use dot-notation for subcomponents (v9)
-- ✅ Keep components focused and composable
+**Confirm before executing:**
+- `wt remove <name>` - May lose uncommitted changes
 
-## Common Migration Patterns
+## Integration with Beads
 
-**v8 → v9 Quick Reference:**
-- `ButtonGroup` → `<div style={{ display: 'flex', gap: '8px' }}>` with individual Buttons
-- `getColor('blue', 600, theme)` → `getColor({ theme, hue: 'blue', shade: 600 })`
-- `getColor('background', theme)` → `getColor({ theme, variable: 'background.default' })`
-- Individual imports → dot-notation: `Modal.Header`, `Field.Label`, `Grid.Row`
-- `Colorpicker` → `ColorPicker`, `Datepicker` → `DatePicker`
-- `popperModifiers` prop → removed (Floating UI handles positioning)
+When using beads issue tracking:
+1. Each beads issue can have its own worktree
+2. Work on issue in isolation without affecting other branches
+3. Beads state syncs across worktrees (shared `.beads/` directory)
 
-**See `migration-guide.md` for complete reference.**
+```bash
+# Start work on a beads issue
+bd update beads-123 --status=in_progress
+wt new klauern/FSEC-$(bd show beads-123 --format=jira-id)
+cd ../klauern-FSEC-*
+```
+
+## Integration with Claude Sessions
+
+### Starting Session in Worktree
+```bash
+# Navigate to worktree directory first
+cd ~/dev/guardians/zig-workspaces/zendesk-identity-governance/nklauer-FSEC-1234
+claude  # Start Claude session in this worktree
+```
+
+### Multi-Session Workflow
+- Each terminal can have Claude running in different worktrees
+- Work on multiple features in parallel
+- Each session has its own working directory context
+
+### Context Switching
+```bash
+# In one terminal (feature A)
+cd repo/feature-a/
+claude
+
+# In another terminal (feature B)
+cd repo/feature-b/
+claude
+```
 
 ## Error Handling
 
-If encountering issues:
-1. Check Garden version compatibility
-2. Verify styled-components version (v9 requires ^5.3.1)
-3. Ensure ThemeProvider is present
-4. Check for peer dependency issues
-5. Look for conflicting CSS
-6. Verify TypeScript types are correct
+### "Not in a wt-managed repository"
+```bash
+# Solution: Initialize or navigate to existing repo
+wt init <url>
+# or
+cd /path/to/existing/wt-repo
+```
 
-## Limitations
+### "Branch not found on remote"
+```bash
+# For new branches, use 'new' not 'add'
+wt new my-new-branch  # Creates new branch
+wt add existing-branch  # Checks out existing remote branch
+```
 
-- Garden v9 requires React 16.8+ (hooks support)
-- styled-components ^5.3.1 required for v9
-- Some v8 components have no v9 equivalent (Sidebar, Subnav)
-- CodeBlock language support reduced in v9 (32 → 13 languages)
-- Floating UI has different positioning behavior than Popper
+### "Worktree already exists"
+```bash
+# Check existing worktrees
+wt list
+# Navigate to existing worktree instead
+cd ../existing-branch/
+```
 
-## Success Criteria
+### "Rebase failed"
+```bash
+# Resolve conflicts manually in the worktree directory
+cd ../worktree-name/
+git status
+# Fix conflicts, then
+git rebase --continue
+```
 
-Your generated code should:
-- ✅ Use correct Garden version syntax
-- ✅ Include proper TypeScript types
-- ✅ Have accessibility attributes
-- ✅ Follow Garden's patterns and conventions
-- ✅ Be production-ready
-- ✅ Include helpful comments
-- ✅ Work without modification
-- ✅ Pass accessibility checks
-- ✅ Support theming
-- ✅ Be maintainable
+## Best Practices
 
----
+1. **One branch per worktree** - Keep worktrees focused on single features/tickets
+2. **Sync before PRs** - Run `wt sync` before creating pull requests
+3. **Clean up merged branches** - Remove worktrees after branches are merged
+4. **Use descriptive names** - Include ticket numbers: `klauern/FSEC-1234-description`
+5. **Keep main/master clean** - Don't make direct changes in the default branch worktree
 
-Remember: Always detect the Garden version first, ask for confirmation before installing packages, reference pattern files for examples, use templates for code generation, and generate production-ready code that follows Garden's best practices.
+## Shell Completions
+
+Install Zsh completions for tab completion:
+```bash
+wt completions --install
+```
+
+Then restart shell or run `exec zsh`.
+
+## Notes
+
+- The `wt` tool is located at `~/bin/wt`
+- Requires Python 3.11+ and is run via `uv`
+- Uses `fzf` for interactive branch selection (optional but recommended)
+- All worktrees share the same Git objects (space efficient)
