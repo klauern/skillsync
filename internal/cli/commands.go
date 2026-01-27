@@ -2075,6 +2075,11 @@ func runTUI() error {
 
 		case tui.DashboardViewPromote:
 			ui.Warning("Promote/Demote TUI is not yet implemented")
+
+		case tui.DashboardViewDelete:
+			if err := runDeleteTUI(); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -2171,5 +2176,86 @@ func executeExport(result tui.ExportListResult) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "\nExported %d skill(s) as %s\n", len(result.SelectedSkills), result.Format)
+	return nil
+}
+
+// runDeleteTUI runs the delete skills TUI view.
+func runDeleteTUI() error {
+	// Discover skills from all platforms
+	var allSkills []model.Skill
+	for _, p := range model.AllPlatforms() {
+		skills, err := parsePlatformSkillsWithScope(p, nil)
+		if err != nil {
+			// Log error but continue with other platforms
+			continue
+		}
+		allSkills = append(allSkills, skills...)
+	}
+
+	if len(allSkills) == 0 {
+		ui.Info("No skills found")
+		return nil
+	}
+
+	result, err := tui.RunDeleteList(allSkills)
+	if err != nil {
+		return fmt.Errorf("delete TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.DeleteActionNone {
+		return nil
+	}
+
+	if result.Action == tui.DeleteActionDelete {
+		return executeDelete(result)
+	}
+
+	return nil
+}
+
+// executeDelete performs the actual deletion based on TUI result.
+func executeDelete(result tui.DeleteListResult) error {
+	if len(result.SelectedSkills) == 0 {
+		ui.Info("No skills selected for deletion")
+		return nil
+	}
+
+	// Delete each selected skill
+	var deleted int
+	var errors []string
+	for _, skill := range result.SelectedSkills {
+		// Verify the skill is in a writable scope
+		if skill.Scope != model.ScopeRepo && skill.Scope != model.ScopeUser {
+			errors = append(errors, fmt.Sprintf("%s: scope %q is not writable", skill.Name, skill.Scope))
+			continue
+		}
+
+		// Delete the skill file
+		if err := os.Remove(skill.Path); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", skill.Name, err))
+			continue
+		}
+
+		// Try to remove the parent directory if it's empty (for directory-based skills)
+		if strings.HasSuffix(skill.Path, "/SKILL.md") {
+			parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
+			_ = os.Remove(parentDir) // Ignore error - directory may not be empty
+		}
+
+		deleted++
+	}
+
+	if deleted > 0 {
+		ui.Success(fmt.Sprintf("Deleted %d skill(s)", deleted))
+	}
+
+	if len(errors) > 0 {
+		for _, e := range errors {
+			ui.Error(fmt.Sprintf("Failed: %s", e))
+		}
+		return fmt.Errorf("some deletions failed")
+	}
+
 	return nil
 }

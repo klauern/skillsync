@@ -32,6 +32,8 @@ const (
 	DashboardViewScope
 	// DashboardViewPromote opens the promote/demote view.
 	DashboardViewPromote
+	// DashboardViewDelete opens the delete/remove skills view.
+	DashboardViewDelete
 )
 
 // DashboardResult contains the result of the dashboard TUI interaction.
@@ -153,6 +155,11 @@ func defaultMenuItems() []MenuItem {
 			Title:       "Configuration",
 			Description: "View and edit skillsync settings",
 			View:        DashboardViewConfig,
+		},
+		{
+			Title:       "Delete Skills",
+			Description: "Remove skills from repo or user scopes",
+			View:        DashboardViewDelete,
 		},
 	}
 }
