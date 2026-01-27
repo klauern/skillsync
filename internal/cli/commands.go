@@ -25,6 +25,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
+	"github.com/klauern/skillsync/internal/similarity"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/ui/tui"
@@ -2060,7 +2061,9 @@ func runTUI() error {
 			}
 
 		case tui.DashboardViewCompare:
-			ui.Warning("Compare/Dedupe TUI is not yet implemented")
+			if err := runDedupeTUI(); err != nil {
+				return err
+			}
 
 		case tui.DashboardViewConfig:
 			ui.Warning("Config TUI is not yet implemented")
@@ -2322,6 +2325,180 @@ func executeDelete(result tui.DeleteListResult) error {
 
 	if deleted > 0 {
 		ui.Success(fmt.Sprintf("Deleted %d skill(s)", deleted))
+	}
+
+	if len(errors) > 0 {
+		for _, e := range errors {
+			ui.Error(fmt.Sprintf("Failed: %s", e))
+		}
+		return fmt.Errorf("some deletions failed")
+	}
+
+	return nil
+}
+
+// runDedupeTUI runs the dedupe/compare TUI view.
+func runDedupeTUI() error {
+	// Discover skills from all platforms
+	var allSkills []model.Skill
+	for _, p := range model.AllPlatforms() {
+		skills, err := parsePlatformSkillsWithScope(p, nil)
+		if err != nil {
+			// Log error but continue with other platforms
+			continue
+		}
+		allSkills = append(allSkills, skills...)
+	}
+
+	if len(allSkills) < 2 {
+		ui.Info("Not enough skills to compare (need at least 2)")
+		return nil
+	}
+
+	// Load config for thresholds
+	appConfig, err := config.Load()
+	if err != nil {
+		appConfig = config.Default()
+	}
+
+	// Find similar skills using default thresholds
+	duplicates, err := findDuplicatesForTUI(allSkills, appConfig)
+	if err != nil {
+		return fmt.Errorf("failed to find duplicates: %w", err)
+	}
+
+	if len(duplicates) == 0 {
+		ui.Info("No duplicate or similar skills found")
+		return nil
+	}
+
+	result, err := tui.RunDedupeList(duplicates)
+	if err != nil {
+		return fmt.Errorf("dedupe TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.DedupeActionNone {
+		return nil
+	}
+
+	if result.Action == tui.DedupeActionDelete {
+		return executeDedupe(result)
+	}
+
+	return nil
+}
+
+// findDuplicatesForTUI finds duplicate skill pairs using similarity matching.
+func findDuplicatesForTUI(skills []model.Skill, cfg *config.Config) ([]*similarity.ComparisonResult, error) {
+	var results []*similarity.ComparisonResult
+	comparedPairs := make(map[string]bool)
+
+	// Name similarity matching
+	nameConfig := similarity.NameMatcherConfig{
+		Threshold: cfg.Similarity.NameThreshold,
+		Algorithm: cfg.Similarity.Algorithm,
+		Normalize: true,
+	}
+	nameMatcher := similarity.NewNameMatcher(nameConfig)
+	nameMatches := nameMatcher.FindSimilar(skills)
+
+	for _, match := range nameMatches {
+		pairKey := makeDupePairKey(match.Skill1, match.Skill2)
+		if comparedPairs[pairKey] {
+			continue
+		}
+		comparedPairs[pairKey] = true
+
+		// Compute content score
+		contentConfig := similarity.ContentMatcherConfig{
+			Threshold: 0, // Don't filter, we want the score
+			Algorithm: cfg.Similarity.Algorithm,
+			LineMode:  true,
+		}
+		contentMatcher := similarity.NewContentMatcher(contentConfig)
+		contentScore := contentMatcher.Compare(match.Skill1.Content, match.Skill2.Content)
+
+		result := similarity.ComputeDiff(match.Skill1, match.Skill2, match.Score, contentScore)
+		results = append(results, result)
+	}
+
+	// Content similarity matching
+	contentConfig := similarity.ContentMatcherConfig{
+		Threshold: cfg.Similarity.ContentThreshold,
+		Algorithm: cfg.Similarity.Algorithm,
+		LineMode:  true,
+	}
+	contentMatcher := similarity.NewContentMatcher(contentConfig)
+	contentMatches := contentMatcher.FindSimilar(skills)
+
+	for _, match := range contentMatches {
+		pairKey := makeDupePairKey(match.Skill1, match.Skill2)
+		if comparedPairs[pairKey] {
+			continue
+		}
+		comparedPairs[pairKey] = true
+
+		// Compute name score
+		nameConfig := similarity.NameMatcherConfig{
+			Threshold: 0, // Don't filter, we want the score
+			Algorithm: cfg.Similarity.Algorithm,
+			Normalize: true,
+		}
+		nameMatcher := similarity.NewNameMatcher(nameConfig)
+		nameScore := nameMatcher.Compare(match.Skill1.Name, match.Skill2.Name)
+
+		result := similarity.ComputeDiff(match.Skill1, match.Skill2, nameScore, match.Score)
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// makeDupePairKey creates a consistent key for a skill pair regardless of order.
+func makeDupePairKey(s1, s2 model.Skill) string {
+	key1 := fmt.Sprintf("%s:%s:%s", s1.Platform, s1.Scope, s1.Name)
+	key2 := fmt.Sprintf("%s:%s:%s", s2.Platform, s2.Scope, s2.Name)
+	if key1 < key2 {
+		return key1 + "|" + key2
+	}
+	return key2 + "|" + key1
+}
+
+// executeDedupe performs the actual deletion based on dedupe TUI result.
+func executeDedupe(result tui.DedupeListResult) error {
+	if len(result.SelectedSkills) == 0 {
+		ui.Info("No skills selected for deletion")
+		return nil
+	}
+
+	// Delete each selected skill
+	var deleted int
+	var errors []string
+	for _, skill := range result.SelectedSkills {
+		// Verify the skill is in a writable scope
+		if skill.Scope != model.ScopeRepo && skill.Scope != model.ScopeUser {
+			errors = append(errors, fmt.Sprintf("%s: scope %q is not writable", skill.Name, skill.Scope))
+			continue
+		}
+
+		// Delete the skill file
+		if err := os.Remove(skill.Path); err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", skill.Name, err))
+			continue
+		}
+
+		// Try to remove the parent directory if it's empty (for directory-based skills)
+		if strings.HasSuffix(skill.Path, "/SKILL.md") {
+			parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
+			_ = os.Remove(parentDir) // Ignore error - directory may not be empty
+		}
+
+		deleted++
+	}
+
+	if deleted > 0 {
+		ui.Success(fmt.Sprintf("Deleted %d duplicate skill(s)", deleted))
 	}
 
 	if len(errors) > 0 {
