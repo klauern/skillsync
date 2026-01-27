@@ -1203,25 +1203,29 @@ func TestSyncCommandArguments(t *testing.T) {
 			args:    []string{"skillsync", "sync", "--strategy", "invalid", "cursor", "codex"},
 			wantErr: true,
 		},
-		"invalid source scope": {
-			args:    []string{"skillsync", "sync", "--source-scope", "invalid", "cursor", "codex"},
+		"invalid source scope in spec": {
+			args:    []string{"skillsync", "sync", "cursor:invalid", "codex"},
 			wantErr: true,
 		},
-		"invalid target scope": {
-			args:    []string{"skillsync", "sync", "--target-scope", "admin", "cursor", "codex"},
+		"invalid target scope in spec": {
+			args:    []string{"skillsync", "sync", "cursor", "codex:admin"},
 			wantErr: true,
 		},
-		"valid source scope": {
-			args:    []string{"skillsync", "sync", "--source-scope", "user", "--skip-validation", "--yes", "cursor", "codex"},
+		"valid source scope in spec": {
+			args:    []string{"skillsync", "sync", "--skip-validation", "--yes", "cursor:user", "codex"},
 			wantErr: false,
 		},
-		"valid target scope user": {
-			args:    []string{"skillsync", "sync", "--target-scope", "user", "--skip-validation", "--yes", "cursor", "codex"},
+		"valid target scope user in spec": {
+			args:    []string{"skillsync", "sync", "--skip-validation", "--yes", "cursor", "codex:user"},
 			wantErr: false,
 		},
-		"valid multiple source scopes": {
-			args:    []string{"skillsync", "sync", "--source-scope", "user,repo", "--skip-validation", "--yes", "cursor", "codex"},
+		"valid multiple source scopes in spec": {
+			args:    []string{"skillsync", "sync", "--skip-validation", "--yes", "cursor:user,repo", "codex"},
 			wantErr: false,
+		},
+		"invalid multiple target scopes": {
+			args:    []string{"skillsync", "sync", "cursor", "codex:user,repo"},
+			wantErr: true,
 		},
 	}
 

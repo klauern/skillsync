@@ -499,6 +499,14 @@ func syncCommand() *cli.Command {
 
    Supported platforms: claudecode, cursor, codex
 
+   Platform spec format: platform[:scope[,scope2,...]]
+     - cursor           All scopes from cursor (source), user scope (target)
+     - cursor:repo      Only repo scope
+     - cursor:repo,user Both repo and user scopes (source only)
+
+   Valid scopes: repo, user, admin, system, builtin
+   Target scope must be repo or user (writable locations)
+
    Strategies:
      overwrite   - Replace target skills unconditionally (default)
      skip        - Skip skills that already exist in target
@@ -508,11 +516,11 @@ func syncCommand() *cli.Command {
      interactive - Prompt for each conflict
 
    Examples:
-     skillsync sync claudecode cursor
-     skillsync sync --dry-run cursor codex
-     skillsync sync --strategy=skip claude-code cursor
-     skillsync sync cursor claude-code --source-scope user
-     skillsync sync cursor claude-code --source-scope repo --target-scope user`,
+     skillsync sync cursor claudecode           # All cursor skills to claudecode user scope
+     skillsync sync cursor:repo claudecode:user # Repo skills to user scope
+     skillsync sync cursor:repo,user codex:repo # Multiple source scopes to repo
+     skillsync sync --dry-run cursor codex      # Preview changes
+     skillsync sync --strategy=skip cursor codex`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "dry-run",
@@ -524,14 +532,6 @@ func syncCommand() *cli.Command {
 				Aliases: []string{"s"},
 				Value:   "overwrite",
 				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive",
-			},
-			&cli.StringFlag{
-				Name:  "source-scope",
-				Usage: "Filter source skills by scope (repo, user, admin, system, builtin). Comma-separated for multiple.",
-			},
-			&cli.StringFlag{
-				Name:  "target-scope",
-				Usage: "Target scope for synced skills (repo, user). Determines where skills are written.",
 			},
 			&cli.BoolFlag{
 				Name:  "skip-backup",
@@ -551,6 +551,12 @@ func syncCommand() *cli.Command {
 			cfg, err := parseSyncConfig(cmd)
 			if err != nil {
 				return err
+			}
+
+			// Always parse source skills
+			cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes)
+			if err != nil {
+				return fmt.Errorf("failed to parse source skills: %w", err)
 			}
 
 			// Validate source skills before sync (unless skipped)
@@ -574,17 +580,18 @@ func syncCommand() *cli.Command {
 
 			// Create backup before sync (unless skipped or dry-run)
 			if !cfg.dryRun && !cfg.skipBackup {
-				prepareBackup(cfg.targetPlatform)
+				prepareBackup(cfg.targetSpec.Platform)
 			}
 
 			// Create sync options and execute
 			opts := sync.Options{
-				DryRun:   cfg.dryRun,
-				Strategy: cfg.strategy,
+				DryRun:      cfg.dryRun,
+				Strategy:    cfg.strategy,
+				TargetScope: cfg.targetSpec.TargetScope(),
 			}
 
 			syncer := sync.New()
-			result, err := syncer.Sync(cfg.sourcePlatform, cfg.targetPlatform, opts)
+			result, err := syncer.SyncWithSkills(cfg.sourceSkills, cfg.targetSpec.Platform, opts)
 			if err != nil {
 				return fmt.Errorf("sync failed: %w", err)
 			}
@@ -631,12 +638,10 @@ func syncCommand() *cli.Command {
 
 // syncConfig holds the parsed configuration for a sync command
 type syncConfig struct {
-	sourcePlatform model.Platform
-	targetPlatform model.Platform
+	sourceSpec     model.PlatformSpec
+	targetSpec     model.PlatformSpec
 	dryRun         bool
 	strategy       sync.Strategy
-	sourceScopes   []model.SkillScope // Filter source skills by scope
-	targetScope    model.SkillScope   // Target scope for synced skills
 	skipBackup     bool
 	skipValidation bool
 	yesFlag        bool
@@ -650,18 +655,25 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		return nil, errors.New("sync requires exactly 2 arguments: <source> <target>")
 	}
 
-	sourcePlatform, err := model.ParsePlatform(args.Get(0))
+	// Parse source platform spec (e.g., "cursor", "cursor:repo", "cursor:repo,user")
+	sourceSpec, err := model.ParsePlatformSpec(args.Get(0))
 	if err != nil {
-		return nil, fmt.Errorf("invalid source platform: %w", err)
+		return nil, fmt.Errorf("invalid source: %w", err)
 	}
 
-	targetPlatform, err := model.ParsePlatform(args.Get(1))
+	// Parse target platform spec (e.g., "claudecode", "claudecode:user")
+	targetSpec, err := model.ParsePlatformSpec(args.Get(1))
 	if err != nil {
-		return nil, fmt.Errorf("invalid target platform: %w", err)
+		return nil, fmt.Errorf("invalid target: %w", err)
 	}
 
-	if sourcePlatform == targetPlatform {
-		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourcePlatform)
+	// Validate target spec (only single scope, only repo/user allowed)
+	if err := targetSpec.ValidateAsTarget(); err != nil {
+		return nil, fmt.Errorf("invalid target: %w", err)
+	}
+
+	if sourceSpec.Platform == targetSpec.Platform {
+		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourceSpec.Platform)
 	}
 
 	strategyStr := cmd.String("strategy")
@@ -670,40 +682,11 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge, three-way, interactive)", strategyStr)
 	}
 
-	// Parse source scopes filter
-	var sourceScopes []model.SkillScope
-	sourceScopeStr := cmd.String("source-scope")
-	if sourceScopeStr != "" {
-		for _, s := range strings.Split(sourceScopeStr, ",") {
-			scope, err := model.ParseScope(strings.TrimSpace(s))
-			if err != nil {
-				return nil, fmt.Errorf("invalid source-scope: %w", err)
-			}
-			sourceScopes = append(sourceScopes, scope)
-		}
-	}
-
-	// Parse target scope (optional, defaults to user scope)
-	var targetScope model.SkillScope
-	targetScopeStr := cmd.String("target-scope")
-	if targetScopeStr != "" {
-		targetScope, err = model.ParseScope(targetScopeStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid target-scope: %w", err)
-		}
-		// Only allow repo or user as target scopes (writable locations)
-		if targetScope != model.ScopeRepo && targetScope != model.ScopeUser {
-			return nil, fmt.Errorf("target-scope must be 'repo' or 'user', got %q", targetScopeStr)
-		}
-	}
-
 	return &syncConfig{
-		sourcePlatform: sourcePlatform,
-		targetPlatform: targetPlatform,
+		sourceSpec:     sourceSpec,
+		targetSpec:     targetSpec,
 		dryRun:         cmd.Bool("dry-run"),
 		strategy:       strategy,
-		sourceScopes:   sourceScopes,
-		targetScope:    targetScope,
 		skipBackup:     cmd.Bool("skip-backup"),
 		skipValidation: cmd.Bool("skip-validation"),
 		yesFlag:        cmd.Bool("yes"),
@@ -711,18 +694,12 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 	}, nil
 }
 
-// validateSourceSkills validates source skills and returns them
+// validateSourceSkills validates source skills (assumes skills are already parsed in cfg.sourceSkills)
 func validateSourceSkills(cfg *syncConfig) error {
 	fmt.Println("Validating source skills...")
 
-	var err error
-	cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourcePlatform, cfg.sourceScopes)
-	if err != nil {
-		return fmt.Errorf("failed to parse source skills: %w", err)
-	}
-
 	// Validate skill formats
-	formatResult, err := validation.ValidateSkillsFormat(cfg.sourceSkills, cfg.sourcePlatform)
+	formatResult, err := validation.ValidateSkillsFormat(cfg.sourceSkills, cfg.sourceSpec.Platform)
 	if err != nil {
 		return fmt.Errorf("validation error: %w", err)
 	}
@@ -751,7 +728,7 @@ func validateSourceSkills(cfg *syncConfig) error {
 	// Note: Skip source path validation since skills were already successfully parsed
 	// from potentially multiple scopes (project, user, admin, system). The primary
 	// platform path may not exist, but that's fine if other scopes have skills.
-	if err := validateTargetPath(cfg.targetPlatform); err != nil {
+	if err := validateTargetPath(cfg.targetSpec.Platform); err != nil {
 		return err
 	}
 
@@ -762,21 +739,9 @@ func validateSourceSkills(cfg *syncConfig) error {
 // showSyncSummaryAndConfirm shows sync summary and requests user confirmation
 func showSyncSummaryAndConfirm(cfg *syncConfig) (bool, error) {
 	fmt.Printf("\n=== Sync Summary ===\n")
-	fmt.Printf("Source: %s\n", cfg.sourcePlatform)
-	fmt.Printf("Target: %s\n", cfg.targetPlatform)
+	fmt.Printf("Source: %s\n", cfg.sourceSpec)
+	fmt.Printf("Target: %s\n", cfg.targetSpec)
 	fmt.Printf("Strategy: %s (%s)\n", cfg.strategy, cfg.strategy.Description())
-
-	if len(cfg.sourceScopes) > 0 {
-		scopeStrs := make([]string, len(cfg.sourceScopes))
-		for i, s := range cfg.sourceScopes {
-			scopeStrs[i] = string(s)
-		}
-		fmt.Printf("Source scope filter: %s\n", strings.Join(scopeStrs, ", "))
-	}
-
-	if cfg.targetScope != "" {
-		fmt.Printf("Target scope: %s\n", cfg.targetScope)
-	}
 
 	if len(cfg.sourceSkills) > 0 {
 		fmt.Printf("Skills to sync: %d\n", len(cfg.sourceSkills))
