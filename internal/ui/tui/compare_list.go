@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -139,6 +140,11 @@ func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareList
 		{Title: "Content%", Width: 8},
 		{Title: "Changes", Width: 18},
 	}
+
+	// Sort by content similarity descending (highest similarity first)
+	sort.Slice(comparisons, func(i, j int) bool {
+		return comparisons[i].ContentScore > comparisons[j].ContentScore
+	})
 
 	m := CompareListModel{
 		comparisons: comparisons,
@@ -346,6 +352,10 @@ func (m *CompareListModel) applyFilter() {
 				filtered = append(filtered, c)
 			}
 		}
+		// Maintain sort order by content similarity descending
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].ContentScore > filtered[j].ContentScore
+		})
 		m.filtered = filtered
 	}
 	m.table.SetRows(m.comparisonsToRows(m.filtered))
