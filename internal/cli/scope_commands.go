@@ -524,7 +524,7 @@ func runScopeList(cmd *cli.Command, skillName string) error {
 				activeStr = ui.Success("✓")
 			}
 			// Color platform names for visual distinction
-			platform := colorPlatform(string(loc.Platform))
+			platform := colorPlatform(string(loc.Platform), 12)
 			fmt.Printf("%s %-8s %-6s %s\n", platform, loc.Scope, activeStr, loc.Path)
 		}
 		fmt.Printf("\nFound %d location(s)\n", len(locations))
@@ -626,7 +626,7 @@ func runScopeListAll(cmd *cli.Command) error {
 				name = name[:27] + "..."
 			}
 			// Color platform names for visual distinction
-			platform := colorPlatform(string(s.Platform))
+			platform := colorPlatform(string(s.Platform), 12)
 			fmt.Printf("%s %-8s %-30s %s\n", platform, s.Scope, name, s.Path)
 		}
 		fmt.Printf("\nTotal: %d skill(s)\n", len(allSkills))

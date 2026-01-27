@@ -746,9 +746,9 @@ func TestColorPlatform(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			result := colorPlatform(tt.platform)
+			result := colorPlatform(tt.platform, 12)
 			if !strings.Contains(result, tt.contains) {
-				t.Errorf("colorPlatform(%q) = %q, want to contain %q", tt.platform, result, tt.contains)
+				t.Errorf("colorPlatform(%q, 12) = %q, want to contain %q", tt.platform, result, tt.contains)
 			}
 		})
 	}

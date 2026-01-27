@@ -478,17 +478,14 @@ func TestDiscoverOutputFormats(t *testing.T) {
 	}
 }
 
-// NOTE: The following fixture-based tests are skipped because the discover command
-// currently uses hardcoded paths from util.ClaudeCodeSkillsPath() rather than
-// respecting the SKILLSYNC_*_PATH environment variables set by the test harness.
-// These tests serve as documentation for the expected behavior once that is fixed.
-// See: https://github.com/klauern/skillsync/issues/XXX
+// NOTE: The following fixture-based tests verify that discover respects
+// configured platform paths and the SKILLSYNC_*_SKILLS_PATHS environment
+// variables set by the test harness.
+// See: https://github.com/klauern/skillsync/issues
 
 // TestDiscoverWithSkills verifies discover finds skills from fixtures.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverWithSkills(t *testing.T) {
-	t.Skip("discover command uses hardcoded paths, not environment overrides - needs fix")
-
 	h := e2e.NewHarness(t)
 
 	// Create test skills in Claude Code fixture
@@ -502,14 +499,14 @@ func TestDiscoverWithSkills(t *testing.T) {
 	e2e.AssertOutputContains(t, result, "test-skill-one")
 	e2e.AssertOutputContains(t, result, "test-skill-two")
 	e2e.AssertOutputContains(t, result, "First test skill")
-	e2e.AssertOutputContains(t, result, "Total: 2 skill(s)")
+	// NOTE: Exact count assertion removed because discover now includes
+	// installed plugin skills from ~/.claude/plugins/cache/, which varies
+	// by user environment. The test verifies fixture skills are discovered.
 }
 
 // TestDiscoverMultiplePlatforms verifies discover finds skills from multiple platforms.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverMultiplePlatforms(t *testing.T) {
-	t.Skip("discover command uses hardcoded paths, not environment overrides - needs fix")
-
 	h := e2e.NewHarness(t)
 
 	// Create skills in multiple platforms

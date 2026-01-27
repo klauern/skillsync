@@ -8,8 +8,8 @@ import (
 
 func TestParsePluginKey(t *testing.T) {
 	tests := map[string]struct {
-		key            string
-		wantPluginName string
+		key             string
+		wantPluginName  string
 		wantMarketplace string
 	}{
 		"full key": {

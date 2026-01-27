@@ -56,6 +56,7 @@ Settings and permissions are stored in JSON:
 ```
 
 Common configuration files:
+
 - `.claude/settings.local.json` - Local project settings
 - `.claude/settings.json` - Project settings (committed)
 - `~/.claude/config.json` - Global settings
@@ -82,16 +83,22 @@ Common configuration files:
 
 ### Storage Locations
 
-Cursor stores rules in:
+Cursor stores skills in:
 
-1. **Project rules**: `.cursor/rules/` directory
-2. **Global rules**: `~/.cursor/rules/` for user-wide rules
+1. **Project skills**: `.cursor/skills/` directory
+2. **Global skills**: `~/.cursor/skills/` for user-wide skills
+3. **Legacy rules**: `.cursor/rules/` (project) or `~/.cursor/rules/` (global)
 
 ### File Format
 
-#### Markdown with Custom Frontmatter (`.md` or `.mdc`)
+#### Agent Skills Standard (`SKILL.md`)
 
-Cursor uses a special markdown format with YAML frontmatter:
+Newer Cursor skills follow the Agent Skills Standard with `SKILL.md` files in
+subdirectories.
+
+#### Legacy Rules (`.md` or `.mdc`)
+
+Legacy Cursor rules use a special markdown format with YAML frontmatter:
 
 ```markdown
 ---
@@ -110,7 +117,7 @@ Instructions for Cursor AI...
   - `globs`: Array of glob patterns for file matching
   - `alwaysApply`: Boolean (if true, applies to all files)
 - **Content**: Markdown-formatted instructions
-- **File extensions**: `.md` or `.mdc` (Cursor markdown)
+- **File extensions**: `.md` or `.mdc` (Cursor markdown, legacy)
 - **Matching**: Rules apply based on glob patterns matching file paths
 - **Precedence**: More specific globs take precedence
 
@@ -263,26 +270,26 @@ skills:
 
 ### Metadata Field Mapping
 
-| Concept | Claude Code | Cursor | Codex |
-|---------|-------------|--------|-------|
-| Skill Name | `name` | (filename) | `name` |
-| Description | `description` | (content) | `description` |
-| Scope | `tools` | `globs` | `parameters` |
-| Always Apply | - | `alwaysApply` | - |
-| Instructions | (content) | (content) | `implementation` |
+| Concept      | Claude Code   | Cursor        | Codex            |
+| ------------ | ------------- | ------------- | ---------------- |
+| Skill Name   | `name`        | (filename)    | `name`           |
+| Description  | `description` | (content)     | `description`    |
+| Scope        | `tools`       | `globs`       | `parameters`     |
+| Always Apply | -             | `alwaysApply` | -                |
+| Instructions | (content)     | (content)     | `implementation` |
 
 ### File Extensions by Platform
 
-| Platform | Extensions | MIME Type |
-|----------|------------|-----------|
-| Claude Code | `.md`, `.json` | `text/markdown`, `application/json` |
-| Cursor | `.md`, `.mdc` | `text/markdown` |
-| Codex | `.json`, `.yaml`, `.yml` | `application/json`, `text/yaml` |
+| Platform    | Extensions               | MIME Type                           |
+| ----------- | ------------------------ | ----------------------------------- |
+| Claude Code | `.md`, `.json`           | `text/markdown`, `application/json` |
+| Cursor      | `.md`, `.mdc`            | `text/markdown`                     |
+| Codex       | `.json`, `.yaml`, `.yml` | `application/json`, `text/yaml`     |
 
 ### Default Paths
 
-| Platform | Local Path | Global Path |
-|----------|------------|-------------|
-| Claude Code | `.claude/skills/` | `~/.claude/skills/` |
-| Cursor | `.cursor/rules/` | `~/.cursor/rules/` |
-| Codex | `.codex/skills/` | `~/.codex/skills/`, `/etc/codex/skills/` |
+| Platform    | Local Path        | Global Path                              |
+| ----------- | ----------------- | ---------------------------------------- |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/`                      |
+| Cursor      | `.cursor/rules/`  | `~/.cursor/rules/`                       |
+| Codex       | `.codex/skills/`  | `~/.codex/skills/`, `/etc/codex/skills/` |
