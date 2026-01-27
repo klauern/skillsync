@@ -2079,7 +2079,9 @@ func runTUI() error {
 			}
 
 		case tui.DashboardViewScope:
-			ui.Warning("Scope management TUI is not yet implemented")
+			if err := runScopeTUI(); err != nil {
+				return err
+			}
 
 		case tui.DashboardViewPromote:
 			if err := runPromoteDemoteTUI(); err != nil {
@@ -2337,6 +2339,60 @@ func executeDelete(result tui.DeleteListResult) error {
 			ui.Error(fmt.Sprintf("Failed: %s", e))
 		}
 		return fmt.Errorf("some deletions failed")
+	}
+
+	return nil
+}
+
+// runScopeTUI runs the scope management TUI view.
+func runScopeTUI() error {
+	// Discover skills from all platforms
+	var allSkills []model.Skill
+	for _, p := range model.AllPlatforms() {
+		skills, err := parsePlatformSkillsWithScope(p, nil)
+		if err != nil {
+			// Log error but continue with other platforms
+			continue
+		}
+		allSkills = append(allSkills, skills...)
+	}
+
+	// Include plugin skills
+	pluginSkills, err := discoverPluginSkills("", true)
+	if err == nil {
+		allSkills = append(allSkills, pluginSkills...)
+	}
+
+	if len(allSkills) == 0 {
+		ui.Info("No skills found")
+		return nil
+	}
+
+	result, err := tui.RunScopeList(allSkills)
+	if err != nil {
+		return fmt.Errorf("scope TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.ScopeActionNone {
+		return nil
+	}
+
+	if result.Action == tui.ScopeActionView {
+		// Display skill details
+		skill := result.SelectedSkill
+		fmt.Println()
+		fmt.Println(ui.Bold(fmt.Sprintf("Skill: %s", skill.Name)))
+		fmt.Println(ui.Info(fmt.Sprintf("Platform:    %s", skill.Platform)))
+		fmt.Println(ui.Info(fmt.Sprintf("Scope:       %s", skill.DisplayScope())))
+		fmt.Println(ui.Info(fmt.Sprintf("Description: %s", skill.Description)))
+		fmt.Println(ui.Info(fmt.Sprintf("Path:        %s", skill.Path)))
+		if len(skill.Tools) > 0 {
+			fmt.Println(ui.Info(fmt.Sprintf("Tools:       %s", strings.Join(skill.Tools, ", "))))
+		}
+		if len(skill.References) > 0 {
+			fmt.Println(ui.Info(fmt.Sprintf("References:  %s", strings.Join(skill.References, ", "))))
+		}
 	}
 
 	return nil
