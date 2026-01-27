@@ -36,6 +36,8 @@ const (
 	DashboardViewPromote
 	// DashboardViewDelete opens the delete/remove skills view.
 	DashboardViewDelete
+	// DashboardViewConflicts opens the conflict resolution view.
+	DashboardViewConflicts
 )
 
 // DashboardResult contains the result of the dashboard TUI interaction.
@@ -167,6 +169,11 @@ func defaultMenuItems() []MenuItem {
 			Title:       "Delete Skills",
 			Description: "Remove skills from repo or user scopes",
 			View:        DashboardViewDelete,
+		},
+		{
+			Title:       "Resolve Conflicts",
+			Description: "Handle sync conflicts between platforms",
+			View:        DashboardViewConflicts,
 		},
 	}
 }

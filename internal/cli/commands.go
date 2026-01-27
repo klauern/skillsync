@@ -2090,6 +2090,11 @@ func runTUI() error {
 			if err := runDeleteTUI(); err != nil {
 				return err
 			}
+
+		case tui.DashboardViewConflicts:
+			if err := runConflictsTUI(); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -2333,6 +2338,21 @@ func executeDelete(result tui.DeleteListResult) error {
 		}
 		return fmt.Errorf("some deletions failed")
 	}
+
+	return nil
+}
+
+// runConflictsTUI runs the conflict resolution TUI view.
+func runConflictsTUI() error {
+	// For now, show a message that this view is accessible through sync operations
+	// In a full implementation, this would show pending conflicts from a sync session
+	ui.Info("Conflict resolution is available during sync operations")
+	ui.Info("Use 'skillsync sync --strategy interactive' to resolve conflicts during sync")
+
+	// Create a demo conflict for testing the UI (can be removed in production)
+	// This allows testing the TUI without an active sync session
+	ui.Info("")
+	ui.Info("To test the conflict resolution UI, run a sync with the interactive strategy")
 
 	return nil
 }

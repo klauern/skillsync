@@ -170,14 +170,14 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 	}
 
 	columns := []table.Column{
-		{Title: " ", Width: 3},             // Checkbox column
-		{Title: "Name", Width: 22},         // Skill name
-		{Title: "Platform", Width: 12},     // Platform
-		{Title: "Scope", Width: 8},         // Scope
-		{Title: "Similar To", Width: 22},   // Similar skill name
-		{Title: "Name%", Width: 6},         // Name similarity
-		{Title: "Content%", Width: 8},      // Content similarity
-		{Title: "Description", Width: 25},  // Description
+		{Title: " ", Width: 3},            // Checkbox column
+		{Title: "Name", Width: 22},        // Skill name
+		{Title: "Platform", Width: 12},    // Platform
+		{Title: "Scope", Width: 8},        // Scope
+		{Title: "Similar To", Width: 22},  // Similar skill name
+		{Title: "Name%", Width: 6},        // Name similarity
+		{Title: "Content%", Width: 8},     // Content similarity
+		{Title: "Description", Width: 25}, // Description
 	}
 
 	// Initialize with no skills selected
