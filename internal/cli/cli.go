@@ -57,6 +57,7 @@ func Run(ctx context.Context, args []string) error {
 			promoteCommand(),
 			demoteCommand(),
 			scopeCommand(),
+			tuiCommand(),
 		},
 	}
 	return app.Run(ctx, args)

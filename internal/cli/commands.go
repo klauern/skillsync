@@ -2006,3 +2006,112 @@ func formatSize(bytes int64) string {
 		return fmt.Sprintf("%d B", bytes)
 	}
 }
+
+// tuiCommand returns the TUI dashboard command.
+func tuiCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "tui",
+		Aliases: []string{"ui"},
+		Usage:   "Launch the interactive TUI dashboard",
+		Description: `Launch the unified interactive TUI application for skillsync.
+
+   The TUI provides a menu-driven interface to access all skillsync features:
+   - Discover skills across all platforms
+   - Manage backups (list, restore, delete, verify)
+   - Sync operations between platforms
+   - Compare and dedupe skills
+   - Import/export operations
+   - Scope and promote/demote management
+   - Configuration settings
+
+   Use arrow keys to navigate, Enter to select, and q to quit.`,
+		Action: func(_ context.Context, _ *cli.Command) error {
+			return runTUI()
+		},
+	}
+}
+
+// runTUI launches the interactive TUI dashboard and handles view navigation.
+func runTUI() error {
+	for {
+		result, err := tui.RunDashboard()
+		if err != nil {
+			return fmt.Errorf("TUI error: %w", err)
+		}
+
+		switch result.View {
+		case tui.DashboardViewNone:
+			// User quit the dashboard
+			return nil
+
+		case tui.DashboardViewDiscover:
+			if err := runDiscoverTUI(); err != nil {
+				return err
+			}
+
+		case tui.DashboardViewBackups:
+			if err := runBackupsTUI(); err != nil {
+				return err
+			}
+
+		case tui.DashboardViewSync:
+			if err := runSyncTUI(); err != nil {
+				return err
+			}
+
+		case tui.DashboardViewCompare:
+			ui.Warning("Compare/Dedupe TUI is not yet implemented")
+
+		case tui.DashboardViewConfig:
+			ui.Warning("Config TUI is not yet implemented")
+
+		case tui.DashboardViewExport:
+			ui.Warning("Import/Export TUI is not yet implemented")
+
+		case tui.DashboardViewScope:
+			ui.Warning("Scope management TUI is not yet implemented")
+
+		case tui.DashboardViewPromote:
+			ui.Warning("Promote/Demote TUI is not yet implemented")
+		}
+	}
+}
+
+// runDiscoverTUI runs the discover skills TUI view.
+func runDiscoverTUI() error {
+	// Discover skills from all platforms
+	var allSkills []model.Skill
+	for _, p := range model.AllPlatforms() {
+		skills, err := parsePlatformSkillsWithScope(p, nil)
+		if err != nil {
+			// Log error but continue with other platforms
+			continue
+		}
+		allSkills = append(allSkills, skills...)
+	}
+
+	// Include plugin skills
+	pluginSkills, err := discoverPluginSkills("", true)
+	if err == nil {
+		allSkills = append(allSkills, pluginSkills...)
+	}
+
+	if len(allSkills) == 0 {
+		ui.Info("No skills found across any platform")
+		return nil
+	}
+
+	return discoverSkillsInteractive(allSkills)
+}
+
+// runBackupsTUI runs the backup management TUI view.
+func runBackupsTUI() error {
+	return listBackupsInteractive("")
+}
+
+// runSyncTUI runs the sync TUI view.
+func runSyncTUI() error {
+	ui.Warning("Sync TUI requires source and target platforms")
+	ui.Info("Use 'skillsync sync --interactive <source> <target>' for now")
+	return nil
+}
