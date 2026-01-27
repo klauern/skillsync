@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -576,6 +577,11 @@ func outputTable(skills []model.Skill) error {
 		fmt.Println("No skills found.")
 		return nil
 	}
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
 
 	// Print colored headers
 	// SOURCE shows where skills come from: ~/.claude/skills (user), .claude/skills (repo),
