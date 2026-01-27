@@ -19,6 +19,10 @@ build: ## Build the binary
 install: ## Install the binary to GOPATH/bin
 	go install $(LDFLAGS) ./cmd/skillsync
 
+.PHONY: uninstall
+uninstall: ## Remove installed binary from GOPATH/bin
+	rm -f $(shell [ -n "$(GOBIN)" ] && echo "$(GOBIN)" || echo "$(shell go env GOPATH)/bin")/$(BINARY_NAME)$(shell go env GOEXE)
+
 .PHONY: test
 test: ## Run tests
 	go test -v -race -coverprofile=coverage.out ./...
