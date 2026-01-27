@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -157,6 +158,11 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 			movableSkills = append(movableSkills, s)
 		}
 	}
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(movableSkills, func(i, j int) bool {
+		return strings.ToLower(movableSkills[i].Name) < strings.ToLower(movableSkills[j].Name)
+	})
 
 	columns := []table.Column{
 		{Title: " ", Width: 3},            // Checkbox column
