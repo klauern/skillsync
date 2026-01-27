@@ -235,6 +235,7 @@ func discoveryCommand() *cli.Command {
 		Aliases: []string{"discovery", "list"},
 		Usage:   "Discover and list skills across platforms",
 		UsageText: `skillsync discover [options]
+   skillsync discover --interactive       # Interactive TUI mode
    skillsync discover --platform claude-code
    skillsync discover --no-plugins
    skillsync discover --repo https://github.com/user/plugins
@@ -247,8 +248,15 @@ func discoveryCommand() *cli.Command {
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
    or specify a Git repository with --repo to fetch plugins from.
 
-   Output formats: table (default), json, yaml`,
+   Output formats: table (default), json, yaml
+
+   Use --interactive (-i) for a TUI with keyboard navigation and filtering.`,
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "interactive",
+				Aliases: []string{"i"},
+				Usage:   "Interactive TUI mode with keyboard navigation",
+			},
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
@@ -285,6 +293,7 @@ func discoveryCommand() *cli.Command {
 			excludePlugins := cmd.Bool("no-plugins")
 			repoURL := cmd.String("repo")
 			noCache := cmd.Bool("no-cache")
+			interactive := cmd.Bool("interactive")
 
 			// Include plugins by default unless --no-plugins is set
 			includePlugins := !excludePlugins
@@ -336,6 +345,9 @@ func discoveryCommand() *cli.Command {
 			}
 
 			// Output results
+			if interactive {
+				return discoverSkillsInteractive(allSkills)
+			}
 			return outputSkills(allSkills, format)
 		},
 	}
@@ -382,6 +394,43 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 	}
 
 	return skills, nil
+}
+
+// discoverSkillsInteractive runs the interactive TUI for skill discovery
+func discoverSkillsInteractive(skills []model.Skill) error {
+	if len(skills) == 0 {
+		fmt.Println("No skills found.")
+		return nil
+	}
+
+	result, err := tui.RunDiscoverList(skills)
+	if err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	// Handle the selected action
+	switch result.Action {
+	case tui.DiscoverActionView:
+		fmt.Printf("\n%s\n", ui.Bold("Skill: "+result.Skill.Name))
+		fmt.Printf("Platform: %s\n", result.Skill.Platform)
+		fmt.Printf("Scope: %s\n", result.Skill.DisplayScope())
+		fmt.Printf("Path: %s\n", result.Skill.Path)
+		if result.Skill.Description != "" {
+			fmt.Printf("Description: %s\n", result.Skill.Description)
+		}
+		if len(result.Skill.Tools) > 0 {
+			fmt.Printf("Tools: %s\n", strings.Join(result.Skill.Tools, ", "))
+		}
+		fmt.Printf("\n%s\n", ui.Dim("--- Content ---"))
+		fmt.Println(result.Skill.Content)
+	case tui.DiscoverActionCopy:
+		fmt.Printf("\nPath: %s\n", result.Skill.Path)
+	case tui.DiscoverActionNone:
+		// User quit without action
+		return nil
+	}
+
+	return nil
 }
 
 // outputSkills formats and prints skills in the requested format
