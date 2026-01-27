@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -158,6 +159,11 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		{Title: "Scope", Width: 10},       // Scope
 		{Title: "Description", Width: 40}, // Description
 	}
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
 
 	// Initialize all skills as selected by default
 	selected := make(map[string]bool)
