@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -168,6 +169,23 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 			deletableSkills = append(deletableSkills, s)
 		}
 	}
+
+	// Sort by content similarity descending (highest similarity first)
+	// Build a map of skill key to best content score for sorting
+	bestContentScores := make(map[string]float64)
+	for _, dup := range duplicates {
+		key1 := dedupeSkillKey(dup.Skill1)
+		key2 := dedupeSkillKey(dup.Skill2)
+		if dup.ContentScore > bestContentScores[key1] {
+			bestContentScores[key1] = dup.ContentScore
+		}
+		if dup.ContentScore > bestContentScores[key2] {
+			bestContentScores[key2] = dup.ContentScore
+		}
+	}
+	sort.Slice(deletableSkills, func(i, j int) bool {
+		return bestContentScores[dedupeSkillKey(deletableSkills[i])] > bestContentScores[dedupeSkillKey(deletableSkills[j])]
+	})
 
 	columns := []table.Column{
 		{Title: " ", Width: 3},            // Checkbox column
