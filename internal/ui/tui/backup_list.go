@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -131,6 +132,11 @@ func NewBackupListModel(backups []backup.Metadata) BackupListModel {
 		{Title: "Created", Width: 19},
 		{Title: "Size", Width: 10},
 	}
+
+	// Sort backups by creation time (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].CreatedAt.After(backups[j].CreatedAt)
+	})
 
 	rows := backupsToRows(backups)
 
