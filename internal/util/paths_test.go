@@ -465,3 +465,103 @@ func TestExpandPaths_EmptyInput(t *testing.T) {
 		t.Errorf("ExpandPaths(nil) returned %d paths, expected 0", len(result))
 	}
 }
+
+func TestSkillsyncConfigPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		// Ensure env var is unset
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncConfigPath()
+		expected := filepath.Join(HomeDir(), ".skillsync")
+
+		if got != expected {
+			t.Errorf("SkillsyncConfigPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync/path"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncConfigPath()
+
+		if got != customPath {
+			t.Errorf("SkillsyncConfigPath() = %q, want %q", got, customPath)
+		}
+	})
+}
+
+func TestSkillsyncBackupsPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncBackupsPath()
+		expected := filepath.Join(HomeDir(), ".skillsync", "backups")
+
+		if got != expected {
+			t.Errorf("SkillsyncBackupsPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncBackupsPath()
+		expected := filepath.Join(customPath, "backups")
+
+		if got != expected {
+			t.Errorf("SkillsyncBackupsPath() = %q, want %q", got, expected)
+		}
+	})
+}
+
+func TestSkillsyncMetadataPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncMetadataPath()
+		expected := filepath.Join(HomeDir(), ".skillsync", "metadata")
+
+		if got != expected {
+			t.Errorf("SkillsyncMetadataPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncMetadataPath()
+		expected := filepath.Join(customPath, "metadata")
+
+		if got != expected {
+			t.Errorf("SkillsyncMetadataPath() = %q, want %q", got, expected)
+		}
+	})
+}
+
+func TestSkillsyncPluginsPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncPluginsPath()
+		expected := filepath.Join(HomeDir(), ".skillsync", "plugins")
+
+		if got != expected {
+			t.Errorf("SkillsyncPluginsPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncPluginsPath()
+		expected := filepath.Join(customPath, "plugins")
+
+		if got != expected {
+			t.Errorf("SkillsyncPluginsPath() = %q, want %q", got, expected)
+		}
+	})
+}
