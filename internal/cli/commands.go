@@ -2066,7 +2066,9 @@ func runTUI() error {
 			ui.Warning("Config TUI is not yet implemented")
 
 		case tui.DashboardViewExport:
-			ui.Warning("Import/Export TUI is not yet implemented")
+			if err := runExportTUI(); err != nil {
+				return err
+			}
 
 		case tui.DashboardViewScope:
 			ui.Warning("Scope management TUI is not yet implemented")
@@ -2113,5 +2115,61 @@ func runBackupsTUI() error {
 func runSyncTUI() error {
 	ui.Warning("Sync TUI requires source and target platforms")
 	ui.Info("Use 'skillsync sync --interactive <source> <target>' for now")
+	return nil
+}
+
+// runExportTUI runs the export TUI view.
+func runExportTUI() error {
+	// Discover skills from all platforms
+	skills, err := discoverSkillsForExport("")
+	if err != nil {
+		return fmt.Errorf("failed to discover skills: %w", err)
+	}
+
+	if len(skills) == 0 {
+		ui.Info("No skills found to export")
+		return nil
+	}
+
+	result, err := tui.RunExportList(skills)
+	if err != nil {
+		return fmt.Errorf("export TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.ExportActionNone {
+		return nil
+	}
+
+	if result.Action == tui.ExportActionExport {
+		return executeExport(result)
+	}
+
+	return nil
+}
+
+// executeExport performs the actual export based on TUI result.
+func executeExport(result tui.ExportListResult) error {
+	if len(result.SelectedSkills) == 0 {
+		ui.Info("No skills selected for export")
+		return nil
+	}
+
+	// Build export options
+	opts := export.Options{
+		Format:          result.Format,
+		Pretty:          result.Pretty,
+		IncludeMetadata: result.IncludeMetadata,
+	}
+
+	// Create exporter
+	exporter := export.New(opts)
+
+	// Write to stdout
+	if err := exporter.Export(result.SelectedSkills, os.Stdout); err != nil {
+		return fmt.Errorf("export failed: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "\nExported %d skill(s) as %s\n", len(result.SelectedSkills), result.Format)
 	return nil
 }
