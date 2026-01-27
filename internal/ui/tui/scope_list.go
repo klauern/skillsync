@@ -27,21 +27,21 @@ const (
 
 // ScopeListResult contains the result of the scope list TUI interaction.
 type ScopeListResult struct {
-	Action       ScopeAction
+	Action        ScopeAction
 	SelectedSkill model.Skill
 }
 
 // scopeListKeyMap defines the key bindings for the scope list.
 type scopeListKeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	View     key.Binding
-	Filter   key.Binding
-	ClearFlt key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	View      key.Binding
+	Filter    key.Binding
+	ClearFlt  key.Binding
 	NextScope key.Binding
 	PrevScope key.Binding
-	Help     key.Binding
-	Quit     key.Binding
+	Help      key.Binding
+	Quit      key.Binding
 }
 
 func defaultScopeListKeyMap() scopeListKeyMap {
@@ -128,8 +128,8 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 	columns := []table.Column{
 		{Title: "Name", Width: 25},
 		{Title: "Platform", Width: 12},
-		{Title: "Scope", Width: 10},
-		{Title: "Description", Width: 45},
+		{Title: "Scope", Width: 40},
+		{Title: "Description", Width: 35},
 	}
 
 	// Collect unique scopes from skills
@@ -191,12 +191,12 @@ func (m ScopeListModel) skillsToRows(skills []model.Skill) []table.Row {
 			platform = platform[:9] + "..."
 		}
 		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
+		if len(scope) > 40 {
+			scope = scope[:37] + "..."
 		}
 		desc := s.Description
-		if len(desc) > 45 {
-			desc = desc[:42] + "..."
+		if len(desc) > 35 {
+			desc = desc[:32] + "..."
 		}
 		rows[i] = table.Row{
 			name,
@@ -295,7 +295,7 @@ func (m ScopeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filtered) > 0 {
 				skill := m.getSelectedSkill()
 				m.result = ScopeListResult{
-					Action:       ScopeActionView,
+					Action:        ScopeActionView,
 					SelectedSkill: skill,
 				}
 				m.quitting = true

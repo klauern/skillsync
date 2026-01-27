@@ -106,8 +106,8 @@ func TestScopeListModel_SkillsToRows(t *testing.T) {
 		t.Errorf("expected platform 'claude-code', got %s", row[1])
 	}
 	// Scope is displayed via DisplayScope()
-	if row[2] != "~/.claude" {
-		t.Errorf("expected scope '~/.claude', got %s", row[2])
+	if row[2] != "~/.claude/skills" {
+		t.Errorf("expected scope '~/.claude/skills', got %s", row[2])
 	}
 }
 

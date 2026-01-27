@@ -578,13 +578,14 @@ func outputTable(skills []model.Skill) error {
 	}
 
 	// Print colored headers
-	// SOURCE shows where skills come from: ~/.claude (user), .claude (repo), plugin:<name>
+	// SOURCE shows where skills come from: ~/.claude/skills (user), .claude/skills (repo),
+	// or with plugin info: ~/.claude/skills (plugin: name@marketplace)
 	fmt.Printf("%s %s %s %s\n",
 		ui.Header(fmt.Sprintf("%-30s", "NAME")),
 		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
-		ui.Header(fmt.Sprintf("%-20s", "SOURCE")),
-		ui.Header(fmt.Sprintf("%-50s", "DESCRIPTION")))
-	fmt.Printf("%-30s %-12s %-20s %-50s\n", "----", "--------", "------", "-----------")
+		ui.Header(fmt.Sprintf("%-40s", "SOURCE")),
+		ui.Header(fmt.Sprintf("%-40s", "DESCRIPTION")))
+	fmt.Printf("%-30s %-12s %-40s %-40s\n", "----", "--------", "------", "-----------")
 
 	for _, skill := range skills {
 		name := skill.Name
@@ -593,8 +594,8 @@ func outputTable(skills []model.Skill) error {
 		}
 
 		desc := skill.Description
-		if len(desc) > 50 {
-			desc = desc[:47] + "..."
+		if len(desc) > 40 {
+			desc = desc[:37] + "..."
 		}
 
 		// Color platform names for visual distinction
@@ -603,7 +604,7 @@ func outputTable(skills []model.Skill) error {
 		// Color source for visual distinction by scope type
 		source := colorSource(skill)
 
-		fmt.Printf("%-30s %s %s %-50s\n", name, platform, source, desc)
+		fmt.Printf("%-30s %s %s %-40s\n", name, platform, source, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
@@ -626,14 +627,27 @@ func colorPlatform(platform string) string {
 	}
 }
 
-// colorSource returns a colored source string based on the skill's scope.
-// Colors: user (~/.xxx) = cyan, repo (.xxx) = green, plugin = yellow, other = dim
+// colorSource returns a colored source string based on the skill's scope and plugin info.
+// Colors:
+//   - user (~/.xxx) = cyan
+//   - repo (.xxx) = green
+//   - plugin (installed) = yellow
+//   - plugin (dev symlink) = magenta
+//   - system/admin/builtin = dim
 func colorSource(skill model.Skill) string {
 	source := skill.DisplayScope()
-	if len(source) > 20 {
-		source = source[:17] + "..."
+	if len(source) > 40 {
+		source = source[:37] + "..."
 	}
-	formatted := fmt.Sprintf("%-20s", source)
+	formatted := fmt.Sprintf("%-40s", source)
+
+	// Check for plugin symlinks first (more specific than scope)
+	if skill.PluginInfo != nil {
+		if skill.PluginInfo.IsDev {
+			return ui.Magenta(formatted) // magenta for dev symlinks
+		}
+		return ui.Warning(formatted) // yellow for installed plugin symlinks
+	}
 
 	switch skill.Scope {
 	case model.ScopeUser:
@@ -1039,27 +1053,161 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 // parsePlatformSkillsWithScope parses skills from the given platform with optional scope filtering.
 // If scopeFilter is nil or empty, all scopes are included.
 func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope) ([]model.Skill, error) {
-	// Use tiered parser for scope-aware discovery
-	tieredParser, err := tiered.NewForPlatform(platform)
+	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create tiered parser for %s: %w", platform, err)
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	var skills []model.Skill
-
-	if len(scopeFilter) > 0 {
-		// Parse with scope filter
-		skills, err = tieredParser.ParseWithScopeFilter(scopeFilter)
-	} else {
-		// Parse all scopes
-		skills, err = tieredParser.Parse()
-	}
-
+	paths, repoRoot, err := platformSkillsPaths(cfg, platform)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse skills from %s: %w", platform, err)
+		return nil, err
+	}
+	if len(paths) == 0 {
+		return []model.Skill{}, nil
 	}
 
-	return skills, nil
+	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter), nil
+}
+
+func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+	repoRoot := util.GetRepoRoot(cwd)
+
+	var rawPaths []string
+	switch platform {
+	case model.ClaudeCode:
+		rawPaths = cfg.Platforms.ClaudeCode.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.ClaudeCode.SkillsPath != "" {
+			rawPaths = []string{cfg.Platforms.ClaudeCode.SkillsPath}
+		}
+	case model.Cursor:
+		rawPaths = cfg.Platforms.Cursor.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.Cursor.SkillsPath != "" {
+			rawPaths = []string{cfg.Platforms.Cursor.SkillsPath}
+		}
+	case model.Codex:
+		rawPaths = cfg.Platforms.Codex.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" {
+			rawPaths = []string{cfg.Platforms.Codex.SkillsPath}
+		}
+	default:
+		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	return resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot, nil
+}
+
+func resolveSkillsPaths(rawPaths []string, cwd, repoRoot string) []string {
+	paths := make([]string, 0, len(rawPaths))
+	seen := make(map[string]bool)
+
+	addPath := func(path string) {
+		if path == "" || seen[path] {
+			return
+		}
+		paths = append(paths, path)
+		seen[path] = true
+	}
+
+	for _, rawPath := range rawPaths {
+		rawPath = strings.TrimSpace(rawPath)
+		if rawPath == "" {
+			continue
+		}
+		if filepath.IsAbs(rawPath) || strings.HasPrefix(rawPath, "~") {
+			addPath(util.ExpandPath(rawPath, cwd))
+			continue
+		}
+
+		addPath(util.ExpandPath(rawPath, cwd))
+		if repoRoot != "" && repoRoot != cwd {
+			addPath(util.ExpandPath(rawPath, repoRoot))
+		}
+	}
+
+	return paths
+}
+
+func parsePlatformSkillsFromPaths(
+	platform model.Platform,
+	paths []string,
+	repoRoot string,
+	scopeFilter []model.SkillScope,
+) []model.Skill {
+	parserFactory := tiered.ParserFactoryFor(platform)
+	skillsByName := make(map[string]model.Skill)
+
+	scopeSet := make(map[model.SkillScope]bool)
+	for _, s := range scopeFilter {
+		scopeSet[s] = true
+	}
+
+	for _, path := range paths {
+		scope := inferScopeForPath(path, repoRoot)
+		if len(scopeSet) > 0 && !scopeSet[scope] {
+			continue
+		}
+
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+
+		pathParser := parserFactory(path)
+		skills, err := pathParser.Parse()
+		if err != nil {
+			continue
+		}
+
+		for _, skill := range skills {
+			skill.Scope = scope
+			if existing, exists := skillsByName[skill.Name]; exists {
+				if skill.Scope.IsHigherPrecedence(existing.Scope) {
+					skillsByName[skill.Name] = skill
+				}
+				continue
+			}
+			skillsByName[skill.Name] = skill
+		}
+	}
+
+	result := make([]model.Skill, 0, len(skillsByName))
+	for _, skill := range skillsByName {
+		result = append(result, skill)
+	}
+	return result
+}
+
+func inferScopeForPath(path, repoRoot string) model.SkillScope {
+	cleaned := filepath.Clean(path)
+
+	if repoRoot != "" {
+		root := filepath.Clean(repoRoot)
+		rootWithSep := root + string(os.PathSeparator)
+		if cleaned == root || strings.HasPrefix(cleaned, rootWithSep) {
+			return model.ScopeRepo
+		}
+	}
+
+	home := filepath.Clean(util.HomeDir())
+	homeWithSep := home + string(os.PathSeparator)
+	if home != "" && (cleaned == home || strings.HasPrefix(cleaned, homeWithSep)) {
+		return model.ScopeUser
+	}
+
+	etcPrefix := string(os.PathSeparator) + "etc" + string(os.PathSeparator)
+	if strings.HasPrefix(cleaned, etcPrefix) {
+		return model.ScopeSystem
+	}
+
+	optPrefix := string(os.PathSeparator) + "opt" + string(os.PathSeparator)
+	if strings.HasPrefix(cleaned, optPrefix) {
+		return model.ScopeAdmin
+	}
+
+	return model.ScopeUser
 }
 
 // formatValidationError formats a validation error for display with context

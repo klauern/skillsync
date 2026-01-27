@@ -67,6 +67,17 @@ func SkillsyncPluginsPath() string {
 	return filepath.Join(SkillsyncConfigPath(), "plugins")
 }
 
+// ClaudePluginCachePath returns the Claude Code plugin cache directory
+// This is where Claude Code stores installed plugins from marketplaces.
+func ClaudePluginCachePath() string {
+	return filepath.Join(HomeDir(), ".claude", "plugins", "cache")
+}
+
+// ClaudeInstalledPluginsPath returns the path to Claude Code's installed plugins manifest
+func ClaudeInstalledPluginsPath() string {
+	return filepath.Join(HomeDir(), ".claude", "plugins", "installed_plugins.json")
+}
+
 // GetRepoRoot attempts to find the root of the current git repository.
 // Returns empty string if not in a git repository.
 func GetRepoRoot(startDir string) string {

@@ -201,6 +201,7 @@ func DiscoverFiles(baseDir string, patterns []string) ([]string, error) {
 }
 
 // walkMatch performs recursive file matching for patterns containing **.
+// It follows symlinks to directories to support symlinked skill directories.
 func walkMatch(baseDir, pattern string) ([]string, error) {
 	var matches []string
 
@@ -213,11 +214,8 @@ func walkMatch(baseDir, pattern string) ([]string, error) {
 	// The suffix after ** (e.g., "/*.md" becomes "*.md")
 	suffix := strings.TrimPrefix(parts[1], "/")
 
-	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // Skip files we can't access
-		}
-
+	// Use a custom walker that follows symlinks
+	err := walkFollowSymlinks(baseDir, func(path string, info os.FileInfo) error {
 		// Skip directories
 		if info.IsDir() {
 			return nil
@@ -250,6 +248,55 @@ func walkMatch(baseDir, pattern string) ([]string, error) {
 	}
 
 	return matches, nil
+}
+
+// walkFollowSymlinks walks a directory tree, following symlinks to directories.
+// It detects and avoids cycles by tracking visited directories.
+func walkFollowSymlinks(root string, walkFn func(path string, info os.FileInfo) error) error {
+	visited := make(map[string]bool)
+	return walkFollowSymlinksImpl(root, visited, walkFn)
+}
+
+func walkFollowSymlinksImpl(path string, visited map[string]bool, walkFn func(path string, info os.FileInfo) error) error {
+	// Resolve symlinks to get the real path for cycle detection
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil // Skip paths we can't resolve
+	}
+
+	// Check for cycles
+	if visited[realPath] {
+		return nil
+	}
+	visited[realPath] = true
+
+	// Get info about the path (follows symlinks)
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil // Skip paths we can't stat
+	}
+
+	// Call the walk function
+	if err := walkFn(path, info); err != nil {
+		return err
+	}
+
+	// If it's a directory, recurse into it
+	if info.IsDir() {
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return nil // Skip directories we can't read
+		}
+
+		for _, entry := range entries {
+			childPath := filepath.Join(path, entry.Name())
+			if err := walkFollowSymlinksImpl(childPath, visited, walkFn); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // ValidateSkillName checks if a skill name is valid.

@@ -24,6 +24,8 @@ var (
 	Dim = color.New(color.Faint).SprintFunc()
 	// Header is used for table headers (bold cyan).
 	Header = color.New(color.FgCyan, color.Bold).SprintFunc()
+	// Magenta is used for development/special items (magenta).
+	Magenta = color.New(color.FgMagenta).SprintFunc()
 )
 
 // Status symbols with colors.

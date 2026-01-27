@@ -335,8 +335,8 @@ func TestSkillsToRows(t *testing.T) {
 	if row[1] != "claude-code" {
 		t.Errorf("expected platform 'claude-code', got '%s'", row[1])
 	}
-	if row[2] != "~/.claude" {
-		t.Errorf("expected scope '~/.claude', got '%s'", row[2])
+	if row[2] != "~/.claude/skills" {
+		t.Errorf("expected scope '~/.claude/skills', got '%s'", row[2])
 	}
 }
 

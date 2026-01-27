@@ -130,23 +130,23 @@ func TestSkillDisplayScope(t *testing.T) {
 	}{
 		"user scope claude": {
 			skill: Skill{Platform: ClaudeCode, Scope: ScopeUser},
-			want:  "~/.claude",
+			want:  "~/.claude/skills",
 		},
 		"user scope cursor": {
 			skill: Skill{Platform: Cursor, Scope: ScopeUser},
-			want:  "~/.cursor",
+			want:  "~/.cursor/skills",
 		},
 		"user scope codex": {
 			skill: Skill{Platform: Codex, Scope: ScopeUser},
-			want:  "~/.codex",
+			want:  "~/.codex/skills",
 		},
 		"repo scope claude": {
 			skill: Skill{Platform: ClaudeCode, Scope: ScopeRepo},
-			want:  ".claude",
+			want:  ".claude/skills",
 		},
 		"repo scope cursor": {
 			skill: Skill{Platform: Cursor, Scope: ScopeRepo},
-			want:  ".cursor",
+			want:  ".cursor/skills",
 		},
 		"plugin scope with name": {
 			skill: Skill{
@@ -187,6 +187,51 @@ func TestSkillDisplayScope(t *testing.T) {
 		"unknown scope": {
 			skill: Skill{Platform: ClaudeCode, Scope: "custom"},
 			want:  "custom",
+		},
+		"plugin info with installed plugin": {
+			skill: Skill{
+				Platform: ClaudeCode,
+				Scope:    ScopeUser,
+				PluginInfo: &PluginInfo{
+					PluginName:  "commits@klauern-skills",
+					Marketplace: "klauern-skills",
+					Version:     "1.1.0",
+					IsDev:       false,
+				},
+			},
+			want: "~/.claude/skills (plugin: commits@klauern-skills)",
+		},
+		"plugin info with dev symlink and marketplace": {
+			skill: Skill{
+				Platform: ClaudeCode,
+				Scope:    ScopeUser,
+				PluginInfo: &PluginInfo{
+					Marketplace: "klauern-skills",
+					IsDev:       true,
+				},
+			},
+			want: "~/.claude/skills (dev: klauern-skills)",
+		},
+		"plugin info with dev symlink no marketplace": {
+			skill: Skill{
+				Platform: ClaudeCode,
+				Scope:    ScopeUser,
+				PluginInfo: &PluginInfo{
+					IsDev: true,
+				},
+			},
+			want: "~/.claude/skills (dev)",
+		},
+		"plugin info with marketplace only": {
+			skill: Skill{
+				Platform: ClaudeCode,
+				Scope:    ScopeUser,
+				PluginInfo: &PluginInfo{
+					Marketplace: "klauern-skills",
+					IsDev:       false,
+				},
+			},
+			want: "~/.claude/skills (plugin: klauern-skills)",
 		},
 	}
 

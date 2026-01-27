@@ -16,7 +16,8 @@ import (
 
 // Parser implements the parser.Parser interface for Claude Code skills
 type Parser struct {
-	basePath string
+	basePath    string
+	pluginIndex *PluginIndex
 }
 
 // New creates a new Claude Code parser
@@ -27,7 +28,10 @@ func New(basePath string) *Parser {
 	if basePath == "" {
 		basePath = util.ClaudeCodeSkillsPath()
 	}
-	return &Parser{basePath: basePath}
+	return &Parser{
+		basePath:    basePath,
+		pluginIndex: LoadPluginIndex(),
+	}
 }
 
 // Parse parses Claude Code skills from markdown files with YAML frontmatter
@@ -59,6 +63,11 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		)
 	} else {
 		for _, skill := range agentSkills {
+			// Detect if this skill is from a plugin symlink
+			skillDir := filepath.Dir(skill.Path)
+			if pluginInfo := DetectPluginSource(skillDir, p.pluginIndex); pluginInfo != nil {
+				skill.PluginInfo = pluginInfo
+			}
 			seenNames[skill.Name] = true
 			allSkills = append(allSkills, skill)
 		}
@@ -109,6 +118,14 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			)
 			continue
 		}
+
+		// Detect if this skill is from a plugin symlink
+		// For legacy skills, check the skill directory (may be same as basePath)
+		skillDir := filepath.Dir(filePath)
+		if pluginInfo := DetectPluginSource(skillDir, p.pluginIndex); pluginInfo != nil {
+			skill.PluginInfo = pluginInfo
+		}
+
 		seenNames[skill.Name] = true
 		allSkills = append(allSkills, skill)
 	}
@@ -160,7 +177,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 		// Extract tools array
 		if toolsVal, ok := fm["tools"]; ok {
-			if toolsSlice, ok := toolsVal.([]interface{}); ok {
+			if toolsSlice, ok := toolsVal.([]any); ok {
 				tools = make([]string, 0, len(toolsSlice))
 				for _, tool := range toolsSlice {
 					if toolStr, ok := tool.(string); ok {
