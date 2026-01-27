@@ -30,6 +30,10 @@ type Options struct {
 	// TargetPath overrides the default target path.
 	TargetPath string
 
+	// TargetScope specifies the scope to write to (repo or user).
+	// Defaults to user scope if not specified.
+	TargetScope model.SkillScope
+
 	// SkipValidation skips pre-sync validation.
 	SkipValidation bool
 
@@ -400,7 +404,18 @@ func (s *Synchronizer) SyncWithSkills(
 		logging.Count(len(skills)),
 		slog.String(logging.KeyStrategy, string(opts.Strategy)),
 		slog.Bool("dry_run", opts.DryRun),
+		slog.String("target_scope", string(opts.TargetScope)),
 	)
+
+	if len(skills) == 0 {
+		logging.Debug("no skills provided to sync")
+		return &Result{
+			Target:   target,
+			Strategy: opts.Strategy,
+			DryRun:   opts.DryRun,
+			Skills:   make([]SkillResult, 0),
+		}, nil
+	}
 
 	result := &Result{
 		Source:   skills[0].Platform, // Assume all skills are from same platform
@@ -410,29 +425,33 @@ func (s *Synchronizer) SyncWithSkills(
 		Skills:   make([]SkillResult, 0),
 	}
 
-	if len(skills) == 0 {
-		logging.Debug("no skills provided to sync")
-		return result, nil
-	}
-
 	// Set default strategy
 	if result.Strategy == "" {
 		result.Strategy = StrategyOverwrite
 	}
 
-	// Get target path
+	// Get target path based on scope
 	targetPath := opts.TargetPath
 	if targetPath == "" {
 		var err error
-		targetPath, err = validation.GetPlatformPath(target)
+		if opts.TargetScope != "" {
+			targetPath, err = validation.GetPlatformPathForScope(target, opts.TargetScope)
+		} else {
+			targetPath, err = validation.GetPlatformPath(target)
+		}
 		if err != nil {
 			logging.Error("failed to get target path",
 				logging.Platform(string(target)),
+				slog.String("scope", string(opts.TargetScope)),
 				logging.Err(err),
 			)
 			return result, fmt.Errorf("failed to get target path: %w", err)
 		}
 	}
+	logging.Debug("determined target path",
+		logging.Path(targetPath),
+		slog.String("scope", string(opts.TargetScope)),
+	)
 
 	// Parse existing target skills
 	targetSkills, err := s.parseSkills(target, opts.TargetPath)

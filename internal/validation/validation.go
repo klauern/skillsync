@@ -506,3 +506,33 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}
 }
+
+// GetPlatformPathForScope returns the path for a platform and specific scope.
+// If scope is empty, defaults to user scope.
+// For user scope, it respects environment variable overrides (same as GetPlatformPath).
+func GetPlatformPathForScope(platform model.Platform, scope model.SkillScope) (string, error) {
+	// Default to user scope if not specified
+	if scope == "" {
+		scope = model.ScopeUser
+	}
+
+	switch scope {
+	case model.ScopeUser:
+		// For user scope, use GetPlatformPath which respects env var overrides
+		return GetPlatformPath(platform)
+	case model.ScopeRepo:
+		// Get repo root from current working directory
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("cannot get current directory: %w", err)
+		}
+		repoRoot := util.GetRepoRoot(cwd)
+		if repoRoot == "" {
+			// Not in a git repo, use current directory
+			repoRoot = cwd
+		}
+		return util.RepoSkillsPath(platform, repoRoot), nil
+	default:
+		return "", fmt.Errorf("unsupported target scope %q (only 'repo' or 'user' allowed)", scope)
+	}
+}
