@@ -433,6 +433,111 @@ func discoverSkillsInteractive(skills []model.Skill) error {
 	return nil
 }
 
+// syncSkillsInteractive runs the interactive TUI for sync skill selection
+func syncSkillsInteractive(cfg *syncConfig) error {
+	if len(cfg.sourceSkills) == 0 {
+		fmt.Println("No skills found to sync.")
+		return nil
+	}
+
+	// Parse existing target skills for diff preview
+	targetSkills, err := parsePlatformSkills(cfg.targetSpec.Platform)
+	if err != nil {
+		// Not fatal - target may not have any skills yet
+		targetSkills = []model.Skill{}
+	}
+
+	// Create a map of target skills by name for quick lookup
+	targetSkillMap := make(map[string]model.Skill)
+	for _, s := range targetSkills {
+		targetSkillMap[s.Name] = s
+	}
+
+	// Main TUI loop - allows navigating between list and diff preview
+	for {
+		result, err := tui.RunSyncList(cfg.sourceSkills, cfg.sourceSpec.Platform, cfg.targetSpec.Platform)
+		if err != nil {
+			return fmt.Errorf("TUI error: %w", err)
+		}
+
+		switch result.Action {
+		case tui.SyncActionNone:
+			// User quit without action
+			fmt.Println("Sync cancelled.")
+			return nil
+
+		case tui.SyncActionPreview:
+			// Show diff preview for selected skill
+			var targetSkill *model.Skill
+			if ts, exists := targetSkillMap[result.PreviewSkill.Name]; exists {
+				targetSkill = &ts
+			}
+
+			diffResult, err := tui.RunSyncDiff(result.PreviewSkill, targetSkill, cfg.sourceSpec.Platform, cfg.targetSpec.Platform)
+			if err != nil {
+				return fmt.Errorf("diff preview error: %w", err)
+			}
+
+			switch diffResult.Action {
+			case tui.DiffActionBack:
+				// Continue the loop to go back to the list
+				continue
+			case tui.DiffActionSync:
+				// Sync just this one skill
+				if err := executeSyncForSkills(cfg, []model.Skill{diffResult.Skill}); err != nil {
+					return err
+				}
+				return nil
+			case tui.DiffActionNone:
+				// User quit
+				fmt.Println("Sync cancelled.")
+				return nil
+			}
+
+		case tui.SyncActionSync:
+			// Sync selected skills
+			if len(result.SelectedSkills) == 0 {
+				fmt.Println("No skills selected.")
+				return nil
+			}
+
+			if err := executeSyncForSkills(cfg, result.SelectedSkills); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+}
+
+// executeSyncForSkills performs the actual sync operation for the given skills
+func executeSyncForSkills(cfg *syncConfig, skills []model.Skill) error {
+	// Create backup before sync
+	if !cfg.skipBackup {
+		prepareBackup(cfg.targetSpec.Platform)
+	}
+
+	// Create sync options and execute
+	opts := sync.Options{
+		DryRun:      cfg.dryRun,
+		Strategy:    cfg.strategy,
+		TargetScope: cfg.targetSpec.TargetScope(),
+	}
+
+	syncer := sync.New()
+	result, err := syncer.SyncWithSkills(skills, cfg.targetSpec.Platform, opts)
+	if err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	displaySyncResults(result)
+
+	if !result.Success() {
+		return errors.New("sync completed with errors")
+	}
+
+	return nil
+}
+
 // outputSkills formats and prints skills in the requested format
 func outputSkills(skills []model.Skill, format string) error {
 	switch format {
@@ -573,8 +678,14 @@ func syncCommand() *cli.Command {
      skillsync sync cursor:repo claudecode:user # Repo skills to user scope
      skillsync sync cursor:repo,user codex:repo # Multiple source scopes to repo
      skillsync sync --dry-run cursor codex      # Preview changes
-     skillsync sync --strategy=skip cursor codex`,
+     skillsync sync --strategy=skip cursor codex
+     skillsync sync --interactive cursor codex  # Interactive TUI mode`,
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "interactive",
+				Aliases: []string{"i"},
+				Usage:   "Interactive TUI mode with skill selection and diff preview",
+			},
 			&cli.BoolFlag{
 				Name:    "dry-run",
 				Aliases: []string{"d"},
@@ -606,6 +717,8 @@ func syncCommand() *cli.Command {
 				return err
 			}
 
+			interactive := cmd.Bool("interactive")
+
 			// Always parse source skills (use tiered parser for scope filtering)
 			if cfg.sourceSpec.HasScopes() {
 				// User specified scopes - use tiered parser for scope filtering
@@ -616,6 +729,11 @@ func syncCommand() *cli.Command {
 			}
 			if err != nil {
 				return fmt.Errorf("failed to parse source skills: %w", err)
+			}
+
+			// Interactive TUI mode
+			if interactive {
+				return syncSkillsInteractive(cfg)
 			}
 
 			// Validate source skills before sync (unless skipped)
