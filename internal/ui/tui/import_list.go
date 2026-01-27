@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/filepicker"
@@ -494,7 +495,13 @@ func (m *ImportListModel) loadSkillsFromPath(path string) error {
 	}
 
 	m.skills = parsedSkills
-	m.filtered = parsedSkills
+
+	// Sort skills alphabetically by name (case-insensitive)
+	sort.Slice(m.skills, func(i, j int) bool {
+		return strings.ToLower(m.skills[i].Name) < strings.ToLower(m.skills[j].Name)
+	})
+
+	m.filtered = m.skills
 
 	// Select all skills by default
 	for _, s := range m.skills {
