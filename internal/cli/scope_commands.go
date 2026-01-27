@@ -616,18 +616,18 @@ func runScopeListAll(cmd *cli.Command) error {
 		fmt.Printf("%s %s %s %s\n",
 			ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
 			ui.Header(fmt.Sprintf("%-8s", "SCOPE")),
-			ui.Header(fmt.Sprintf("%-25s", "NAME")),
+			ui.Header(fmt.Sprintf("%-30s", "NAME")),
 			ui.Header("PATH"))
-		fmt.Printf("%-12s %-8s %-25s %s\n", "--------", "-----", "----", "----")
+		fmt.Printf("%-12s %-8s %-30s %s\n", "--------", "-----", "----", "----")
 
 		for _, s := range allSkills {
 			name := s.Name
-			if len(name) > 25 {
-				name = name[:22] + "..."
+			if len(name) > 30 {
+				name = name[:27] + "..."
 			}
 			// Color platform names for visual distinction
 			platform := colorPlatform(string(s.Platform))
-			fmt.Printf("%s %-8s %-25s %s\n", platform, s.Scope, name, s.Path)
+			fmt.Printf("%s %-8s %-30s %s\n", platform, s.Scope, name, s.Path)
 		}
 		fmt.Printf("\nTotal: %d skill(s)\n", len(allSkills))
 	default:

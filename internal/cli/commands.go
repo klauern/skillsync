@@ -420,21 +420,21 @@ func outputTable(skills []model.Skill) error {
 	// Print colored headers
 	// SOURCE shows where skills come from: ~/.claude (user), .claude (repo), plugin:<name>
 	fmt.Printf("%s %s %s %s\n",
-		ui.Header(fmt.Sprintf("%-25s", "NAME")),
+		ui.Header(fmt.Sprintf("%-30s", "NAME")),
 		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
 		ui.Header(fmt.Sprintf("%-20s", "SOURCE")),
-		ui.Header(fmt.Sprintf("%-40s", "DESCRIPTION")))
-	fmt.Printf("%-25s %-12s %-20s %-40s\n", "----", "--------", "------", "-----------")
+		ui.Header(fmt.Sprintf("%-50s", "DESCRIPTION")))
+	fmt.Printf("%-30s %-12s %-20s %-50s\n", "----", "--------", "------", "-----------")
 
 	for _, skill := range skills {
 		name := skill.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
+		if len(name) > 30 {
+			name = name[:27] + "..."
 		}
 
 		desc := skill.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
+		if len(desc) > 50 {
+			desc = desc[:47] + "..."
 		}
 
 		// Color platform names for visual distinction
@@ -443,7 +443,7 @@ func outputTable(skills []model.Skill) error {
 		// Color source for visual distinction by scope type
 		source := colorSource(skill)
 
-		fmt.Printf("%-25s %s %s %-40s\n", name, platform, source, desc)
+		fmt.Printf("%-30s %s %s %-50s\n", name, platform, source, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
@@ -1754,16 +1754,16 @@ func outputBackupsTable(backups []backup.Metadata) error {
 	fmt.Printf("%s %s %s %s %s\n",
 		ui.Header(fmt.Sprintf("%-28s", "ID")),
 		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
-		ui.Header(fmt.Sprintf("%-35s", "SOURCE")),
+		ui.Header(fmt.Sprintf("%-45s", "SOURCE")),
 		ui.Header(fmt.Sprintf("%-20s", "CREATED")),
 		ui.Header("SIZE"))
-	fmt.Printf("%-28s %-12s %-35s %-20s %s\n", "--", "--------", "------", "-------", "----")
+	fmt.Printf("%-28s %-12s %-45s %-20s %s\n", "--", "--------", "------", "-------", "----")
 
 	for _, b := range backups {
-		// Truncate source path if too long
+		// Truncate source path if too long (use left-truncation to preserve the meaningful end)
 		source := b.SourcePath
-		if len(source) > 35 {
-			source = "..." + source[len(source)-32:]
+		if len(source) > 45 {
+			source = "..." + source[len(source)-42:]
 		}
 
 		// Format size
@@ -1775,7 +1775,7 @@ func outputBackupsTable(backups []backup.Metadata) error {
 		// Color platform names for visual distinction
 		platform := colorPlatform(string(b.Platform))
 
-		fmt.Printf("%-28s %s %-35s %-20s %s\n", b.ID, platform, source, created, size)
+		fmt.Printf("%-28s %s %-45s %-20s %s\n", b.ID, platform, source, created, size)
 	}
 
 	fmt.Printf("\nTotal: %d backup(s)\n", len(backups))

@@ -137,11 +137,11 @@ func TestStrategyDescription(t *testing.T) {
 			strategy Strategy
 			contains string
 		}{
-			"overwrite contains replace":   {strategy: StrategyOverwrite, contains: "Replace"},
-			"skip contains skip":           {strategy: StrategySkip, contains: "Skip"},
-			"newer contains newer":         {strategy: StrategyNewer, contains: "newer"},
-			"merge contains merge":         {strategy: StrategyMerge, contains: "Merge"},
-			"three-way contains merge":     {strategy: StrategyThreeWay, contains: "merge"},
+			"overwrite contains replace":    {strategy: StrategyOverwrite, contains: "Replace"},
+			"skip contains skip":            {strategy: StrategySkip, contains: "Skip"},
+			"newer contains newer":          {strategy: StrategyNewer, contains: "newer"},
+			"merge contains merge":          {strategy: StrategyMerge, contains: "Merge"},
+			"three-way contains merge":      {strategy: StrategyThreeWay, contains: "merge"},
 			"interactive contains conflict": {strategy: StrategyInteractive, contains: "conflict"},
 		}
 

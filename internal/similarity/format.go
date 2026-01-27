@@ -451,8 +451,8 @@ func FormatComparisonTable(w io.Writer, results []*ComparisonResult) error {
 		return err
 	}
 
-	// Column width for skill names with scope (e.g., "garden (plugin)")
-	const skillColWidth = 30
+	// Column width for skill names with scope (e.g., "garden (cc/plugin)")
+	const skillColWidth = 35
 
 	// Colored header
 	if _, err := fmt.Fprintf(w, "%s %s %s %s %s\n",
