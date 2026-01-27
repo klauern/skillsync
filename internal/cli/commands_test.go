@@ -124,7 +124,7 @@ func TestConfigInitCommand(t *testing.T) {
 					t.Fatalf("failed to create config dir: %v", err)
 				}
 				configPath := filepath.Join(configDir, "config.yaml")
-				if err := os.WriteFile(configPath, []byte("existing: config"), 0o644); err != nil {
+				if err := os.WriteFile(configPath, []byte("existing: config"), 0o600); err != nil {
 					t.Fatalf("failed to write existing config: %v", err)
 				}
 				return tempDir
@@ -142,7 +142,7 @@ func TestConfigInitCommand(t *testing.T) {
 					t.Fatalf("failed to create config dir: %v", err)
 				}
 				configPath := filepath.Join(configDir, "config.yaml")
-				if err := os.WriteFile(configPath, []byte("existing: config"), 0o644); err != nil {
+				if err := os.WriteFile(configPath, []byte("existing: config"), 0o600); err != nil {
 					t.Fatalf("failed to write existing config: %v", err)
 				}
 				return tempDir
@@ -904,7 +904,7 @@ func TestCheckWritePermission(t *testing.T) {
 			wantErr: false,
 		},
 		"non-existent path falls back to current dir": {
-			setup: func(t *testing.T) string {
+			setup: func(_ *testing.T) string {
 				return "/non/existent/path"
 			},
 			wantErr: false, // Falls back to "." which should be writable

@@ -1223,18 +1223,18 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 	switch platform {
 	case model.ClaudeCode:
 		rawPaths = cfg.Platforms.ClaudeCode.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.ClaudeCode.SkillsPath != "" {
-			rawPaths = []string{cfg.Platforms.ClaudeCode.SkillsPath}
+		if len(rawPaths) == 0 && cfg.Platforms.ClaudeCode.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.ClaudeCode.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
 	case model.Cursor:
 		rawPaths = cfg.Platforms.Cursor.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Cursor.SkillsPath != "" {
-			rawPaths = []string{cfg.Platforms.Cursor.SkillsPath}
+		if len(rawPaths) == 0 && cfg.Platforms.Cursor.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.Cursor.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
 	case model.Codex:
 		rawPaths = cfg.Platforms.Codex.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" {
-			rawPaths = []string{cfg.Platforms.Codex.SkillsPath}
+		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
 	default:
 		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
