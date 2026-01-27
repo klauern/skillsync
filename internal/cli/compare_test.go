@@ -323,3 +323,91 @@ type configError struct {
 func (e *configError) Error() string {
 	return e.msg
 }
+
+func TestFindSimilarSkillsSamePlatformFilter(t *testing.T) {
+	// Create test skills - two from same platform, one from different
+	skills := []model.Skill{
+		{
+			Name:     "commit",
+			Platform: model.ClaudeCode,
+			Scope:    model.ScopeUser,
+			Content:  "Create a commit with conventional format",
+		},
+		{
+			Name:     "commit-push",
+			Platform: model.ClaudeCode,
+			Scope:    model.ScopeUser,
+			Content:  "Create a commit with conventional format and push",
+		},
+		{
+			Name:     "commit",
+			Platform: model.Cursor,
+			Scope:    model.ScopeUser,
+			Content:  "Create a commit with conventional format",
+		},
+	}
+
+	tests := []struct {
+		name         string
+		samePlatform bool
+		wantMinPairs int // minimum expected pairs (depends on similarity thresholds)
+		wantAllSame  bool
+	}{
+		{
+			name:         "without same-platform filter includes cross-platform",
+			samePlatform: false,
+			wantMinPairs: 1,
+			wantAllSame:  false,
+		},
+		{
+			name:         "with same-platform filter only same platform",
+			samePlatform: true,
+			wantMinPairs: 0, // might be 0 if no same-platform pairs meet threshold
+			wantAllSame:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &compareConfig{
+				nameThreshold:    0.5, // Lower threshold to find more matches
+				contentThreshold: 0.5,
+				samePlatform:     tt.samePlatform,
+			}
+
+			results, err := findSimilarSkills(skills, cfg)
+			if err != nil {
+				t.Fatalf("findSimilarSkills() error = %v", err)
+			}
+
+			if len(results) < tt.wantMinPairs {
+				t.Errorf("findSimilarSkills() got %d pairs, want at least %d", len(results), tt.wantMinPairs)
+			}
+
+			if tt.wantAllSame {
+				for _, r := range results {
+					if r.Skill1.Platform != r.Skill2.Platform {
+						t.Errorf("findSimilarSkills() with samePlatform=true returned cross-platform pair: %s (%s) vs %s (%s)",
+							r.Skill1.Name, r.Skill1.Platform,
+							r.Skill2.Name, r.Skill2.Platform)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSamePlatformConfigParsing(t *testing.T) {
+	// Test that samePlatform is correctly included in config
+	cfg := &compareConfig{
+		nameThreshold:    0.7,
+		contentThreshold: 0.6,
+		format:           "table",
+		samePlatform:     true,
+	}
+
+	err := validateCompareConfig(cfg)
+	if err != nil {
+		t.Errorf("validateCompareConfig() should accept samePlatform=true, got error: %v", err)
+	}
+}

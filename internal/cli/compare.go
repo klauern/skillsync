@@ -26,6 +26,7 @@ func compareCommand() *cli.Command {
    skillsync compare --name-threshold 0.8
    skillsync compare --content-threshold 0.7
    skillsync compare --platform claude-code
+   skillsync compare --same-platform
    skillsync compare --format json`,
 		Description: `Find skills that may be duplicates or variations based on name or content similarity.
 
@@ -34,6 +35,7 @@ func compareCommand() *cli.Command {
    - Duplicate skills that may need cleanup
    - Skills that have diverged across platforms
    - Potential candidates for consolidation
+   - Redundant skills within a single platform (use --same-platform)
 
    Similarity matching:
    - Name similarity: Compares skill names using Levenshtein and Jaro-Winkler algorithms
@@ -83,6 +85,11 @@ func compareCommand() *cli.Command {
 				Value: "", // empty means "use config value"
 				Usage: "Similarity algorithm: combined, levenshtein, jaro-winkler (for names) or combined, lcs, jaccard (for content, default from config: combined)",
 			},
+			&cli.BoolFlag{
+				Name:    "same-platform",
+				Aliases: []string{"s"},
+				Usage:   "Only show similar skills within the same platform (helps find redundant skills)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			return runCompare(cmd)
@@ -99,6 +106,7 @@ type compareConfig struct {
 	nameOnly         bool
 	contentOnly      bool
 	algorithm        string
+	samePlatform     bool
 }
 
 func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
@@ -117,6 +125,7 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 		nameOnly:         cmd.Bool("name-only"),
 		contentOnly:      cmd.Bool("content-only"),
 		algorithm:        cmd.String("algorithm"),
+		samePlatform:     cmd.Bool("same-platform"),
 	}
 
 	// Apply config defaults for unset values
@@ -292,6 +301,17 @@ func findSimilarSkills(skills []model.Skill, cfg *compareConfig) ([]*similarity.
 			result := similarity.ComputeDiff(match.Skill1, match.Skill2, nameScore, match.Score)
 			results = append(results, result)
 		}
+	}
+
+	// Filter to same-platform pairs if requested
+	if cfg.samePlatform {
+		filtered := make([]*similarity.ComparisonResult, 0, len(results))
+		for _, result := range results {
+			if result.Skill1.Platform == result.Skill2.Platform {
+				filtered = append(filtered, result)
+			}
+		}
+		results = filtered
 	}
 
 	return results, nil
