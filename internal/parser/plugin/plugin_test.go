@@ -490,6 +490,14 @@ func TestDeriveRepoName(t *testing.T) {
 			url:  "skills",
 			want: "skills",
 		},
+		"empty string returns empty": {
+			url:  "",
+			want: "",
+		},
+		"ssh URL with only colon returns empty": {
+			url:  "git@github.com:",
+			want: "",
+		},
 	}
 
 	for name, tt := range tests {
@@ -499,5 +507,379 @@ func TestDeriveRepoName(t *testing.T) {
 				t.Errorf("deriveRepoName(%q) = %q, want %q", tt.url, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParser_ensureRepo_EmptyRepoURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	p := New(tmpDir)
+
+	// With empty repoURL, ensureRepo should return basePath
+	repoPath, err := p.ensureRepo()
+	if err != nil {
+		t.Fatalf("ensureRepo() error = %v", err)
+	}
+	if repoPath != tmpDir {
+		t.Errorf("ensureRepo() = %q, want %q", repoPath, tmpDir)
+	}
+}
+
+func TestParser_ensureRepo_ExistingRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a parser with a repoURL - use tmpDir as basePath
+	p := &Parser{
+		basePath: tmpDir,
+		repoURL:  "https://github.com/klauern/skills",
+	}
+
+	// Pre-create the repo directory with a .git folder to simulate an existing clone
+	repoPath := filepath.Join(tmpDir, "klauern-skills")
+	gitDir := filepath.Join(repoPath, ".git")
+	testMkdirAll(t, gitDir)
+
+	// Create a dummy file in .git to make it look like a real repo
+	testWriteFile(t, filepath.Join(gitDir, "config"), []byte("[core]\n"))
+
+	// ensureRepo should return the existing path (gitPull will fail but that's ok)
+	gotPath, err := p.ensureRepo()
+	if err != nil {
+		t.Fatalf("ensureRepo() error = %v", err)
+	}
+	if gotPath != repoPath {
+		t.Errorf("ensureRepo() = %q, want %q", gotPath, repoPath)
+	}
+}
+
+func TestParser_ensureRepo_CreatesDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	nonExistentBase := filepath.Join(tmpDir, "new-plugins-dir")
+
+	p := &Parser{
+		basePath: nonExistentBase,
+		repoURL:  "https://example.com/repo",
+	}
+
+	// The directory should be created even if clone fails
+	_, _ = p.ensureRepo()
+
+	// Verify the base directory was created
+	info, err := os.Stat(nonExistentBase)
+	if err != nil {
+		t.Fatalf("expected base directory to exist, got error: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("expected base path to be a directory")
+	}
+}
+
+func TestParser_Parse_WithRepoURL_ExistingRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a parser with repoURL pointing to a pre-existing "cloned" repo
+	p := &Parser{
+		basePath: tmpDir,
+		repoURL:  "https://github.com/klauern/test-skills",
+	}
+
+	// Pre-create the repo directory structure with valid plugin content
+	repoPath := filepath.Join(tmpDir, "klauern-test-skills")
+	gitDir := filepath.Join(repoPath, ".git")
+	testMkdirAll(t, gitDir)
+	testWriteFile(t, filepath.Join(gitDir, "config"), []byte("[core]\n"))
+
+	// Create a plugin with skill
+	pluginDir := filepath.Join(repoPath, "my-plugin")
+	pluginManifestDir := filepath.Join(pluginDir, ".claude-plugin")
+	testMkdirAll(t, pluginManifestDir)
+
+	pluginManifest := Manifest{Name: "my-plugin", Version: "1.0.0"}
+	pluginData, _ := json.Marshal(pluginManifest)
+	testWriteFile(t, filepath.Join(pluginManifestDir, "plugin.json"), pluginData)
+
+	skillDir := filepath.Join(pluginDir, "test-skill")
+	testMkdirAll(t, skillDir)
+	testWriteFile(t, filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: test-skill\n---\nContent"))
+
+	// Parse should work with the pre-existing repo
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Errorf("Parse() returned %d skills, want 1", len(skills))
+	}
+}
+
+func TestParser_parseMarketplace_MalformedJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create marketplace.json with invalid JSON
+	marketplaceDir := filepath.Join(tmpDir, ".claude-plugin")
+	testMkdirAll(t, marketplaceDir)
+	testWriteFile(t, filepath.Join(marketplaceDir, "marketplace.json"), []byte("{invalid json"))
+
+	p := New(tmpDir)
+	skills, err := p.parseMarketplace(tmpDir)
+
+	// Should return error for malformed JSON
+	if err == nil {
+		t.Error("parseMarketplace() expected error for malformed JSON, got nil")
+	}
+	if len(skills) != 0 {
+		t.Errorf("parseMarketplace() returned %d skills, want 0", len(skills))
+	}
+}
+
+func TestParser_parseMarketplace_PluginParsingFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create valid marketplace.json with a plugin reference
+	marketplace := MarketplaceManifest{
+		Name: "test-repo",
+		Plugins: []Ref{
+			{Name: "good-plugin", Source: "./plugins/good-plugin"},
+			{Name: "bad-plugin", Source: "./plugins/nonexistent-plugin"},
+		},
+	}
+
+	marketplaceDir := filepath.Join(tmpDir, ".claude-plugin")
+	testMkdirAll(t, marketplaceDir)
+	marketplaceData, _ := json.Marshal(marketplace)
+	testWriteFile(t, filepath.Join(marketplaceDir, "marketplace.json"), marketplaceData)
+
+	// Create only the good plugin
+	goodPluginDir := filepath.Join(tmpDir, "plugins", "good-plugin")
+	skillDir := filepath.Join(goodPluginDir, "skill")
+	testMkdirAll(t, skillDir)
+	testWriteFile(t, filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: good-skill\n---\nContent"))
+
+	p := New(tmpDir)
+	skills, err := p.parseMarketplace(tmpDir)
+
+	// Should not error - failed plugins are logged and skipped
+	if err != nil {
+		t.Fatalf("parseMarketplace() error = %v", err)
+	}
+
+	// Should have parsed the good plugin's skill
+	if len(skills) != 1 {
+		t.Errorf("parseMarketplace() returned %d skills, want 1", len(skills))
+	}
+	if len(skills) > 0 && skills[0].Name != "good-skill" {
+		t.Errorf("skill.Name = %q, want %q", skills[0].Name, "good-skill")
+	}
+}
+
+func TestParser_parsePlugin_NoSkillFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create plugin directory with manifest but no SKILL.md files
+	pluginDir := filepath.Join(tmpDir, "empty-plugin")
+	manifestDir := filepath.Join(pluginDir, ".claude-plugin")
+	testMkdirAll(t, manifestDir)
+
+	manifest := Manifest{Name: "empty-plugin", Version: "1.0.0"}
+	manifestData, _ := json.Marshal(manifest)
+	testWriteFile(t, filepath.Join(manifestDir, "plugin.json"), manifestData)
+
+	p := New(tmpDir)
+	skills, err := p.parsePlugin(pluginDir, "test-repo")
+
+	// Should succeed but return no skills
+	if err != nil {
+		t.Fatalf("parsePlugin() error = %v", err)
+	}
+	if len(skills) != 0 {
+		t.Errorf("parsePlugin() returned %d skills, want 0", len(skills))
+	}
+}
+
+func TestParser_parsePlugin_InvalidSkillFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create plugin with mix of valid and invalid skill files
+	pluginDir := filepath.Join(tmpDir, "mixed-plugin")
+
+	// Good skill
+	goodSkillDir := filepath.Join(pluginDir, "good-skill")
+	testMkdirAll(t, goodSkillDir)
+	testWriteFile(t, filepath.Join(goodSkillDir, "SKILL.md"), []byte("---\nname: good-skill\n---\nContent"))
+
+	// Bad skill (invalid name with spaces)
+	badSkillDir := filepath.Join(pluginDir, "bad-skill")
+	testMkdirAll(t, badSkillDir)
+	testWriteFile(t, filepath.Join(badSkillDir, "SKILL.md"), []byte("---\nname: invalid name with spaces\n---\nContent"))
+
+	p := New(tmpDir)
+	skills, err := p.parsePlugin(pluginDir, "test-repo")
+
+	// Should succeed - invalid skills are logged and skipped
+	if err != nil {
+		t.Fatalf("parsePlugin() error = %v", err)
+	}
+
+	// Should have parsed only the good skill
+	if len(skills) != 1 {
+		t.Errorf("parsePlugin() returned %d skills, want 1", len(skills))
+	}
+	if len(skills) > 0 && skills[0].Name != "good-skill" {
+		t.Errorf("skill.Name = %q, want %q", skills[0].Name, "good-skill")
+	}
+}
+
+func TestParser_parseSkillFile_WithPartialManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "partial-skill")
+	testMkdirAll(t, skillDir)
+
+	skillContent := `---
+name: partial-skill
+---
+Content`
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	testWriteFile(t, skillPath, []byte(skillContent))
+
+	// Test with partial plugin manifest (only name, no version or author)
+	pluginManifest := &Manifest{
+		Name: "partial-plugin",
+	}
+
+	p := New(tmpDir)
+	skill, err := p.parseSkillFile(skillPath, pluginManifest, "")
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	// Check that plugin name is set
+	if skill.Metadata["plugin"] != "partial-plugin" {
+		t.Errorf("Metadata[plugin] = %q, want %q", skill.Metadata["plugin"], "partial-plugin")
+	}
+
+	// Version should not be set (empty string not stored)
+	if v, ok := skill.Metadata["plugin_version"]; ok && v != "" {
+		t.Errorf("Metadata[plugin_version] should be empty, got %q", v)
+	}
+
+	// Author should not be set
+	if a, ok := skill.Metadata["author"]; ok && a != "" {
+		t.Errorf("Metadata[author] should be empty, got %q", a)
+	}
+
+	// Repository should not be set (empty string passed)
+	if r, ok := skill.Metadata["repository"]; ok && r != "" {
+		t.Errorf("Metadata[repository] should be empty, got %q", r)
+	}
+}
+
+func TestParser_scanForPlugins_NestedPlugins(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create nested plugin structure
+	// tmpDir/
+	//   level1/
+	//     level2/
+	//       my-plugin/
+	//         .claude-plugin/plugin.json
+	//         skill/SKILL.md
+	nestedPluginDir := filepath.Join(tmpDir, "level1", "level2", "my-plugin")
+	manifestDir := filepath.Join(nestedPluginDir, ".claude-plugin")
+	testMkdirAll(t, manifestDir)
+
+	manifest := Manifest{Name: "nested-plugin", Version: "1.0.0"}
+	manifestData, _ := json.Marshal(manifest)
+	testWriteFile(t, filepath.Join(manifestDir, "plugin.json"), manifestData)
+
+	skillDir := filepath.Join(nestedPluginDir, "skill")
+	testMkdirAll(t, skillDir)
+	testWriteFile(t, filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: nested-skill\n---\nContent"))
+
+	p := New(tmpDir)
+	skills, err := p.scanForPlugins(tmpDir)
+
+	if err != nil {
+		t.Fatalf("scanForPlugins() error = %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Errorf("scanForPlugins() returned %d skills, want 1", len(skills))
+	}
+
+	if len(skills) > 0 && skills[0].Name != "nested-skill" {
+		t.Errorf("skill.Name = %q, want %q", skills[0].Name, "nested-skill")
+	}
+}
+
+func TestParser_scanForPlugins_MultiplePlugins(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create multiple plugins at different locations
+	for _, pluginName := range []string{"plugin-a", "plugin-b", "subdir/plugin-c"} {
+		pluginDir := filepath.Join(tmpDir, pluginName)
+		manifestDir := filepath.Join(pluginDir, ".claude-plugin")
+		testMkdirAll(t, manifestDir)
+
+		manifest := Manifest{Name: pluginName, Version: "1.0.0"}
+		manifestData, _ := json.Marshal(manifest)
+		testWriteFile(t, filepath.Join(manifestDir, "plugin.json"), manifestData)
+
+		skillDir := filepath.Join(pluginDir, "skill")
+		testMkdirAll(t, skillDir)
+		testWriteFile(t, filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: "+pluginName+"-skill\n---\nContent"))
+	}
+
+	p := New(tmpDir)
+	skills, err := p.scanForPlugins(tmpDir)
+
+	if err != nil {
+		t.Fatalf("scanForPlugins() error = %v", err)
+	}
+
+	if len(skills) != 3 {
+		t.Errorf("scanForPlugins() returned %d skills, want 3", len(skills))
+	}
+}
+
+func TestParser_Parse_FallbackToScanWhenMarketplaceEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create marketplace.json with empty plugins array
+	marketplace := MarketplaceManifest{
+		Name:    "empty-marketplace",
+		Plugins: []Ref{},
+	}
+
+	marketplaceDir := filepath.Join(tmpDir, ".claude-plugin")
+	testMkdirAll(t, marketplaceDir)
+	marketplaceData, _ := json.Marshal(marketplace)
+	testWriteFile(t, filepath.Join(marketplaceDir, "marketplace.json"), marketplaceData)
+
+	// Also create a plugin that would be found by scanning
+	pluginDir := filepath.Join(tmpDir, "scannable-plugin")
+	manifestDir := filepath.Join(pluginDir, ".claude-plugin")
+	testMkdirAll(t, manifestDir)
+
+	manifest := Manifest{Name: "scannable-plugin", Version: "1.0.0"}
+	manifestData, _ := json.Marshal(manifest)
+	testWriteFile(t, filepath.Join(manifestDir, "plugin.json"), manifestData)
+
+	skillDir := filepath.Join(pluginDir, "skill")
+	testMkdirAll(t, skillDir)
+	testWriteFile(t, filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: scanned-skill\n---\nContent"))
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	// Should fall back to scanning since marketplace returned 0 skills
+	if len(skills) != 1 {
+		t.Errorf("Parse() returned %d skills, want 1", len(skills))
+	}
+
+	if len(skills) > 0 && skills[0].Name != "scanned-skill" {
+		t.Errorf("skill.Name = %q, want %q", skills[0].Name, "scanned-skill")
 	}
 }
