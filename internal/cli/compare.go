@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
@@ -192,6 +193,11 @@ func runCompare(cmd *cli.Command) error {
 		fmt.Println("No similar skills found matching the criteria.")
 		return nil
 	}
+
+	// Sort by content similarity descending (highest similarity first)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].ContentScore > results[j].ContentScore
+	})
 
 	// Output results
 	return outputCompareResults(results, cfg.format)
