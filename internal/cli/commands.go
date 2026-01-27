@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/backup"
@@ -355,7 +356,10 @@ func discoveryCommand() *cli.Command {
 	}
 }
 
-// discoverPluginSkills discovers skills from Claude Code plugins with optional caching
+// discoverPluginSkills discovers skills from Claude Code plugins with optional caching.
+// It discovers skills from:
+// 1. ~/.skillsync/plugins/ - cloned plugin repositories
+// 2. ~/.claude/plugins/cache/ - installed Claude Code plugins
 func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) {
 	var pluginParser *plugin.Parser
 
@@ -378,10 +382,19 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 		}
 	}
 
-	// Parse plugins
+	// Parse plugins from ~/.skillsync/plugins/
 	skills, err := pluginParser.Parse()
 	if err != nil {
 		return nil, err
+	}
+
+	// Also discover skills from Claude plugin cache (~/.claude/plugins/cache/)
+	// Only do this for local discovery (not when fetching from a specific repo)
+	if repoURL == "" {
+		cacheSkills, err := discoverClaudePluginCacheSkills(skills)
+		if err == nil {
+			skills = append(skills, cacheSkills...)
+		}
 	}
 
 	// Cache the results for local plugins
@@ -396,6 +409,48 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 	}
 
 	return skills, nil
+}
+
+// discoverClaudePluginCacheSkills discovers skills from installed Claude Code plugins.
+// It deduplicates against existingSkills to avoid showing the same skill twice
+// (e.g., when a skill exists both as a dev symlink and in the cache).
+func discoverClaudePluginCacheSkills(existingSkills []model.Skill) ([]model.Skill, error) {
+	cacheParser := claude.NewCachePluginsParser("")
+	cacheSkills, err := cacheParser.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a deduplication index from existing skills
+	// Key: skill name + marketplace (to handle same skill in different marketplaces)
+	seen := make(map[string]bool)
+	for _, s := range existingSkills {
+		key := s.Name
+		if s.PluginInfo != nil && s.PluginInfo.Marketplace != "" {
+			key = s.Name + "@" + s.PluginInfo.Marketplace
+		} else if marketplace, ok := s.Metadata["marketplace"]; ok {
+			key = s.Name + "@" + marketplace
+		}
+		seen[key] = true
+	}
+
+	// Filter out duplicates from cache skills
+	var uniqueSkills []model.Skill
+	for _, s := range cacheSkills {
+		key := s.Name
+		if s.PluginInfo != nil && s.PluginInfo.Marketplace != "" {
+			key = s.Name + "@" + s.PluginInfo.Marketplace
+		} else if marketplace, ok := s.Metadata["marketplace"]; ok {
+			key = s.Name + "@" + marketplace
+		}
+
+		if !seen[key] {
+			seen[key] = true
+			uniqueSkills = append(uniqueSkills, s)
+		}
+	}
+
+	return uniqueSkills, nil
 }
 
 // discoverSkillsInteractive runs the interactive TUI for skill discovery
@@ -571,6 +626,73 @@ func outputYAML(skills []model.Skill) error {
 	return nil
 }
 
+// columnWidths holds the calculated widths for each table column
+type columnWidths struct {
+	name     int
+	platform int
+	source   int
+	desc     int
+}
+
+// getTerminalWidth returns the current terminal width, or a default of 120 if unavailable
+func getTerminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		return 120 // sensible default for non-TTY or error cases
+	}
+	return width
+}
+
+// clamp restricts a value to the range [min, max]
+func clamp(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
+}
+
+// calculateColumnWidths determines optimal column widths based on content and terminal size
+func calculateColumnWidths(skills []model.Skill, termWidth int) columnWidths {
+	// Find max content width for each column
+	maxName, maxSource, maxDesc := 0, 0, 0
+	for _, s := range skills {
+		if len(s.Name) > maxName {
+			maxName = len(s.Name)
+		}
+		if len(s.DisplayScope()) > maxSource {
+			maxSource = len(s.DisplayScope())
+		}
+		if len(s.Description) > maxDesc {
+			maxDesc = len(s.Description)
+		}
+	}
+
+	// Platform is fixed at 12 (claude-code is longest at 10)
+	platform := 12
+
+	// Set bounds for name and source
+	name := clamp(maxName, 15, 35)
+	source := clamp(maxSource, 20, 60)
+
+	// Allocate remaining space to description (minimum 20)
+	// 6 accounts for spacing between columns (2 spaces each gap × 3 gaps)
+	used := name + platform + source + 6
+	desc := termWidth - used
+	if desc < 20 {
+		desc = 20
+	}
+
+	return columnWidths{
+		name:     name,
+		platform: platform,
+		source:   source,
+		desc:     desc,
+	}
+}
+
 // outputTable prints skills in a table format with colored output
 func outputTable(skills []model.Skill) error {
 	if len(skills) == 0 {
@@ -583,34 +705,49 @@ func outputTable(skills []model.Skill) error {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
 
+	// Calculate dynamic column widths based on content and terminal size
+	termWidth := getTerminalWidth()
+	widths := calculateColumnWidths(skills, termWidth)
+
 	// Print colored headers
 	// SOURCE shows where skills come from: ~/.claude/skills (user), .claude/skills (repo),
 	// or with plugin info: ~/.claude/skills (plugin: name@marketplace)
 	fmt.Printf("%s %s %s %s\n",
-		ui.Header(fmt.Sprintf("%-30s", "NAME")),
-		ui.Header(fmt.Sprintf("%-12s", "PLATFORM")),
-		ui.Header(fmt.Sprintf("%-40s", "SOURCE")),
-		ui.Header(fmt.Sprintf("%-40s", "DESCRIPTION")))
-	fmt.Printf("%-30s %-12s %-40s %-40s\n", "----", "--------", "------", "-----------")
+		ui.Header(fmt.Sprintf("%-*s", widths.name, "NAME")),
+		ui.Header(fmt.Sprintf("%-*s", widths.platform, "PLATFORM")),
+		ui.Header(fmt.Sprintf("%-*s", widths.source, "SOURCE")),
+		ui.Header(fmt.Sprintf("%-*s", widths.desc, "DESCRIPTION")))
+	fmt.Printf("%-*s %-*s %-*s %-*s\n",
+		widths.name, "----",
+		widths.platform, "--------",
+		widths.source, "------",
+		widths.desc, "-----------")
 
 	for _, skill := range skills {
 		name := skill.Name
-		if len(name) > 30 {
-			name = name[:27] + "..."
+		if len(name) > widths.name {
+			name = name[:widths.name-3] + "..."
 		}
 
-		desc := skill.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
+		// Sanitize description: replace newlines with spaces for table display
+		desc := strings.ReplaceAll(skill.Description, "\n", " ")
+		desc = strings.ReplaceAll(desc, "\r", "")
+		// Collapse multiple spaces
+		for strings.Contains(desc, "  ") {
+			desc = strings.ReplaceAll(desc, "  ", " ")
+		}
+		desc = strings.TrimSpace(desc)
+		if len(desc) > widths.desc {
+			desc = desc[:widths.desc-3] + "..."
 		}
 
 		// Color platform names for visual distinction
-		platform := colorPlatform(string(skill.Platform))
+		platform := colorPlatform(string(skill.Platform), widths.platform)
 
 		// Color source for visual distinction by scope type
-		source := colorSource(skill)
+		source := colorSource(skill, widths.source)
 
-		fmt.Printf("%-30s %s %s %-40s\n", name, platform, source, desc)
+		fmt.Printf("%-*s %s %s %-*s\n", widths.name, name, platform, source, widths.desc, desc)
 	}
 
 	fmt.Printf("\nTotal: %d skill(s)\n", len(skills))
@@ -618,9 +755,9 @@ func outputTable(skills []model.Skill) error {
 }
 
 // colorPlatform returns a colored platform name for visual distinction
-func colorPlatform(platform string) string {
+func colorPlatform(platform string, width int) string {
 	// Use consistent width formatting with colors
-	formatted := fmt.Sprintf("%-12s", platform)
+	formatted := fmt.Sprintf("%-*s", width, platform)
 	switch platform {
 	case "claudecode":
 		return ui.Info(formatted)
@@ -640,12 +777,12 @@ func colorPlatform(platform string) string {
 //   - plugin (installed) = yellow
 //   - plugin (dev symlink) = magenta
 //   - system/admin/builtin = dim
-func colorSource(skill model.Skill) string {
+func colorSource(skill model.Skill, width int) string {
 	source := skill.DisplayScope()
-	if len(source) > 40 {
-		source = source[:37] + "..."
+	if len(source) > width {
+		source = source[:width-3] + "..."
 	}
-	formatted := fmt.Sprintf("%-40s", source)
+	formatted := fmt.Sprintf("%-*s", width, source)
 
 	// Check for plugin symlinks first (more specific than scope)
 	if skill.PluginInfo != nil {
@@ -2138,7 +2275,7 @@ func outputBackupsTable(backups []backup.Metadata) error {
 		created := b.CreatedAt.Format("2006-01-02 15:04:05")
 
 		// Color platform names for visual distinction
-		platform := colorPlatform(string(b.Platform))
+		platform := colorPlatform(string(b.Platform), 12)
 
 		fmt.Printf("%-28s %s %-45s %-20s %s\n", b.ID, platform, source, created, size)
 	}
@@ -2296,8 +2433,78 @@ func runBackupsTUI() error {
 
 // runSyncTUI runs the sync TUI view.
 func runSyncTUI() error {
-	ui.Warning("Sync TUI requires source and target platforms")
-	ui.Info("Use 'skillsync sync --interactive <source> <target>' for now")
+	// Step 1: Pick source and target platforms
+	pickerResult, err := tui.RunPlatformPicker()
+	if err != nil {
+		return fmt.Errorf("platform picker error: %w", err)
+	}
+
+	if pickerResult.Action == tui.PlatformPickerActionNone {
+		return nil // User cancelled
+	}
+
+	sourcePlatform := pickerResult.Source
+	targetPlatform := pickerResult.Target
+
+	// Step 2: Parse skills from the source platform
+	sourceSkills, err := parsePlatformSkillsWithScope(sourcePlatform, nil)
+	if err != nil {
+		return fmt.Errorf("failed to parse source skills: %w", err)
+	}
+
+	if len(sourceSkills) == 0 {
+		ui.Info(fmt.Sprintf("No skills found in %s", sourcePlatform))
+		return nil
+	}
+
+	// Step 3: Run the sync list TUI to select skills
+	syncResult, err := tui.RunSyncList(sourceSkills, sourcePlatform, targetPlatform)
+	if err != nil {
+		return fmt.Errorf("sync list error: %w", err)
+	}
+
+	if syncResult.Action == tui.SyncActionNone {
+		return nil // User cancelled
+	}
+
+	if syncResult.Action == tui.SyncActionPreview {
+		// Show preview for the selected skill
+		skill := syncResult.PreviewSkill
+		ui.Info(fmt.Sprintf("Preview: %s", skill.Name))
+		fmt.Println()
+		fmt.Println(skill.Content)
+		return nil
+	}
+
+	// Step 4: Perform the sync for selected skills
+	if len(syncResult.SelectedSkills) == 0 {
+		ui.Info("No skills selected for sync")
+		return nil
+	}
+
+	// Create backup before sync
+	prepareBackup(targetPlatform)
+
+	// Perform sync
+	syncer := sync.New()
+	opts := sync.Options{
+		Strategy: sync.StrategyOverwrite,
+	}
+	result, err := syncer.SyncWithSkills(syncResult.SelectedSkills, targetPlatform, opts)
+	if err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	// Display results
+	changed := result.TotalChanged()
+	ui.Success(fmt.Sprintf("Synced %d skills from %s to %s", changed, sourcePlatform, targetPlatform))
+	if len(result.Skipped()) > 0 {
+		ui.Info(fmt.Sprintf("Skipped %d skills (already up to date)", len(result.Skipped())))
+	}
+	if result.HasConflicts() {
+		ui.Warning(fmt.Sprintf("%d conflicts detected - use 'Resolve Conflicts' to handle them", len(result.Conflicts())))
+	}
+
 	return nil
 }
 
@@ -2588,16 +2795,115 @@ func runScopeTUI() error {
 }
 
 // runConflictsTUI runs the conflict resolution TUI view.
+// This scans for potential conflicts across platforms and shows them for resolution.
 func runConflictsTUI() error {
-	// For now, show a message that this view is accessible through sync operations
-	// In a full implementation, this would show pending conflicts from a sync session
-	ui.Info("Conflict resolution is available during sync operations")
-	ui.Info("Use 'skillsync sync --strategy interactive' to resolve conflicts during sync")
+	// Discover skills from all platforms to find potential conflicts
+	platformSkills := make(map[model.Platform][]model.Skill)
+	for _, p := range model.AllPlatforms() {
+		skills, err := parsePlatformSkillsWithScope(p, nil)
+		if err != nil {
+			continue
+		}
+		if len(skills) > 0 {
+			platformSkills[p] = skills
+		}
+	}
 
-	// Create a demo conflict for testing the UI (can be removed in production)
-	// This allows testing the TUI without an active sync session
-	ui.Info("")
-	ui.Info("To test the conflict resolution UI, run a sync with the interactive strategy")
+	// Need at least 2 platforms with skills to have potential conflicts
+	if len(platformSkills) < 2 {
+		ui.Info("Not enough platforms with skills to check for conflicts")
+		ui.Info("Skills need to exist on at least 2 platforms to detect conflicts")
+		return nil
+	}
+
+	// Find skills that exist on multiple platforms with different content
+	detector := sync.NewConflictDetector()
+	var conflicts []*sync.Conflict
+
+	// Build map of skill name -> skills across platforms
+	skillMap := make(map[string][]model.Skill)
+	for _, skills := range platformSkills {
+		for _, skill := range skills {
+			skillMap[skill.Name] = append(skillMap[skill.Name], skill)
+		}
+	}
+
+	// Check each skill that exists on multiple platforms
+	for _, skills := range skillMap {
+		if len(skills) < 2 {
+			continue
+		}
+		// Compare first skill with others
+		for i := 1; i < len(skills); i++ {
+			conflict := detector.DetectConflict(skills[0], skills[i])
+			if conflict != nil {
+				conflicts = append(conflicts, conflict)
+			}
+		}
+	}
+
+	if len(conflicts) == 0 {
+		ui.Success("No conflicts found across platforms")
+		ui.Info("All skills with the same name have identical content")
+		return nil
+	}
+
+	// Run the conflict resolution TUI
+	result, err := tui.RunConflictList(conflicts)
+	if err != nil {
+		return fmt.Errorf("conflict TUI error: %w", err)
+	}
+
+	if result.Action == tui.ConflictActionNone || result.Action == tui.ConflictActionCancel {
+		return nil
+	}
+
+	// Apply resolutions
+	if result.Action == tui.ConflictActionResolve {
+		applied := 0
+		for _, resolution := range result.Resolutions {
+			if resolution.Resolution == sync.ResolutionSkip {
+				continue
+			}
+			// Find the skills involved in this conflict
+			skills := skillMap[resolution.SkillName]
+			if len(skills) == 0 {
+				continue
+			}
+
+			// Determine content to write based on resolution
+			var content string
+			switch resolution.Resolution {
+			case sync.ResolutionUseSource:
+				content = skills[0].Content
+			case sync.ResolutionUseTarget:
+				if len(skills) > 1 {
+					content = skills[1].Content
+				}
+			case sync.ResolutionMerge:
+				content = resolution.Content
+			default:
+				continue
+			}
+
+			// Update all instances of this skill across platforms
+			for _, skill := range skills {
+				if skill.Content == content {
+					continue // Already has the resolved content
+				}
+				if skill.Path != "" {
+					if err := os.WriteFile(skill.Path, []byte(content), 0o600); err != nil {
+						ui.Warning(fmt.Sprintf("Failed to update %s on %s: %v", skill.Name, skill.Platform, err))
+						continue
+					}
+					applied++
+				}
+			}
+		}
+		if applied > 0 {
+			ui.Success(fmt.Sprintf("Applied %d resolution(s)", applied))
+		}
+	}
 
 	return nil
 }
