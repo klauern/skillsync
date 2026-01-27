@@ -2066,7 +2066,9 @@ func runTUI() error {
 			}
 
 		case tui.DashboardViewConfig:
-			ui.Warning("Config TUI is not yet implemented")
+			if err := runConfigTUI(); err != nil {
+				return err
+			}
 
 		case tui.DashboardViewExport:
 			if err := runExportTUI(); err != nil {
@@ -2137,6 +2139,34 @@ func runBackupsTUI() error {
 func runSyncTUI() error {
 	ui.Warning("Sync TUI requires source and target platforms")
 	ui.Info("Use 'skillsync sync --interactive <source> <target>' for now")
+	return nil
+}
+
+// runConfigTUI runs the configuration editor TUI view.
+func runConfigTUI() error {
+	cfg, err := config.Load()
+	if err != nil {
+		ui.Warning(fmt.Sprintf("Could not load config: %v", err))
+		cfg = config.Default()
+	}
+
+	result, err := tui.RunConfigList(cfg)
+	if err != nil {
+		return fmt.Errorf("config TUI error: %w", err)
+	}
+
+	// Handle the result
+	if result.Action == tui.ConfigActionNone {
+		return nil
+	}
+
+	if result.Action == tui.ConfigActionSave {
+		if err := result.Config.Save(); err != nil {
+			return fmt.Errorf("failed to save configuration: %w", err)
+		}
+		ui.Success("Configuration saved to " + config.FilePath())
+	}
+
 	return nil
 }
 
