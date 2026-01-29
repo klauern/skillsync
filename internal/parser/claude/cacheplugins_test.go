@@ -249,3 +249,210 @@ func TestCachePluginsParser_ParsePluginDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestCachePluginsParser_ParseWithPluginIndex(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create plugin directory structure: marketplace/plugin/version/skill
+	plugin1Dir := filepath.Join(tmpDir, "klauern-skills", "commits", "1.2.0")
+	skill1Dir := filepath.Join(plugin1Dir, "conventional-commits")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skill1Dir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	// Create SKILL.md with frontmatter
+	skillContent := `---
+name: conventional-commits
+description: Create commits following conventional commits
+tools:
+  - Bash
+  - Read
+---
+# Conventional Commits
+Help with creating conventional commits.
+`
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skill1Dir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create second plugin
+	plugin2Dir := filepath.Join(tmpDir, "klauern-skills", "worktree", "0.1.0")
+	skill2Dir := filepath.Join(plugin2Dir, "worktree-manager")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skill2Dir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skill2Dir, "SKILL.md"), []byte("# Worktree Manager\nContent"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create mock plugin index
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			plugin1Dir: {
+				PluginKey:   "commits@klauern-skills",
+				PluginName:  "commits",
+				Marketplace: "klauern-skills",
+				Version:     "1.2.0",
+				InstallPath: plugin1Dir,
+			},
+			plugin2Dir: {
+				PluginKey:   "worktree@klauern-skills",
+				PluginName:  "worktree",
+				Marketplace: "klauern-skills",
+				Version:     "0.1.0",
+				InstallPath: plugin2Dir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(skills))
+	}
+
+	// Verify first skill details
+	var commitsSkill, worktreeSkill model.Skill
+	for _, s := range skills {
+		if s.Name == "conventional-commits" {
+			commitsSkill = s
+		} else if s.Name == "worktree-manager" {
+			worktreeSkill = s
+		}
+	}
+
+	if commitsSkill.Name == "" {
+		t.Fatal("conventional-commits skill not found")
+	}
+
+	if commitsSkill.Description != "Create commits following conventional commits" {
+		t.Errorf("expected description 'Create commits following conventional commits', got %q", commitsSkill.Description)
+	}
+
+	if commitsSkill.PluginInfo == nil {
+		t.Fatal("PluginInfo should be set")
+	}
+
+	if commitsSkill.PluginInfo.PluginName != "commits@klauern-skills" {
+		t.Errorf("expected PluginName 'commits@klauern-skills', got %q", commitsSkill.PluginInfo.PluginName)
+	}
+
+	if commitsSkill.PluginInfo.Version != "1.2.0" {
+		t.Errorf("expected Version '1.2.0', got %q", commitsSkill.PluginInfo.Version)
+	}
+
+	if worktreeSkill.Name == "" {
+		t.Fatal("worktree-manager skill not found")
+	}
+
+	if worktreeSkill.PluginInfo == nil {
+		t.Fatal("PluginInfo should be set for worktree skill")
+	}
+
+	// Verify scope is plugin for all
+	for _, s := range skills {
+		if s.Scope != model.ScopePlugin {
+			t.Errorf("expected scope plugin, got %s for skill %s", s.Scope, s.Name)
+		}
+	}
+}
+
+func TestCachePluginsParser_ParseDeduplicatesPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a single plugin directory
+	pluginDir := filepath.Join(tmpDir, "test-plugin")
+	skillDir := filepath.Join(pluginDir, "my-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# My Skill\nContent"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create an index with duplicate entries for the same path (simulating multiple versions)
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "test@marketplace",
+				PluginName:  "test",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should only get one skill (not duplicated)
+	if len(skills) != 1 {
+		t.Errorf("expected 1 skill (deduplicated), got %d", len(skills))
+	}
+}
+
+func TestCachePluginsParser_ParseSkipsNonexistentPlugins(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create only one plugin directory
+	existingPluginDir := filepath.Join(tmpDir, "existing-plugin")
+	skillDir := filepath.Join(existingPluginDir, "my-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# My Skill\nContent"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create an index with both existing and non-existing paths
+	nonexistentPath := filepath.Join(tmpDir, "nonexistent-plugin")
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			existingPluginDir: {
+				PluginKey:   "existing@marketplace",
+				PluginName:  "existing",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: existingPluginDir,
+			},
+			nonexistentPath: {
+				PluginKey:   "nonexistent@marketplace",
+				PluginName:  "nonexistent",
+				Marketplace: "marketplace",
+				Version:     "2.0.0",
+				InstallPath: nonexistentPath,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should only get skill from existing plugin
+	if len(skills) != 1 {
+		t.Errorf("expected 1 skill from existing plugin, got %d", len(skills))
+	}
+
+	if skills[0].PluginInfo.PluginName != "existing@marketplace" {
+		t.Errorf("expected skill from 'existing@marketplace', got %q", skills[0].PluginInfo.PluginName)
+	}
+}

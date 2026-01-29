@@ -220,3 +220,196 @@ func TestLoadPluginIndex_NonexistentFile(t *testing.T) {
 		t.Error("expected non-nil index even when file doesn't exist")
 	}
 }
+
+func TestDetectPluginSource_CacheSymlink(t *testing.T) {
+	// Create a mock plugin cache structure
+	tmpDir := t.TempDir()
+	cacheDir := filepath.Join(tmpDir, ".claude", "plugins", "cache")
+	skillsDir := filepath.Join(tmpDir, ".claude", "skills")
+
+	// Create source plugin in cache: cache/klauern-skills/commits/1.1.0/conventional-commits
+	pluginDir := filepath.Join(cacheDir, "klauern-skills", "commits", "1.1.0", "conventional-commits")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugin directory: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(pluginDir, "SKILL.md"), []byte("# Test"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create skills directory and symlink
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatalf("failed to create skills directory: %v", err)
+	}
+	symlinkPath := filepath.Join(skillsDir, "conventional-commits")
+	if err := os.Symlink(pluginDir, symlinkPath); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+
+	// Create plugin index
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			filepath.Join(cacheDir, "klauern-skills", "commits", "1.1.0"): {
+				PluginKey:   "commits@klauern-skills",
+				PluginName:  "commits",
+				Marketplace: "klauern-skills",
+				Version:     "1.1.0",
+				InstallPath: filepath.Join(cacheDir, "klauern-skills", "commits", "1.1.0"),
+			},
+		},
+	}
+
+	// Override the cache path lookup for this test by setting the env var
+	// Note: DetectPluginSource uses util.ClaudePluginCachePath() internally
+	t.Setenv("HOME", tmpDir)
+
+	pluginInfo := DetectPluginSource(symlinkPath, index)
+	if pluginInfo == nil {
+		t.Fatal("expected PluginInfo for cache symlink, got nil")
+	}
+
+	if pluginInfo.IsDev {
+		t.Error("expected IsDev to be false for cache symlink")
+	}
+
+	if pluginInfo.PluginName != "commits@klauern-skills" {
+		t.Errorf("PluginName = %q, want %q", pluginInfo.PluginName, "commits@klauern-skills")
+	}
+
+	if pluginInfo.Marketplace != "klauern-skills" {
+		t.Errorf("Marketplace = %q, want %q", pluginInfo.Marketplace, "klauern-skills")
+	}
+
+	if pluginInfo.Version != "1.1.0" {
+		t.Errorf("Version = %q, want %q", pluginInfo.Version, "1.1.0")
+	}
+}
+
+func TestDetectPluginSource_RelativeSymlink(t *testing.T) {
+	// Test with a relative symlink
+	tmpDir := t.TempDir()
+
+	// Create source directory
+	sourceDir := filepath.Join(tmpDir, "source-plugin")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("failed to create source directory: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(sourceDir, "SKILL.md"), []byte("# Test"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create symlink directory
+	linkDir := filepath.Join(tmpDir, "links")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatalf("failed to create link directory: %v", err)
+	}
+
+	// Create a relative symlink: ../source-plugin
+	symlinkPath := filepath.Join(linkDir, "my-skill")
+	if err := os.Symlink("../source-plugin", symlinkPath); err != nil {
+		t.Fatalf("failed to create relative symlink: %v", err)
+	}
+
+	pluginInfo := DetectPluginSource(symlinkPath, nil)
+	if pluginInfo == nil {
+		t.Fatal("expected PluginInfo for relative symlink, got nil")
+	}
+
+	// Should be marked as dev since it's outside plugin cache
+	if !pluginInfo.IsDev {
+		t.Error("expected IsDev to be true for symlink outside plugin cache")
+	}
+
+	if pluginInfo.SymlinkTarget != "../source-plugin" {
+		t.Errorf("SymlinkTarget = %q, want %q", pluginInfo.SymlinkTarget, "../source-plugin")
+	}
+
+	// InstallPath should be resolved to absolute
+	if !filepath.IsAbs(pluginInfo.InstallPath) {
+		t.Errorf("InstallPath should be absolute, got %q", pluginInfo.InstallPath)
+	}
+}
+
+func TestDetectPluginSource_MultipleDevPathPatterns(t *testing.T) {
+	tests := map[string]struct {
+		sourcePath     string
+		wantMarketplace string
+	}{
+		"standard dev path": {
+			sourcePath:     "/Users/test/dev/my-marketplace/plugins/test-skill",
+			wantMarketplace: "my-marketplace",
+		},
+		"go dev path": {
+			sourcePath:     "/Users/test/dev/go/awesome-project/skills/my-skill",
+			wantMarketplace: "awesome-project",
+		},
+		"src dev path": {
+			sourcePath:     "/Users/test/dev/src/company-tools/skill-a",
+			wantMarketplace: "company-tools",
+		},
+		"projects dev path": {
+			sourcePath:     "/Users/test/dev/projects/internal-skills/helper",
+			wantMarketplace: "internal-skills",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Create the source directory
+			// #nosec G301 - test directory
+			if err := os.MkdirAll(tt.sourcePath, 0o755); err != nil {
+				// If we can't create the exact path (e.g., outside tmp), skip
+				t.Skipf("cannot create source path: %v", err)
+			}
+
+			// Create skill directory and symlink
+			skillsDir := filepath.Join(tmpDir, "skills")
+			// #nosec G301 - test directory
+			if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+				t.Fatalf("failed to create skills directory: %v", err)
+			}
+			symlinkPath := filepath.Join(skillsDir, "test-skill")
+			if err := os.Symlink(tt.sourcePath, symlinkPath); err != nil {
+				t.Fatalf("failed to create symlink: %v", err)
+			}
+
+			pluginInfo := DetectPluginSource(symlinkPath, nil)
+			if pluginInfo == nil {
+				t.Fatal("expected PluginInfo for symlink, got nil")
+			}
+
+			if !pluginInfo.IsDev {
+				t.Error("expected IsDev to be true for dev symlink")
+			}
+
+			if pluginInfo.Marketplace != tt.wantMarketplace {
+				t.Errorf("Marketplace = %q, want %q", pluginInfo.Marketplace, tt.wantMarketplace)
+			}
+		})
+	}
+}
+
+func TestPluginIndex_EmptyIndex(t *testing.T) {
+	index := &PluginIndex{
+		byInstallPath: make(map[string]*PluginIndexEntry),
+	}
+
+	// LookupByPath should return nil
+	entry := index.LookupByPath("/some/path")
+	if entry != nil {
+		t.Errorf("expected nil for empty index, got %+v", entry)
+	}
+
+	// LookupByPathPrefix should return nil
+	entry = index.LookupByPathPrefix("/some/path/nested")
+	if entry != nil {
+		t.Errorf("expected nil for empty index, got %+v", entry)
+	}
+}

@@ -509,3 +509,170 @@ func TestIntegration_ResultSummary_WithFailures_Golden(t *testing.T) {
 	summary := result.Summary()
 	util.GoldenFile(t, testdataDir(), "result-summary-failures", summary)
 }
+
+func TestIntegration_SyncWithSkills_PluginScope(t *testing.T) {
+	s := New()
+
+	targetDir := t.TempDir()
+
+	// Create plugin-scope skills (simulating skills from plugin cache)
+	pluginSkills := []model.Skill{
+		{
+			Name:        "conventional-commits",
+			Description: "Create conventional commits",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopePlugin,
+			Content:     "# Conventional Commits\n\nHelp create conventional commits.",
+			Path:        "/fake/path/conventional-commits/SKILL.md",
+			PluginInfo: &model.PluginInfo{
+				PluginName:  "commits@klauern-skills",
+				Marketplace: "klauern-skills",
+				Version:     "1.2.0",
+				IsDev:       false,
+			},
+		},
+		{
+			Name:        "worktree-manager",
+			Description: "Manage git worktrees",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopePlugin,
+			Content:     "# Worktree Manager\n\nManage git worktrees.",
+			Path:        "/fake/path/worktree/SKILL.md",
+			PluginInfo: &model.PluginInfo{
+				PluginName:  "worktree@klauern-skills",
+				Marketplace: "klauern-skills",
+				Version:     "0.1.0",
+				IsDev:       false,
+			},
+		},
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		TargetPath: targetDir,
+	}
+
+	result, err := s.SyncWithSkills(pluginSkills, model.Cursor, opts)
+	util.AssertNoError(t, err)
+
+	util.AssertEqual(t, len(result.Created()), 2)
+	util.AssertEqual(t, result.Success(), true)
+
+	// Verify files were created
+	for _, skill := range pluginSkills {
+		targetPath := filepath.Join(targetDir, skill.Name+".md")
+		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+			t.Errorf("Expected target file %s to exist", targetPath)
+		}
+	}
+
+	// Verify skill results have correct info
+	for _, sr := range result.Skills {
+		if sr.Skill.Scope != model.ScopePlugin {
+			t.Errorf("Expected skill %s to have plugin scope, got %s", sr.Skill.Name, sr.Skill.Scope)
+		}
+	}
+}
+
+func TestIntegration_SyncWithSkills_MixedScopes(t *testing.T) {
+	s := New()
+
+	targetDir := t.TempDir()
+
+	// Create skills with different scopes
+	mixedSkills := []model.Skill{
+		{
+			Name:     "user-skill",
+			Platform: model.ClaudeCode,
+			Scope:    model.ScopeUser,
+			Content:  "# User Skill\n\nUser-defined skill.",
+			Path:     "/fake/path/user-skill.md",
+		},
+		{
+			Name:     "plugin-skill",
+			Platform: model.ClaudeCode,
+			Scope:    model.ScopePlugin,
+			Content:  "# Plugin Skill\n\nPlugin skill.",
+			Path:     "/fake/path/plugin-skill/SKILL.md",
+			PluginInfo: &model.PluginInfo{
+				PluginName:  "test@marketplace",
+				Marketplace: "marketplace",
+				IsDev:       false,
+			},
+		},
+		{
+			Name:     "repo-skill",
+			Platform: model.ClaudeCode,
+			Scope:    model.ScopeRepo,
+			Content:  "# Repo Skill\n\nRepository skill.",
+			Path:     "/fake/path/.claude/skills/repo-skill/SKILL.md",
+		},
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		TargetPath: targetDir,
+	}
+
+	result, err := s.SyncWithSkills(mixedSkills, model.Cursor, opts)
+	util.AssertNoError(t, err)
+
+	util.AssertEqual(t, len(result.Created()), 3)
+
+	// Verify each skill maintains its scope
+	scopeCounts := make(map[model.SkillScope]int)
+	for _, sr := range result.Skills {
+		scopeCounts[sr.Skill.Scope]++
+	}
+
+	util.AssertEqual(t, scopeCounts[model.ScopeUser], 1)
+	util.AssertEqual(t, scopeCounts[model.ScopePlugin], 1)
+	util.AssertEqual(t, scopeCounts[model.ScopeRepo], 1)
+}
+
+func TestIntegration_SyncWithSkills_DevPluginSymlink(t *testing.T) {
+	s := New()
+
+	targetDir := t.TempDir()
+
+	// Create a dev plugin skill (simulating symlinked development skill)
+	devPluginSkill := []model.Skill{
+		{
+			Name:        "dev-commits",
+			Description: "Development version of commits skill",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopePlugin,
+			Content:     "# Dev Commits\n\nDevelopment version.",
+			Path:        "/Users/test/dev/klauern-skills/plugins/commits/SKILL.md",
+			PluginInfo: &model.PluginInfo{
+				PluginName:    "commits@klauern-skills",
+				Marketplace:   "klauern-skills",
+				IsDev:         true,
+				SymlinkTarget: "../../../klauern-skills/plugins/commits",
+				InstallPath:   "/Users/test/dev/klauern-skills/plugins/commits",
+			},
+		},
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		TargetPath: targetDir,
+	}
+
+	result, err := s.SyncWithSkills(devPluginSkill, model.Cursor, opts)
+	util.AssertNoError(t, err)
+
+	util.AssertEqual(t, len(result.Created()), 1)
+
+	// Verify the skill was synced with dev plugin info preserved
+	sr := result.Skills[0]
+	if sr.Skill.PluginInfo == nil {
+		t.Fatal("PluginInfo should be preserved")
+	}
+	if !sr.Skill.PluginInfo.IsDev {
+		t.Error("IsDev should be true for dev plugin")
+	}
+}
