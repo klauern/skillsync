@@ -582,3 +582,83 @@ func TestExporter_Markdown_Multiple_Golden(t *testing.T) {
 
 	util.GoldenFile(t, testdataDir(), "markdown-multiple", buf.String())
 }
+
+func TestExporter_AgentSkillsStandardFields(t *testing.T) {
+	// Test that AgentSkills Standard fields are exported when present
+	skills := []model.Skill{
+		{
+			Name:                   "agentskills-test",
+			Description:            "Test skill with AgentSkills Standard fields",
+			Platform:               model.ClaudeCode,
+			Content:                "Test content",
+			Scope:                  model.ScopeUser,
+			DisableModelInvocation: true,
+			License:                "MIT",
+			Compatibility:          map[string]string{"claude-code": ">=1.0.0"},
+			Scripts:                []string{"setup.sh", "teardown.sh"},
+			References:             []string{"docs/api.md"},
+			Assets:                 []string{"icon.png"},
+			PluginInfo: &model.PluginInfo{
+				PluginName:  "test@example",
+				Marketplace: "example",
+				Version:     "1.0.0",
+			},
+		},
+	}
+
+	opts := Options{
+		Format:          FormatJSON,
+		Pretty:          true,
+		IncludeMetadata: false,
+	}
+
+	exporter := New(opts)
+	var buf bytes.Buffer
+	err := exporter.Export(skills, &buf)
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	var result []exportSkill
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("Failed to parse JSON output: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 skill, got %d", len(result))
+	}
+
+	skill := result[0]
+
+	// Verify AgentSkills Standard fields are present
+	if skill.Scope != "user" {
+		t.Errorf("Scope = %q, want %q", skill.Scope, "user")
+	}
+	if !skill.DisableModelInvocation {
+		t.Error("DisableModelInvocation should be true")
+	}
+	if skill.License != "MIT" {
+		t.Errorf("License = %q, want %q", skill.License, "MIT")
+	}
+	if len(skill.Compatibility) == 0 {
+		t.Error("Compatibility should not be empty")
+	}
+	if skill.Compatibility["claude-code"] != ">=1.0.0" {
+		t.Errorf("Compatibility[claude-code] = %q, want %q", skill.Compatibility["claude-code"], ">=1.0.0")
+	}
+	if len(skill.Scripts) != 2 {
+		t.Errorf("Expected 2 scripts, got %d", len(skill.Scripts))
+	}
+	if len(skill.References) != 1 {
+		t.Errorf("Expected 1 reference, got %d", len(skill.References))
+	}
+	if len(skill.Assets) != 1 {
+		t.Errorf("Expected 1 asset, got %d", len(skill.Assets))
+	}
+	if skill.PluginInfo == nil {
+		t.Fatal("PluginInfo should not be nil")
+	}
+	if skill.PluginInfo.PluginName != "test@example" {
+		t.Errorf("PluginInfo.PluginName = %q, want %q", skill.PluginInfo.PluginName, "test@example")
+	}
+}

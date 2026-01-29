@@ -130,6 +130,18 @@ type exportSkill struct {
 	Metadata    map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 	Content     string            `json:"content" yaml:"content"`
 	ModifiedAt  string            `json:"modified_at,omitempty" yaml:"modified_at,omitempty"`
+
+	// Agent Skills Standard fields
+	Scope                  string            `json:"scope,omitempty" yaml:"scope,omitempty"`
+	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty" yaml:"disable_model_invocation,omitempty"`
+	License                string            `json:"license,omitempty" yaml:"license,omitempty"`
+	Compatibility          map[string]string `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
+	Scripts                []string          `json:"scripts,omitempty" yaml:"scripts,omitempty"`
+	References             []string          `json:"references,omitempty" yaml:"references,omitempty"`
+	Assets                 []string          `json:"assets,omitempty" yaml:"assets,omitempty"`
+
+	// Plugin metadata
+	PluginInfo *model.PluginInfo `json:"plugin_info,omitempty" yaml:"plugin_info,omitempty"`
 }
 
 // toExportSkill converts a model.Skill to exportSkill.
@@ -139,6 +151,30 @@ func (e *Exporter) toExportSkill(skill model.Skill) exportSkill {
 		Description: skill.Description,
 		Platform:    string(skill.Platform),
 		Content:     skill.Content,
+	}
+
+	// Always include AgentSkills Standard fields when present
+	if skill.Scope != "" {
+		es.Scope = string(skill.Scope)
+	}
+	es.DisableModelInvocation = skill.DisableModelInvocation
+	if skill.License != "" {
+		es.License = skill.License
+	}
+	if len(skill.Compatibility) > 0 {
+		es.Compatibility = skill.Compatibility
+	}
+	if len(skill.Scripts) > 0 {
+		es.Scripts = skill.Scripts
+	}
+	if len(skill.References) > 0 {
+		es.References = skill.References
+	}
+	if len(skill.Assets) > 0 {
+		es.Assets = skill.Assets
+	}
+	if skill.PluginInfo != nil {
+		es.PluginInfo = skill.PluginInfo
 	}
 
 	if e.opts.IncludeMetadata {
@@ -219,6 +255,37 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 	sb.WriteString("| Property | Value |\n")
 	sb.WriteString("|----------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Platform | %s |\n", skill.Platform))
+
+	// AgentSkills Standard fields
+	if skill.Scope != "" {
+		sb.WriteString(fmt.Sprintf("| Scope | %s |\n", skill.Scope))
+	}
+	if skill.License != "" {
+		sb.WriteString(fmt.Sprintf("| License | %s |\n", skill.License))
+	}
+	if len(skill.Compatibility) > 0 {
+		for platform, version := range skill.Compatibility {
+			sb.WriteString(fmt.Sprintf("| Compatibility (%s) | %s |\n", platform, version))
+		}
+	}
+	if skill.DisableModelInvocation {
+		sb.WriteString("| Disable Model Invocation | true |\n")
+	}
+	if len(skill.Scripts) > 0 {
+		sb.WriteString(fmt.Sprintf("| Scripts | %s |\n", strings.Join(skill.Scripts, ", ")))
+	}
+	if len(skill.References) > 0 {
+		sb.WriteString(fmt.Sprintf("| References | %s |\n", strings.Join(skill.References, ", ")))
+	}
+	if len(skill.Assets) > 0 {
+		sb.WriteString(fmt.Sprintf("| Assets | %s |\n", strings.Join(skill.Assets, ", ")))
+	}
+	if skill.PluginInfo != nil {
+		sb.WriteString(fmt.Sprintf("| Plugin | %s |\n", skill.PluginInfo.PluginName))
+		if skill.PluginInfo.Version != "" {
+			sb.WriteString(fmt.Sprintf("| Plugin Version | %s |\n", skill.PluginInfo.Version))
+		}
+	}
 
 	if e.opts.IncludeMetadata {
 		if skill.Path != "" {
