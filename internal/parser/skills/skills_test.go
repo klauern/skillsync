@@ -960,3 +960,125 @@ func equalSlices(a, b []string) bool {
 	}
 	return true
 }
+
+// TestCaseInsensitiveSkillMd tests case-insensitive SKILL.md detection
+func TestCaseInsensitiveSkillMd(t *testing.T) {
+	t.Run("lowercase skill.md is discovered", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a skill directory with lowercase skill.md
+		skillDir := filepath.Join(tmpDir, "lowercase-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMd := `---
+name: lowercase-skill
+description: A skill with lowercase skill.md
+---
+Content here.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write skill.md: %v", err)
+		}
+
+		p := New(tmpDir, model.ClaudeCode)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d", len(skills))
+		}
+
+		if skills[0].Name != "lowercase-skill" {
+			t.Errorf("Name = %q, want %q", skills[0].Name, "lowercase-skill")
+		}
+	})
+
+	t.Run("HasSkillDirectory detects lowercase skill.md", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "test-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+
+		// Create lowercase skill.md
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("content"), 0o644); err != nil {
+			t.Fatalf("failed to write skill.md: %v", err)
+		}
+
+		if !HasSkillDirectory(skillDir) {
+			t.Error("HasSkillDirectory should return true for lowercase skill.md")
+		}
+	})
+
+	t.Run("ListSkillDirectories finds lowercase skill.md", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create skill with lowercase
+		lowerDir := filepath.Join(tmpDir, "lower-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(lowerDir, 0o755); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(lowerDir, "skill.md"), []byte("content"), 0o644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		// Create skill with uppercase
+		upperDir := filepath.Join(tmpDir, "upper-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(upperDir, 0o755); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(upperDir, "SKILL.md"), []byte("content"), 0o644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		dirs, err := ListSkillDirectories(tmpDir)
+		if err != nil {
+			t.Fatalf("ListSkillDirectories() error = %v", err)
+		}
+
+		if len(dirs) != 2 {
+			t.Errorf("ListSkillDirectories() returned %d dirs, want 2", len(dirs))
+		}
+	})
+
+	t.Run("GetSkillDirectoryContents works with lowercase skill.md", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		skillDir := filepath.Join(tmpDir, "test-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+
+		// Create lowercase skill.md
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("content"), 0o644); err != nil {
+			t.Fatalf("failed to write skill.md: %v", err)
+		}
+
+		contents, err := GetSkillDirectoryContents(skillDir)
+		if err != nil {
+			t.Fatalf("GetSkillDirectoryContents() error = %v", err)
+		}
+
+		// Should find the lowercase file (we check SKILL.md, then skill.md, then Skill.md)
+		expectedPath := filepath.Join(skillDir, "skill.md")
+		if contents.SkillFile != expectedPath {
+			// On case-insensitive filesystems, SKILL.md might match skill.md
+			// Check that we at least found a skill file
+			if contents.SkillFile == "" {
+				t.Error("GetSkillDirectoryContents should find skill.md")
+			}
+		}
+	})
+}

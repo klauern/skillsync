@@ -708,3 +708,108 @@ description: SKILL.md version
 		t.Errorf("Description = %q, want SKILL.md version (SKILL.md should take precedence)", skill.Description)
 	}
 }
+
+// TestParser_SkillDirectoryExclusion tests that files inside skill directories are excluded from legacy parsing
+func TestParser_SkillDirectoryExclusion(t *testing.T) {
+	t.Run("files in subdirectories of skill directories are excluded", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a skill directory with SKILL.md
+		skillDir := filepath.Join(tmpDir, "my-skill")
+		patternsDir := filepath.Join(skillDir, "patterns")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(patternsDir, 0o755); err != nil {
+			t.Fatalf("failed to create patterns directory: %v", err)
+		}
+
+		skillMd := `---
+name: my-skill
+description: Test skill
+---
+# My Skill
+
+Main content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		// Create reference files that should NOT be treated as skills
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(patternsDir, "accessibility.md"), []byte("# Accessibility Patterns"), 0o644); err != nil {
+			t.Fatalf("failed to write reference file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should only have 1 skill (my-skill), not 2
+		if len(skills) != 1 {
+			t.Errorf("expected 1 skill, got %d", len(skills))
+			for _, s := range skills {
+				t.Logf("  found skill: %s at %s", s.Name, s.Path)
+			}
+		}
+
+		if skills[0].Name != "my-skill" {
+			t.Errorf("expected my-skill, got %s", skills[0].Name)
+		}
+	})
+
+	t.Run("legacy files outside skill directories are still parsed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a SKILL.md skill
+		skillDir := filepath.Join(tmpDir, "modern-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMd := `---
+name: modern-skill
+description: Modern skill
+---
+Content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		// Create a legacy file at root level (NOT inside skill directory)
+		legacyContent := `---
+globs: ["*.go"]
+---
+Legacy content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "legacy-rule.md"), []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("failed to write legacy file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should have 2 skills
+		if len(skills) != 2 {
+			t.Errorf("expected 2 skills, got %d", len(skills))
+		}
+
+		// Verify both skills are present
+		names := make(map[string]bool)
+		for _, s := range skills {
+			names[s.Name] = true
+		}
+		if !names["modern-skill"] {
+			t.Error("missing modern-skill")
+		}
+		if !names["legacy-rule"] {
+			t.Error("missing legacy-rule")
+		}
+	})
+}
