@@ -28,6 +28,9 @@ const (
 
 	// ActionConflict indicates a conflict was detected that needs resolution.
 	ActionConflict Action = "conflict"
+
+	// ActionDeleted indicates a skill was deleted from the target.
+	ActionDeleted Action = "deleted"
 )
 
 // SkillResult represents the outcome of syncing a single skill.
@@ -104,6 +107,11 @@ func (r *Result) Conflicts() []SkillResult {
 	return r.filterByAction(ActionConflict)
 }
 
+// Deleted returns skills that were deleted.
+func (r *Result) Deleted() []SkillResult {
+	return r.filterByAction(ActionDeleted)
+}
+
 // HasConflicts returns true if there are unresolved conflicts.
 func (r *Result) HasConflicts() bool {
 	return len(r.Conflicts()) > 0
@@ -130,9 +138,9 @@ func (r *Result) TotalProcessed() int {
 	return len(r.Skills)
 }
 
-// TotalChanged returns the number of skills that were created, updated, or merged.
+// TotalChanged returns the number of skills that were created, updated, merged, or deleted.
 func (r *Result) TotalChanged() int {
-	return len(r.Created()) + len(r.Updated()) + len(r.Merged())
+	return len(r.Created()) + len(r.Updated()) + len(r.Merged()) + len(r.Deleted())
 }
 
 // Summary returns a human-readable summary of the sync result.
@@ -149,6 +157,7 @@ func (r *Result) Summary() string {
 	sb.WriteString(fmt.Sprintf("  Created:   %d\n", len(r.Created())))
 	sb.WriteString(fmt.Sprintf("  Updated:   %d\n", len(r.Updated())))
 	sb.WriteString(fmt.Sprintf("  Merged:    %d\n", len(r.Merged())))
+	sb.WriteString(fmt.Sprintf("  Deleted:   %d\n", len(r.Deleted())))
 	sb.WriteString(fmt.Sprintf("  Skipped:   %d\n", len(r.Skipped())))
 	sb.WriteString(fmt.Sprintf("  Conflicts: %d\n", len(r.Conflicts())))
 	sb.WriteString(fmt.Sprintf("  Failed:    %d\n", len(r.Failed())))

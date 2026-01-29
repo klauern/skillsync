@@ -39,6 +39,10 @@ type Options struct {
 
 	// Verbose enables detailed output.
 	Verbose bool
+
+	// DeleteMode enables deletion sync: deletes skills from target that match source.
+	// Instead of copying skills TO target, removes skills FROM target that exist in source.
+	DeleteMode bool
 }
 
 // DefaultOptions returns the default sync options.
@@ -501,6 +505,140 @@ func (s *Synchronizer) SyncWithSkills(
 	}
 
 	logging.Debug("sync with skills completed",
+		logging.Platform(string(target)),
+		logging.Count(len(result.Skills)),
+	)
+
+	return result, nil
+}
+
+// DeleteWithSkills deletes skills from target that match the source skills.
+// This is the inverse of sync: instead of copying skills TO target, it removes skills FROM target
+// that exist in the source. Useful for cleaning up test skills or removing deprecated skills.
+func (s *Synchronizer) DeleteWithSkills(
+	sourceSkills []model.Skill,
+	target model.Platform,
+	opts Options,
+) (*Result, error) {
+	logging.Debug("starting delete sync operation",
+		logging.Platform(string(target)),
+		logging.Operation("delete-sync"),
+		logging.Count(len(sourceSkills)),
+		slog.Bool("dry_run", opts.DryRun),
+		slog.String("target_scope", string(opts.TargetScope)),
+	)
+
+	if len(sourceSkills) == 0 {
+		logging.Debug("no skills provided to delete")
+		return &Result{
+			Target:   target,
+			Strategy: opts.Strategy,
+			DryRun:   opts.DryRun,
+			Skills:   make([]SkillResult, 0),
+		}, nil
+	}
+
+	result := &Result{
+		Source:   sourceSkills[0].Platform,
+		Target:   target,
+		Strategy: opts.Strategy,
+		DryRun:   opts.DryRun,
+		Skills:   make([]SkillResult, 0),
+	}
+
+	// Get target path based on scope
+	targetPath := opts.TargetPath
+	if targetPath == "" {
+		var err error
+		if opts.TargetScope != "" {
+			targetPath, err = validation.GetPlatformPathForScope(target, opts.TargetScope)
+		} else {
+			targetPath, err = validation.GetPlatformPath(target)
+		}
+		if err != nil {
+			logging.Error("failed to get target path",
+				logging.Platform(string(target)),
+				slog.String("scope", string(opts.TargetScope)),
+				logging.Err(err),
+			)
+			return result, fmt.Errorf("failed to get target path: %w", err)
+		}
+	}
+	logging.Debug("determined target path",
+		logging.Path(targetPath),
+		slog.String("scope", string(opts.TargetScope)),
+	)
+
+	// Parse existing target skills
+	targetSkills, err := s.parseSkills(target, opts.TargetPath)
+	if err != nil {
+		logging.Debug("target skills not found, nothing to delete",
+			logging.Platform(string(target)),
+			logging.Err(err),
+		)
+		return result, nil
+	}
+
+	logging.Debug("parsed existing target skills",
+		logging.Platform(string(target)),
+		logging.Count(len(targetSkills)),
+	)
+
+	// Build a map of source skill names for quick lookup
+	sourceSkillNames := make(map[string]model.Skill)
+	for _, skill := range sourceSkills {
+		sourceSkillNames[skill.Name] = skill
+	}
+
+	// Find target skills that match source skills and delete them
+	for _, targetSkill := range targetSkills {
+		sourceSkill, exists := sourceSkillNames[targetSkill.Name]
+		if !exists {
+			// Skill not in source list, skip it
+			logging.Debug("skill not in source list, skipping",
+				logging.Skill(targetSkill.Name),
+			)
+			continue
+		}
+
+		skillResult := SkillResult{
+			Skill:      sourceSkill,
+			TargetPath: targetSkill.Path,
+		}
+
+		// Delete the skill file
+		if !opts.DryRun {
+			if err := os.Remove(targetSkill.Path); err != nil {
+				logging.Error("failed to delete skill file",
+					logging.Skill(targetSkill.Name),
+					logging.Path(targetSkill.Path),
+					logging.Err(err),
+				)
+				skillResult.Action = ActionFailed
+				skillResult.Error = fmt.Errorf("failed to delete file: %w", err)
+				result.Skills = append(result.Skills, skillResult)
+				continue
+			}
+
+			// Try to remove parent directory if empty (for Codex SKILL.md files)
+			parentDir := filepath.Dir(targetSkill.Path)
+			if parentDir != targetPath {
+				// Attempt to remove parent dir - will fail silently if not empty
+				_ = os.Remove(parentDir)
+			}
+
+			logging.Debug("deleted skill file",
+				logging.Skill(targetSkill.Name),
+				logging.Path(targetSkill.Path),
+			)
+		}
+
+		skillResult.Action = ActionDeleted
+		skillResult.Message = "deleted from target"
+		result.Skills = append(result.Skills, skillResult)
+	}
+
+	logging.Debug("delete sync operation completed",
 		logging.Platform(string(target)),
 		logging.Count(len(result.Skills)),
 	)

@@ -831,13 +831,19 @@ func syncCommand() *cli.Command {
      three-way   - Intelligent merge with conflict detection
      interactive - Prompt for each conflict
 
+   Delete Mode:
+     Use --delete to remove skills from target that exist in source.
+     This is the inverse of sync: instead of copying TO target, it removes
+     skills FROM target that match the source skill names.
+
    Examples:
      skillsync sync cursor claudecode           # All cursor skills to claudecode user scope
      skillsync sync cursor:repo claudecode:user # Repo skills to user scope
      skillsync sync cursor:repo,user codex:repo # Multiple source scopes to repo
      skillsync sync --dry-run cursor codex      # Preview changes
      skillsync sync --strategy=skip cursor codex
-     skillsync sync --interactive cursor codex  # Interactive TUI mode`,
+     skillsync sync --interactive cursor codex  # Interactive TUI mode
+     skillsync sync --delete cursor codex       # Remove cursor skills from codex`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "interactive",
@@ -868,6 +874,10 @@ func syncCommand() *cli.Command {
 				Aliases: []string{"y"},
 				Usage:   "Skip confirmation prompts (use with caution)",
 			},
+			&cli.BoolFlag{
+				Name:  "delete",
+				Usage: "Delete mode: remove skills FROM target that exist in source (inverse of sync)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			cfg, err := parseSyncConfig(cmd)
@@ -889,9 +899,18 @@ func syncCommand() *cli.Command {
 				return fmt.Errorf("failed to parse source skills: %w", err)
 			}
 
-			// Interactive TUI mode
+			// Interactive TUI mode (not supported with delete mode)
+			if interactive && cfg.deleteMode {
+				return errors.New("interactive mode is not supported with --delete flag")
+			}
+
 			if interactive {
 				return syncSkillsInteractive(cfg)
+			}
+
+			// Delete mode has different flow
+			if cfg.deleteMode {
+				return syncDeleteMode(cfg)
 			}
 
 			// Validate source skills before sync (unless skipped)
@@ -980,6 +999,7 @@ type syncConfig struct {
 	skipBackup     bool
 	skipValidation bool
 	yesFlag        bool
+	deleteMode     bool
 	sourceSkills   []model.Skill
 }
 
@@ -1025,6 +1045,7 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		skipBackup:     cmd.Bool("skip-backup"),
 		skipValidation: cmd.Bool("skip-validation"),
 		yesFlag:        cmd.Bool("yes"),
+		deleteMode:     cmd.Bool("delete"),
 		sourceSkills:   make([]model.Skill, 0),
 	}, nil
 }
@@ -1147,6 +1168,64 @@ func displaySyncResults(result *sync.Result) {
 			fmt.Println()
 		}
 	}
+}
+
+// syncDeleteMode handles the delete sync mode: removing skills from target that exist in source.
+func syncDeleteMode(cfg *syncConfig) error {
+	// Build list of skill names to delete
+	skillNames := make([]string, len(cfg.sourceSkills))
+	for i, skill := range cfg.sourceSkills {
+		skillNames[i] = skill.Name
+	}
+
+	// Show what will be deleted
+	fmt.Printf("Delete mode: Will remove %d skill(s) from %s that exist in %s\n",
+		len(cfg.sourceSkills), cfg.targetSpec.Platform, cfg.sourceSpec.Platform)
+	fmt.Println("\nSkills to delete:")
+	for _, name := range skillNames {
+		fmt.Printf("  - %s\n", name)
+	}
+
+	// Request confirmation (unless --yes or --dry-run)
+	if !cfg.dryRun && !cfg.yesFlag {
+		confirmed, err := confirmAction(
+			fmt.Sprintf("Delete %d skill(s) from %s?", len(cfg.sourceSkills), cfg.targetSpec.Platform),
+			riskLevelDangerous,
+		)
+		if err != nil {
+			return fmt.Errorf("confirmation error: %w", err)
+		}
+		if !confirmed {
+			fmt.Println("Delete cancelled by user")
+			return nil
+		}
+	}
+
+	// Create backup before deletion (unless skipped or dry-run)
+	if !cfg.dryRun && !cfg.skipBackup {
+		prepareBackup(cfg.targetSpec.Platform)
+	}
+
+	// Create options and execute delete
+	opts := sync.Options{
+		DryRun:      cfg.dryRun,
+		TargetScope: cfg.targetSpec.TargetScope(),
+		DeleteMode:  true,
+	}
+
+	syncer := sync.New()
+	result, err := syncer.DeleteWithSkills(cfg.sourceSkills, cfg.targetSpec.Platform, opts)
+	if err != nil {
+		return fmt.Errorf("delete sync failed: %w", err)
+	}
+
+	displaySyncResults(result)
+
+	if !result.Success() {
+		return errors.New("delete sync completed with errors")
+	}
+
+	return nil
 }
 
 // applyResolvedConflicts writes the resolved conflict content to the target files.
