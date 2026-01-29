@@ -198,7 +198,140 @@ Consider removing sensitive data or using environment variables instead.
 
 ### Configuration
 
-Currently, sensitive data detection is always enabled during sync operations. Configuration options may be added in future releases to customize detection patterns, adjust severity levels, skip specific patterns, or add custom patterns.
+Sensitive data detection can be configured in `~/.skillsync/config.yaml` under the `security.detection` section.
+
+#### Basic Configuration
+
+```yaml
+security:
+  detection:
+    enabled: true  # Enable/disable detection (default: true)
+```
+
+#### Disabling Specific Patterns
+
+Disable built-in patterns by name:
+
+```yaml
+security:
+  detection:
+    enabled: true
+    disabled_patterns:
+      - "API Key"
+      - "Generic Secret"
+```
+
+#### Custom Patterns
+
+Add organization-specific patterns:
+
+```yaml
+security:
+  detection:
+    enabled: true
+    custom_patterns:
+      - name: "Internal API Token"
+        regex: "int_[a-zA-Z0-9]{32}"
+        description: "Internal API token detected"
+        severity: "error"  # "error" or "warning"
+
+      - name: "OAuth Client Secret"
+        regex: "(?i)client[_-]?secret\\s*[:=]\\s*['\"]?[a-zA-Z0-9_-]{20,}['\"]?"
+        description: "OAuth client secret detected"
+        severity: "warning"
+```
+
+#### Pattern Overrides
+
+Change severity levels for built-in patterns:
+
+```yaml
+security:
+  detection:
+    enabled: true
+    pattern_overrides:
+      "Password":
+        severity: "error"  # Upgrade from warning to error
+      "Bearer Token":
+        severity: "disabled"  # Disable this pattern
+```
+
+#### Skill Exceptions
+
+Skip detection for specific skills:
+
+```yaml
+security:
+  detection:
+    enabled: true
+    skill_exceptions:
+      - "test-credentials.md"
+      - "auth-examples.md"
+```
+
+#### Complete Example
+
+```yaml
+security:
+  detection:
+    enabled: true
+
+    # Disable patterns not relevant to your workflow
+    disabled_patterns:
+      - "Generic Secret"
+
+    # Add custom patterns for your organization
+    custom_patterns:
+      - name: "Acme Corp API Key"
+        regex: "acme_[a-zA-Z0-9]{24}"
+        description: "Acme Corp API key detected"
+        severity: "error"
+
+    # Adjust severity levels
+    pattern_overrides:
+      "Password":
+        severity: "error"  # More strict
+      "API Key":
+        severity: "warning"  # Less strict
+
+    # Skip detection for test/documentation skills
+    skill_exceptions:
+      - "test-auth.md"
+      - "api-examples.md"
+```
+
+#### Environment Variables
+
+Security settings can be overridden with environment variables:
+
+```bash
+# Disable detection
+export SKILLSYNC_SECURITY_DETECTION_ENABLED=false
+
+# Disable specific patterns (comma-separated)
+export SKILLSYNC_SECURITY_DETECTION_DISABLED_PATTERNS="API Key,Password"
+
+# Skip detection for specific skills (comma-separated)
+export SKILLSYNC_SECURITY_DETECTION_SKILL_EXCEPTIONS="test.md,examples.md"
+```
+
+#### Built-in Patterns
+
+The following patterns are available for configuration:
+
+**High Severity (Errors)**:
+- `AWS Access Key`
+- `AWS Secret Key`
+- `GitHub Token`
+- `Private Key`
+- `Database Connection String`
+
+**Medium Severity (Warnings)**:
+- `API Key`
+- `Token`
+- `Password`
+- `Generic Secret`
+- `Bearer Token`
 
 ## Permission Model
 

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/permissions"
+	"github.com/klauern/skillsync/internal/security"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
@@ -42,6 +44,9 @@ type Config struct {
 
 	// Similarity configures similarity matching thresholds
 	Similarity SimilarityConfig `yaml:"similarity"`
+
+	// Security configures sensitive data detection
+	Security SecurityConfig `yaml:"security"`
 
 	// Permissions configures permission model for operations
 	Permissions *permissions.Config `yaml:"permissions,omitempty"`
@@ -130,6 +135,98 @@ type SimilarityConfig struct {
 	Algorithm string `yaml:"algorithm"`
 }
 
+// SecurityConfig holds sensitive data detection settings.
+type SecurityConfig struct {
+	// Detection configures detection behavior
+	Detection DetectionConfig `yaml:"detection"`
+}
+
+// DetectionConfig holds detection pattern configuration.
+type DetectionConfig struct {
+	// Enabled enables or disables sensitive data detection
+	Enabled bool `yaml:"enabled"`
+	// DisabledPatterns lists pattern names to skip during detection
+	DisabledPatterns []string `yaml:"disabled_patterns,omitempty"`
+	// CustomPatterns defines user-provided detection patterns
+	CustomPatterns []CustomPattern `yaml:"custom_patterns,omitempty"`
+	// PatternOverrides allows changing severity of built-in patterns
+	PatternOverrides map[string]PatternOverride `yaml:"pattern_overrides,omitempty"`
+	// SkillExceptions lists skill names to skip detection for
+	SkillExceptions []string `yaml:"skill_exceptions,omitempty"`
+}
+
+// CustomPattern defines a user-provided sensitive data pattern.
+type CustomPattern struct {
+	// Name is the pattern identifier
+	Name string `yaml:"name"`
+	// Regex is the pattern to match (must be valid regex)
+	Regex string `yaml:"regex"`
+	// Description explains what the pattern detects
+	Description string `yaml:"description"`
+	// Severity is "error" or "warning"
+	Severity string `yaml:"severity"`
+}
+
+// PatternOverride allows changing severity of a built-in pattern.
+type PatternOverride struct {
+	// Severity is "error", "warning", or "disabled"
+	Severity string `yaml:"severity"`
+}
+
+// CreateDetector creates a security detector from this detection configuration.
+func (d *DetectionConfig) CreateDetector() (*security.Detector, error) {
+	// If detection is disabled, return nil
+	if !d.Enabled {
+		return nil, nil
+	}
+
+	// Start with default patterns
+	patterns := security.DefaultPatterns()
+
+	// Apply disabled patterns and overrides
+	enabledPatterns := []security.SensitivePattern{}
+	for _, pattern := range patterns {
+		// Check if disabled
+		disabled := false
+		for _, name := range d.DisabledPatterns {
+			if name == pattern.Name {
+				disabled = true
+				break
+			}
+		}
+		if disabled {
+			continue
+		}
+
+		// Check for severity override
+		if override, exists := d.PatternOverrides[pattern.Name]; exists {
+			if override.Severity == "disabled" {
+				continue
+			}
+			pattern.Severity = override.Severity
+		}
+
+		enabledPatterns = append(enabledPatterns, pattern)
+	}
+
+	// Add custom patterns
+	for _, customPattern := range d.CustomPatterns {
+		compiled, err := regexp.Compile(customPattern.Regex)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex for custom pattern %q: %w", customPattern.Name, err)
+		}
+
+		enabledPatterns = append(enabledPatterns, security.SensitivePattern{
+			Name:        customPattern.Name,
+			Pattern:     compiled,
+			Description: customPattern.Description,
+			Severity:    customPattern.Severity,
+		})
+	}
+
+	return security.NewDetector(enabledPatterns), nil
+}
+
 // Default returns the default configuration.
 func Default() *Config {
 	return &Config{
@@ -187,6 +284,15 @@ func Default() *Config {
 			NameThreshold:    0.7, // 70% match required for name similarity
 			ContentThreshold: 0.6, // 60% match required for content similarity
 			Algorithm:        "combined",
+		},
+		Security: SecurityConfig{
+			Detection: DetectionConfig{
+				Enabled:          true,
+				DisabledPatterns: []string{},
+				CustomPatterns:   []CustomPattern{},
+				PatternOverrides: map[string]PatternOverride{},
+				SkillExceptions:  []string{},
+			},
 		},
 		Permissions: permissions.Default(),
 	}
@@ -456,6 +562,17 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_SIMILARITY_ALGORITHM"); v != "" {
 		c.Similarity.Algorithm = v
 	}
+
+	// Security settings
+	if v := os.Getenv("SKILLSYNC_SECURITY_DETECTION_ENABLED"); v != "" {
+		c.Security.Detection.Enabled = parseBool(v)
+	}
+	if v := os.Getenv("SKILLSYNC_SECURITY_DETECTION_DISABLED_PATTERNS"); v != "" {
+		c.Security.Detection.DisabledPatterns = strings.Split(v, ",")
+	}
+	if v := os.Getenv("SKILLSYNC_SECURITY_DETECTION_SKILL_EXCEPTIONS"); v != "" {
+		c.Security.Detection.SkillExceptions = strings.Split(v, ",")
+	}
 }
 
 // parseBool parses a boolean from common string representations.
@@ -588,6 +705,9 @@ func (c *Config) Validate() *validation.Result {
 	c.validatePlatformPaths(&c.Platforms.Cursor, "platforms.cursor", result)
 	c.validatePlatformPaths(&c.Platforms.Codex, "platforms.codex", result)
 
+	// Validate security configuration
+	c.validateSecurityConfig(result)
+
 	// Validate permissions configuration
 	if c.Permissions != nil {
 		permResult := c.Permissions.Validate()
@@ -639,6 +759,63 @@ func (c *Config) validatePlatformPaths(pc *PlatformConfig, fieldPrefix string, r
 		} else if err != nil {
 			result.AddWarning(fmt.Sprintf("%s.skills_paths[%d]: cannot access path %q: %v", fieldPrefix, i, path, err))
 		}
+	}
+}
+
+// validateSecurityConfig validates security detection configuration.
+func (c *Config) validateSecurityConfig(result *validation.Result) {
+	// Validate custom patterns
+	for i, pattern := range c.Security.Detection.CustomPatterns {
+		fieldPrefix := fmt.Sprintf("security.detection.custom_patterns[%d]", i)
+
+		// Validate pattern name
+		if pattern.Name == "" {
+			result.AddError(&validation.Error{
+				Field:   fmt.Sprintf("%s.name", fieldPrefix),
+				Message: "pattern name cannot be empty",
+			})
+		}
+
+		// Validate regex
+		if pattern.Regex == "" {
+			result.AddError(&validation.Error{
+				Field:   fmt.Sprintf("%s.regex", fieldPrefix),
+				Message: "pattern regex cannot be empty",
+			})
+		} else {
+			// Try to compile regex to validate it
+			if _, err := regexp.Compile(pattern.Regex); err != nil {
+				result.AddError(&validation.Error{
+					Field:   fmt.Sprintf("%s.regex", fieldPrefix),
+					Message: fmt.Sprintf("invalid regex: %v", err),
+				})
+			}
+		}
+
+		// Validate severity
+		validSeverities := map[string]bool{"error": true, "warning": true}
+		if !validSeverities[pattern.Severity] {
+			result.AddError(&validation.Error{
+				Field:   fmt.Sprintf("%s.severity", fieldPrefix),
+				Message: fmt.Sprintf("invalid severity %q (must be: error or warning)", pattern.Severity),
+			})
+		}
+	}
+
+	// Validate pattern overrides
+	for name, override := range c.Security.Detection.PatternOverrides {
+		validSeverities := map[string]bool{"error": true, "warning": true, "disabled": true}
+		if !validSeverities[override.Severity] {
+			result.AddError(&validation.Error{
+				Field:   fmt.Sprintf("security.detection.pattern_overrides[%s].severity", name),
+				Message: fmt.Sprintf("invalid severity %q (must be: error, warning, or disabled)", override.Severity),
+			})
+		}
+	}
+
+	// Warn if detection is disabled
+	if !c.Security.Detection.Enabled {
+		result.AddWarning("security.detection.enabled is false, sensitive data detection is disabled")
 	}
 }
 

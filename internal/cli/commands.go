@@ -30,7 +30,6 @@ import (
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/permissions"
-	"github.com/klauern/skillsync/internal/security"
 	"github.com/klauern/skillsync/internal/similarity"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/ui"
@@ -1361,30 +1360,79 @@ func validateSourceSkills(cfg *syncConfig) error {
 	}
 
 	// Validate security: scan for sensitive data patterns
-	fmt.Println("Scanning for sensitive data...")
-	securityIssues := 0
-	for _, skill := range cfg.sourceSkills {
-		result := security.ValidateSkillContent(skill.Content, skill.Name)
-
-		// Show warnings for detected patterns
-		for _, warning := range result.Warnings {
-			fmt.Printf("  ⚠ Warning: %s (in %s)\n", warning, skill.Name)
-			securityIssues++
-		}
-
-		// Show errors for high-severity patterns
-		for _, err := range result.Errors {
-			fmt.Printf("  ✗ Error: %s\n", err)
-			securityIssues++
-		}
+	// Load config to get security settings
+	appConfig, err := config.Load()
+	if err != nil {
+		logging.Warn("failed to load config for security detection, using defaults", logging.Err(err))
+		appConfig = config.Default()
 	}
 
-	if securityIssues > 0 {
-		fmt.Printf("\nFound %d potential sensitive data issue(s).\n", securityIssues)
-		fmt.Println("Review the warnings above before syncing these skills.")
-		fmt.Println("Consider removing sensitive data or using environment variables instead.")
+	// Check if detection is enabled
+	if !appConfig.Security.Detection.Enabled {
+		fmt.Println("Sensitive data detection disabled by configuration")
 	} else {
-		fmt.Println("  No sensitive data patterns detected")
+		fmt.Println("Scanning for sensitive data...")
+		securityIssues := 0
+
+		// Create detector from config
+		detector, err := appConfig.Security.Detection.CreateDetector()
+		if err != nil {
+			return fmt.Errorf("failed to create security detector: %w", err)
+		}
+		if detector == nil {
+			// Detection disabled
+			fmt.Println("  Sensitive data detection disabled")
+		} else {
+			// Check for skill-specific exceptions
+			for _, skill := range cfg.sourceSkills {
+				// Skip skills in exception list
+				skipSkill := false
+				for _, exception := range appConfig.Security.Detection.SkillExceptions {
+					if exception == skill.Name {
+						skipSkill = true
+						break
+					}
+				}
+				if skipSkill {
+					continue
+				}
+
+				result := detector.ScanContent(skill.Content)
+				if !result.Valid {
+					// Add skill context to errors
+					for i, e := range result.Errors {
+						var validationErr *validation.Error
+						if errors.As(e, &validationErr) {
+							result.Errors[i] = &validation.Error{
+								Field:   fmt.Sprintf("skill:%s:%s", skill.Name, validationErr.Field),
+								Message: validationErr.Message,
+								Err:     validationErr.Err,
+							}
+						}
+					}
+				}
+
+				// Show warnings for detected patterns
+				for _, warning := range result.Warnings {
+					fmt.Printf("  ⚠ Warning: %s (in %s)\n", warning, skill.Name)
+					securityIssues++
+				}
+
+				// Show errors for high-severity patterns
+				for _, errMsg := range result.Errors {
+					fmt.Printf("  ✗ Error: %s\n", errMsg)
+					securityIssues++
+				}
+			}
+
+			if securityIssues > 0 {
+				fmt.Printf("\nFound %d potential sensitive data issue(s).\n", securityIssues)
+				fmt.Println("Review the warnings above before syncing these skills.")
+				fmt.Println("Consider removing sensitive data or using environment variables instead.")
+			} else {
+				fmt.Println("  No sensitive data patterns detected")
+			}
+		}
 	}
 
 	if len(cfg.sourceSkills) == 0 {
