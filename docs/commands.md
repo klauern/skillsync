@@ -1382,6 +1382,7 @@ skillsync backup verify <backup-id>
 ## See Also
 
 - [Quick Start Guide](quick-start.md) - Get started with SkillSync
+- [Compatibility Matrix](compatibility.md) - Version and platform compatibility
 - [Sync Strategies](sync-strategies.md) - Detailed conflict resolution
 - [Skill Formats](skill-formats-research.md) - Platform format specifications
 - [Development Guide](../AGENTS.md) - Contributing to SkillSync

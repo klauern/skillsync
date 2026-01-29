@@ -1188,6 +1188,7 @@ ls -la ~/.codex/skills/
 ## See Also
 
 - [Quick Start Guide](quick-start.md) - Getting started with SkillSync
+- [Compatibility Matrix](compatibility.md) - Version and platform compatibility
 - [Command Reference](commands.md) - Complete command documentation
 - [Sync Strategies](sync-strategies.md) - Conflict resolution strategies
 - [Skill Format Research](skill-formats-research.md) - Technical format specifications

@@ -766,6 +766,16 @@ export SKILLSYNC_AUTO_BACKUP=false
 - **Migration guide:** `docs/migration.md` (if you have existing skills)
 - **Development guide:** See `AGENTS.md` if you want to contribute
 
+---
+
+## See Also
+
+- [Compatibility Matrix](compatibility.md) - Version and platform compatibility
+- [Command Reference](commands.md) - Complete command documentation
+- [Migration Guide](migration.md) - Detailed migration instructions
+- [Sync Strategies](sync-strategies.md) - Conflict resolution strategies
+- [Skill Format Research](skill-formats-research.md) - Technical format specifications
+
 ## Getting Help
 
 - View command help: `skillsync <command> --help`
