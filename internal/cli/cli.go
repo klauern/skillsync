@@ -51,6 +51,7 @@ func Run(ctx context.Context, args []string) error {
 			syncCommand(),
 			discoveryCommand(),
 			platformsCommand(),
+			pluginsCommand(),
 			compareCommand(),
 			dedupeCommand(),
 			exportCommand(),
