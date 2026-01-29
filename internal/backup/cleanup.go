@@ -19,6 +19,9 @@ type CleanupOptions struct {
 
 	// Platform filters cleanup to a specific platform (empty = all platforms)
 	Platform string
+
+	// DryRun previews what would be deleted without actually deleting
+	DryRun bool
 }
 
 // DefaultCleanupOptions returns sensible defaults for cleanup
@@ -111,13 +114,18 @@ func CleanupBackups(opts CleanupOptions) ([]string, error) {
 		}
 	}
 
-	// Delete backups
+	// Delete backups (or just return the list in dry-run mode)
 	var deleted []string
 	for _, backupID := range toDelete {
-		if err := DeleteBackup(backupID); err != nil {
-			return deleted, fmt.Errorf("failed to delete backup %q: %w", backupID, err)
+		if opts.DryRun {
+			// In dry-run mode, just collect the IDs without deleting
+			deleted = append(deleted, backupID)
+		} else {
+			if err := DeleteBackup(backupID); err != nil {
+				return deleted, fmt.Errorf("failed to delete backup %q: %w", backupID, err)
+			}
+			deleted = append(deleted, backupID)
 		}
-		deleted = append(deleted, backupID)
 	}
 
 	return deleted, nil

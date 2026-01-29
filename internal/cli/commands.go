@@ -1975,6 +1975,7 @@ func backupCommand() *cli.Command {
 			backupRestoreCommand(),
 			backupDeleteCommand(),
 			backupVerifyCommand(),
+			backupCleanCommand(),
 		},
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: list backups
@@ -2315,6 +2316,86 @@ func backupVerifyCommand() *cli.Command {
 	}
 }
 
+func backupCleanCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "clean",
+		Usage: "Clean up old backups based on retention policy",
+		UsageText: `skillsync backup clean [options]
+   skillsync backup clean --dry-run              # Preview what would be cleaned
+   skillsync backup clean                         # Clean with default policy
+   skillsync backup clean --max-age 60d           # Keep backups newer than 60 days
+   skillsync backup clean --max-backups 5         # Keep only 5 most recent per source
+   skillsync backup clean --platform claude-code  # Clean only claude-code backups`,
+		Description: `Clean up old backups based on retention policy.
+
+   The cleanup process groups backups by platform and source file, then applies
+   retention rules to each group. Use --dry-run to preview what would be deleted
+   before actually cleaning up.
+
+   Default retention policy:
+     Max Age: 30 days
+     Max Backups: 10 per source file
+     Keep At Least One: true (always keeps newest backup per source)
+
+   Options:
+     --dry-run: Preview deletions without actually deleting files
+     --max-age: Maximum age of backups to keep (e.g., 30d, 2w, 168h)
+     --max-backups: Maximum number of backups to keep per source (0 = unlimited)
+     --platform: Filter cleanup to specific platform
+     --keep-at-least-one: Ensure at least one backup remains per source (default: true)
+
+   Examples:
+     # Preview cleanup with default policy
+     skillsync backup clean --dry-run
+
+     # Clean backups older than 60 days
+     skillsync backup clean --max-age 60d
+
+     # Keep only 5 most recent backups per source
+     skillsync backup clean --max-backups 5
+
+     # Clean only claude-code backups
+     skillsync backup clean --platform claude-code --dry-run`,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "dry-run",
+				Aliases: []string{"d"},
+				Usage:   "Preview what would be deleted without actually deleting",
+			},
+			&cli.StringFlag{
+				Name:    "max-age",
+				Aliases: []string{"a"},
+				Usage:   "Maximum age of backups to keep (e.g., 30d, 2w, 168h)",
+			},
+			&cli.IntFlag{
+				Name:    "max-backups",
+				Aliases: []string{"n"},
+				Value:   -1, // -1 means use default
+				Usage:   "Maximum number of backups to keep per source (0 = unlimited)",
+			},
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Filter cleanup to specific platform (claude-code, cursor, codex)",
+			},
+			&cli.BoolFlag{
+				Name:  "keep-at-least-one",
+				Value: true,
+				Usage: "Ensure at least one backup remains per source file",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			dryRun := cmd.Bool("dry-run")
+			maxAgeStr := cmd.String("max-age")
+			maxBackups := cmd.Int("max-backups")
+			platform := cmd.String("platform")
+			keepAtLeastOne := cmd.Bool("keep-at-least-one")
+
+			return cleanBackups(dryRun, maxAgeStr, int(maxBackups), platform, keepAtLeastOne)
+		},
+	}
+}
+
 // verifyBackupsByID verifies specific backups by their IDs
 func verifyBackupsByID(ids []string) error {
 	fmt.Printf("Verifying %d backup(s)...\n\n", len(ids))
@@ -2518,6 +2599,140 @@ func deleteBackupsByPolicy(olderThan string, keepLatest int, platform string, fo
 
 	fmt.Printf("\n✓ Deleted %d backup(s), freed %s\n", deleted, formatSize(totalSize))
 	return nil
+}
+
+// cleanBackups performs backup cleanup based on retention policy
+func cleanBackups(dryRun bool, maxAgeStr string, maxBackups int, platform string, keepAtLeastOne bool) error {
+	// Build cleanup options
+	opts := backup.DefaultCleanupOptions()
+	opts.DryRun = dryRun
+	opts.Platform = platform
+	opts.KeepAtLeastOne = keepAtLeastOne
+
+	// Parse max-age if provided
+	if maxAgeStr != "" {
+		duration, err := parseDuration(maxAgeStr)
+		if err != nil {
+			return fmt.Errorf("invalid max-age duration: %w", err)
+		}
+		opts.MaxAge = duration
+	}
+
+	// Set max-backups if provided (maxBackups == -1 means use default)
+	if maxBackups != -1 {
+		opts.MaxBackups = maxBackups
+	}
+
+	// Display policy being applied
+	if dryRun {
+		fmt.Println("🔍 DRY RUN MODE - No backups will be deleted")
+		fmt.Println()
+	}
+
+	fmt.Println("Backup cleanup policy:")
+	if opts.MaxAge > 0 {
+		fmt.Printf("  Max Age: %s\n", formatRetentionDuration(opts.MaxAge))
+	} else {
+		fmt.Println("  Max Age: unlimited")
+	}
+
+	if opts.MaxBackups > 0 {
+		fmt.Printf("  Max Backups per source: %d\n", opts.MaxBackups)
+	} else {
+		fmt.Println("  Max Backups per source: unlimited")
+	}
+
+	if opts.Platform != "" {
+		fmt.Printf("  Platform filter: %s\n", opts.Platform)
+	} else {
+		fmt.Println("  Platform filter: all platforms")
+	}
+
+	fmt.Printf("  Keep at least one: %t\n", opts.KeepAtLeastOne)
+	fmt.Println()
+
+	// Check permissions before cleanup (unless dry-run)
+	if !dryRun {
+		permConfig, err := permissions.Load()
+		if err != nil {
+			logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+			permConfig = permissions.Default()
+		}
+		checker := permissions.NewChecker(permConfig)
+
+		deleteDesc := "clean up old backups"
+		if err := checker.CheckAndConfirm(permissions.OpBackupDelete, deleteDesc); err != nil {
+			return fmt.Errorf("permission denied: %w", err)
+		}
+		fmt.Println()
+	}
+
+	// Run cleanup
+	deleted, err := backup.CleanupBackups(opts)
+	if err != nil {
+		return fmt.Errorf("cleanup failed: %w", err)
+	}
+
+	// Display results
+	if len(deleted) == 0 {
+		fmt.Println("✓ No backups need cleanup based on the current policy.")
+		return nil
+	}
+
+	// Load index to get metadata for deleted backups
+	index, err := backup.LoadIndex()
+	if err != nil {
+		return fmt.Errorf("failed to load backup index: %w", err)
+	}
+
+	var totalSize int64
+	if dryRun {
+		fmt.Printf("Would delete %d backup(s):\n", len(deleted))
+	} else {
+		fmt.Printf("Deleted %d backup(s):\n", len(deleted))
+	}
+
+	for _, id := range deleted {
+		if b, exists := index.Backups[id]; exists {
+			fmt.Printf("  - %s (%s, %s, %s)\n",
+				id, b.Platform, formatSize(b.Size), b.CreatedAt.Format("2006-01-02"))
+			totalSize += b.Size
+		} else {
+			// Backup was deleted, so show minimal info
+			fmt.Printf("  - %s\n", id)
+		}
+	}
+
+	fmt.Println()
+	if dryRun {
+		fmt.Printf("Would free: %s\n", formatSize(totalSize))
+		fmt.Println("\nRun without --dry-run to perform the cleanup.")
+	} else {
+		fmt.Printf("✓ Freed: %s\n", formatSize(totalSize))
+	}
+
+	return nil
+}
+
+// formatRetentionDuration formats a time.Duration for retention policy display
+func formatRetentionDuration(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	if days > 0 {
+		if days%7 == 0 {
+			weeks := days / 7
+			return fmt.Sprintf("%d week%s", weeks, pluralize(weeks))
+		}
+		return fmt.Sprintf("%d day%s", days, pluralize(days))
+	}
+	return d.String()
+}
+
+// pluralize returns "s" if count != 1, otherwise ""
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // parseDuration parses a duration string with support for day and week units
