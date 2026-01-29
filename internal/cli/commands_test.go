@@ -1405,16 +1405,18 @@ This is a user skill.
 	}
 
 	tests := map[string]struct {
-		paths       []string
-		scopeFilter []model.SkillScope
-		platform    model.Platform
-		wantScopes  []model.SkillScope
+		paths          []string
+		scopeFilter    []model.SkillScope
+		platform       model.Platform
+		includePlugins bool
+		wantScopes     []model.SkillScope
 	}{
 		"user scope filter excludes plugins": {
-			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
-			scopeFilter: []model.SkillScope{model.ScopeUser},
-			platform:    model.ClaudeCode,
-			wantScopes:  []model.SkillScope{model.ScopeUser},
+			paths:          []string{filepath.Join(tempDir, ".claude", "skills")},
+			scopeFilter:    []model.SkillScope{model.ScopeUser},
+			platform:       model.ClaudeCode,
+			includePlugins: false,
+			wantScopes:     []model.SkillScope{model.ScopeUser},
 		},
 		"plugin scope filter includes only plugins": {
 			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
@@ -1422,26 +1424,38 @@ This is a user skill.
 			platform:    model.ClaudeCode,
 			// Note: This will return no skills since there's no real plugin cache set up
 			// The test validates that user skills are excluded when only plugin scope is requested
-			wantScopes: []model.SkillScope{},
+			includePlugins: false,
+			wantScopes:     []model.SkillScope{},
 		},
-		"no filter includes all scopes": {
-			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
-			scopeFilter: nil,
-			platform:    model.ClaudeCode,
-			// Should include user scope skills and attempt plugin discovery
+		"no filter excludes plugins by default": {
+			paths:          []string{filepath.Join(tempDir, ".claude", "skills")},
+			scopeFilter:    nil,
+			platform:       model.ClaudeCode,
+			includePlugins: false,
+			// With includePlugins=false, plugins are excluded even with no scope filter
+			wantScopes: []model.SkillScope{model.ScopeUser},
+		},
+		"no filter with includePlugins includes user scope": {
+			paths:          []string{filepath.Join(tempDir, ".claude", "skills")},
+			scopeFilter:    nil,
+			platform:       model.ClaudeCode,
+			includePlugins: true,
+			// With includePlugins=true, plugins would be included (but no plugin cache in test)
+			// User scope skills are always included
 			wantScopes: []model.SkillScope{model.ScopeUser},
 		},
 		"non-claude platform ignores plugins": {
-			paths:       []string{filepath.Join(tempDir, ".cursor", "rules")},
-			scopeFilter: []model.SkillScope{model.ScopePlugin},
-			platform:    model.Cursor,
-			wantScopes:  []model.SkillScope{},
+			paths:          []string{filepath.Join(tempDir, ".cursor", "rules")},
+			scopeFilter:    []model.SkillScope{model.ScopePlugin},
+			platform:       model.Cursor,
+			includePlugins: false,
+			wantScopes:     []model.SkillScope{},
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			skills := parsePlatformSkillsFromPaths(tt.platform, tt.paths, "", tt.scopeFilter)
+			skills := parsePlatformSkillsFromPaths(tt.platform, tt.paths, "", tt.scopeFilter, tt.includePlugins)
 
 			// Verify all returned skills have expected scopes
 			for _, skill := range skills {

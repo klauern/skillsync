@@ -345,9 +345,10 @@ func discoveryCommand() *cli.Command {
 			}
 
 			// Discover skills from each platform
+			// Note: plugins are handled separately by discoverPluginSkills below
 			var allSkills []model.Skill
 			for _, p := range platforms {
-				skills, err := parsePlatformSkillsWithScope(p, scopeFilter)
+				skills, err := parsePlatformSkillsWithScope(p, scopeFilter, false)
 				if err != nil {
 					// Log error but continue with other platforms
 					fmt.Printf("Warning: failed to parse %s: %v\n", p, err)
@@ -868,7 +869,12 @@ func syncCommand() *cli.Command {
 
    Valid source scopes: repo, user, admin, system, builtin, plugin
    Valid target scopes: repo, user (writable locations only)
-   Note: plugin scope contains Claude Code plugin skills (read-only)
+
+   Plugin Skills:
+     Plugin scope skills (from Claude Code installed plugins) are excluded
+     by default. To include them, either:
+     - Use --include-plugins flag
+     - Explicitly specify plugin scope: claudecode:plugin
 
    Strategies:
      overwrite   - Replace target skills unconditionally (default)
@@ -884,13 +890,15 @@ func syncCommand() *cli.Command {
      skills FROM target that match the source skill names.
 
    Examples:
-     skillsync sync cursor claudecode           # All cursor skills to claudecode user scope
-     skillsync sync cursor:repo claudecode:user # Repo skills to user scope
-     skillsync sync cursor:repo,user codex:repo # Multiple source scopes to repo
-     skillsync sync --dry-run cursor codex      # Preview changes
+     skillsync sync cursor claudecode             # All cursor skills to claudecode user scope
+     skillsync sync cursor:repo claudecode:user   # Repo skills to user scope
+     skillsync sync cursor:repo,user codex:repo   # Multiple source scopes to repo
+     skillsync sync --dry-run cursor codex        # Preview changes
      skillsync sync --strategy=skip cursor codex
-     skillsync sync --interactive cursor codex  # Interactive TUI mode
-     skillsync sync --delete cursor codex       # Remove cursor skills from codex`,
+     skillsync sync --interactive cursor codex    # Interactive TUI mode
+     skillsync sync --delete cursor codex         # Remove cursor skills from codex
+     skillsync sync --include-plugins claudecode cursor  # Include plugin skills
+     skillsync sync claudecode:plugin cursor      # Sync only plugin skills`,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "interactive",
@@ -925,6 +933,10 @@ func syncCommand() *cli.Command {
 				Name:  "delete",
 				Usage: "Delete mode: remove skills FROM target that exist in source (inverse of sync)",
 			},
+			&cli.BoolFlag{
+				Name:  "include-plugins",
+				Usage: "Include skills from Claude Code plugins (excluded by default)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			cfg, err := parseSyncConfig(cmd)
@@ -935,12 +947,14 @@ func syncCommand() *cli.Command {
 			interactive := cmd.Bool("interactive")
 
 			// Always parse source skills (use tiered parser for scope filtering)
+			// Plugin scope skills are excluded by default unless --include-plugins is set
+			// or the plugin scope is explicitly in the source spec (e.g., "claudecode:plugin")
 			if cfg.sourceSpec.HasScopes() {
 				// User specified scopes - use tiered parser for scope filtering
-				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes)
+				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes, cfg.includePlugins)
 			} else {
-				// No scopes specified - use basic parser (respects env vars for E2E tests)
-				cfg.sourceSkills, err = parsePlatformSkills(cfg.sourceSpec.Platform)
+				// No scopes specified - use tiered parser with plugin exclusion by default
+				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, nil, cfg.includePlugins)
 			}
 			if err != nil {
 				return fmt.Errorf("failed to parse source skills: %w", err)
@@ -1047,6 +1061,7 @@ type syncConfig struct {
 	skipValidation bool
 	yesFlag        bool
 	deleteMode     bool
+	includePlugins bool
 	sourceSkills   []model.Skill
 }
 
@@ -1093,6 +1108,7 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		skipValidation: cmd.Bool("skip-validation"),
 		yesFlag:        cmd.Bool("yes"),
 		deleteMode:     cmd.Bool("delete"),
+		includePlugins: cmd.Bool("include-plugins"),
 		sourceSkills:   make([]model.Skill, 0),
 	}, nil
 }
@@ -1320,8 +1336,9 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 }
 
 // parsePlatformSkillsWithScope parses skills from the given platform with optional scope filtering.
-// If scopeFilter is nil or empty, all scopes are included.
-func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope) ([]model.Skill, error) {
+// If scopeFilter is nil or empty, all scopes are included. Plugin scope skills are excluded by
+// default unless includePlugins is true or the plugin scope is explicitly in scopeFilter.
+func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope, includePlugins bool) ([]model.Skill, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
@@ -1335,7 +1352,7 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 		return []model.Skill{}, nil
 	}
 
-	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter), nil
+	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter, includePlugins), nil
 }
 
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, string, error) {
@@ -1405,6 +1422,7 @@ func parsePlatformSkillsFromPaths(
 	paths []string,
 	repoRoot string,
 	scopeFilter []model.SkillScope,
+	includePlugins bool,
 ) []model.Skill {
 	parserFactory := tiered.ParserFactoryFor(platform)
 	skillsByName := make(map[string]model.Skill)
@@ -1442,9 +1460,12 @@ func parsePlatformSkillsFromPaths(
 		}
 	}
 
-	// For Claude Code, also include plugin cache skills if plugin scope is requested
-	// (or if no scope filter is specified, include all)
-	if platform == model.ClaudeCode && (len(scopeSet) == 0 || scopeSet[model.ScopePlugin]) {
+	// For Claude Code, include plugin cache skills if:
+	// - plugin scope is explicitly requested in scopeFilter, OR
+	// - includePlugins is true (--include-plugins flag)
+	// Note: plugin scope is excluded by default when no scope filter is specified
+	pluginExplicitlyRequested := scopeSet[model.ScopePlugin]
+	if platform == model.ClaudeCode && (pluginExplicitlyRequested || includePlugins) {
 		pluginSkills := parseClaudePluginCacheSkills()
 		for _, skill := range pluginSkills {
 			if existing, exists := skillsByName[skill.Name]; exists {
@@ -2586,7 +2607,7 @@ func runDiscoverTUI() error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil)
+		skills, err := parsePlatformSkillsWithScope(p, nil, false)
 		if err != nil {
 			// Log error but continue with other platforms
 			continue
@@ -2629,7 +2650,7 @@ func runSyncTUI() error {
 	targetPlatform := pickerResult.Target
 
 	// Step 2: Parse skills from the source platform
-	sourceSkills, err := parsePlatformSkillsWithScope(sourcePlatform, nil)
+	sourceSkills, err := parsePlatformSkillsWithScope(sourcePlatform, nil, false)
 	if err != nil {
 		return fmt.Errorf("failed to parse source skills: %w", err)
 	}
@@ -2846,7 +2867,7 @@ func runDeleteTUI() error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil)
+		skills, err := parsePlatformSkillsWithScope(p, nil, false)
 		if err != nil {
 			// Log error but continue with other platforms
 			continue
@@ -2927,7 +2948,7 @@ func runScopeTUI() error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil)
+		skills, err := parsePlatformSkillsWithScope(p, nil, false)
 		if err != nil {
 			// Log error but continue with other platforms
 			continue
@@ -2982,7 +3003,7 @@ func runConflictsTUI() error {
 	// Discover skills from all platforms to find potential conflicts
 	platformSkills := make(map[model.Platform][]model.Skill)
 	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil)
+		skills, err := parsePlatformSkillsWithScope(p, nil, false)
 		if err != nil {
 			continue
 		}
@@ -3095,7 +3116,7 @@ func runCompareTUI() error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil)
+		skills, err := parsePlatformSkillsWithScope(p, nil, false)
 		if err != nil {
 			// Log error but continue with other platforms
 			continue
@@ -3222,7 +3243,7 @@ func runPromoteDemoteTUI() error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil)
+		skills, err := parsePlatformSkillsWithScope(p, nil, false)
 		if err != nil {
 			// Log error but continue with other platforms
 			continue
