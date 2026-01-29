@@ -34,6 +34,19 @@ func New(basePath string) *Parser {
 	}
 }
 
+// NewCachePluginsParser creates a new Claude Code parser for the plugin cache directory
+// If basePath is empty, uses the default Claude Code plugin cache directory (~/.claude/plugins/cache/)
+// This parser is used to discover skills from installed Claude Code plugins.
+func NewCachePluginsParser(basePath string) *Parser {
+	if basePath == "" {
+		basePath = util.ClaudePluginCachePath()
+	}
+	return &Parser{
+		basePath:    basePath,
+		pluginIndex: LoadPluginIndex(),
+	}
+}
+
 // Parse parses Claude Code skills from markdown files with YAML frontmatter
 // Supports both:
 // 1. Agent Skills Standard: SKILL.md files in subdirectories (takes precedence)
