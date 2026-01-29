@@ -1,0 +1,113 @@
+# GoReleaser configuration for skillsync
+# See https://goreleaser.com for documentation
+
+version: 2
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+    # Run quality checks
+    - make audit
+
+builds:
+  - main: ./cmd/skillsync
+    binary: skillsync
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Inject version information via ldflags (matching Makefile approach)
+    ldflags:
+      - -s -w
+      - -X github.com/klauern/skillsync/internal/cli.Version={{.Version}}
+      - -X github.com/klauern/skillsync/internal/cli.Commit={{.FullCommit}}
+      - -X github.com/klauern/skillsync/internal/cli.BuildDate={{.Date}}
+    mod_timestamp: "{{.CommitTimestamp}}"
+
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+      - docs/*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^build:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: "^feat:"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^fix:"
+      order: 1
+    - title: Performance Improvements
+      regexp: "^perf:"
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: klauern
+    name: skillsync
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## skillsync {{.Tag}}
+
+    Release artifacts for multiple platforms.
+  footer: |
+    ## Installation
+
+    ### Binary Download
+
+    Download the appropriate binary for your platform from the assets below.
+
+    ### Homebrew (macOS/Linux)
+
+    ```bash
+    brew tap klauern/skillsync
+    brew install skillsync
+    ```
+
+    ### Go Install
+
+    ```bash
+    go install github.com/klauern/skillsync/cmd/skillsync@{{.Tag}}
+    ```
+  name_template: "{{.ProjectName}}-v{{.Version}}"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# Announce releases (optional, can be enabled later)
+# announce:
+#   skip: false
