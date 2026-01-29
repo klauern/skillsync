@@ -513,6 +513,66 @@ func (s *Synchronizer) determineAction(
 		)
 		return ActionConflict, "conflict detected - awaiting resolution", conflict
 
+	case StrategySmart:
+		// Smart strategy: intelligently choose approach based on content and timestamps
+		logging.Debug("smart strategy evaluation",
+			logging.Skill(source.Name),
+			slog.Time("source_modified", source.ModifiedAt),
+			slog.Time("existing_modified", existing.ModifiedAt),
+		)
+
+		// First check for conflicts
+		conflict := s.conflictDetector.DetectConflict(source, existing)
+		if conflict == nil {
+			// No conflict, content is identical
+			logging.Debug("smart: no conflict detected, content identical",
+				logging.Skill(source.Name),
+			)
+			return ActionSkipped, "content is identical", nil
+		}
+
+		// Check timestamp difference (more than 1 hour is significant)
+		timeDiff := source.ModifiedAt.Sub(existing.ModifiedAt)
+		if timeDiff.Abs() > time.Hour {
+			// Clear timestamp difference - use newer
+			if source.ModifiedAt.After(existing.ModifiedAt) {
+				logging.Debug("smart: source significantly newer, using source",
+					logging.Skill(source.Name),
+					slog.Duration("time_diff", timeDiff),
+				)
+				return ActionUpdated, fmt.Sprintf("source is significantly newer (%s > %s)",
+					source.ModifiedAt.Format(time.RFC3339),
+					existing.ModifiedAt.Format(time.RFC3339)), nil
+			}
+			logging.Debug("smart: target significantly newer, keeping target",
+				logging.Skill(source.Name),
+				slog.Duration("time_diff", timeDiff),
+			)
+			return ActionSkipped, fmt.Sprintf("target is significantly newer (%s > %s)",
+				existing.ModifiedAt.Format(time.RFC3339),
+				source.ModifiedAt.Format(time.RFC3339)), nil
+		}
+
+		// Similar timestamps with conflict - attempt three-way merge
+		logging.Debug("smart: attempting three-way merge for concurrent changes",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
+		mergeResult := s.merger.TwoWayMerge(source, existing)
+		if mergeResult.Success {
+			logging.Debug("smart: three-way merge successful",
+				logging.Skill(source.Name),
+			)
+			return ActionMerged, "intelligently merged concurrent changes", nil
+		}
+
+		// Merge failed - return conflict for manual resolution
+		logging.Debug("smart: merge conflict requires manual resolution",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
+		return ActionConflict, "concurrent changes conflict - needs resolution", conflict
+
 	default:
 		return ActionUpdated, "updating (default strategy)", nil
 	}

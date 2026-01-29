@@ -22,12 +22,16 @@ const (
 
 	// StrategyInteractive prompts user for each conflict.
 	StrategyInteractive Strategy = "interactive"
+
+	// StrategySmart intelligently combines strategies: uses timestamp for clear cases,
+	// attempts three-way merge for conflicts, and auto-merges when safe.
+	StrategySmart Strategy = "smart"
 )
 
 // IsValid returns true if the strategy is recognized.
 func (s Strategy) IsValid() bool {
 	switch s {
-	case StrategyOverwrite, StrategySkip, StrategyNewer, StrategyMerge, StrategyThreeWay, StrategyInteractive:
+	case StrategyOverwrite, StrategySkip, StrategyNewer, StrategyMerge, StrategyThreeWay, StrategyInteractive, StrategySmart:
 		return true
 	default:
 		return false
@@ -36,7 +40,7 @@ func (s Strategy) IsValid() bool {
 
 // AllStrategies returns all supported sync strategies.
 func AllStrategies() []Strategy {
-	return []Strategy{StrategyOverwrite, StrategySkip, StrategyNewer, StrategyMerge, StrategyThreeWay, StrategyInteractive}
+	return []Strategy{StrategyOverwrite, StrategySkip, StrategyNewer, StrategyMerge, StrategyThreeWay, StrategyInteractive, StrategySmart}
 }
 
 // String returns the string representation of the strategy.
@@ -59,6 +63,8 @@ func (s Strategy) Description() string {
 		return "Intelligent three-way merge with conflict detection"
 	case StrategyInteractive:
 		return "Prompt for each conflict interactively"
+	case StrategySmart:
+		return "Intelligently choose best strategy: timestamp-based for clear cases, three-way merge for conflicts"
 	default:
 		return "Unknown strategy"
 	}

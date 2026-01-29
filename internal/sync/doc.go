@@ -1,5 +1,5 @@
 // Package sync implements skill synchronization logic across platforms.
-// It provides strategies for merging, overwriting, and smart syncing
+// It provides strategies for merging, overwriting, and intelligent syncing
 // of agent skills with conflict resolution.
 //
 // # Features
@@ -8,7 +8,7 @@
 //   - Unidirectional sync (source -> target) via Sync() method
 //   - Bidirectional sync (platform A <-> platform B) via SyncBidirectional()
 //   - Real-time progress reporting through ProgressCallback
-//   - Multiple merge strategies (overwrite, skip, newer, merge, three-way, interactive)
+//   - Multiple merge strategies (overwrite, skip, newer, merge, three-way, interactive, smart)
 //   - Conflict detection and resolution
 //   - Dry-run mode for previewing changes
 //
@@ -73,4 +73,6 @@
 //   - StrategyMerge: Concatenate content with headers
 //   - StrategyThreeWay: Intelligent merge with conflict detection
 //   - StrategyInteractive: Prompt for each conflict
+//   - StrategySmart: Intelligently combines strategies - uses timestamp for clear cases (>1 hour difference),
+//     attempts three-way merge for concurrent changes, auto-merges when safe
 package sync

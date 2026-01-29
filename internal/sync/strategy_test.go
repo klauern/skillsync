@@ -13,6 +13,7 @@ func TestStrategyIsValid(t *testing.T) {
 		"merge valid":        {strategy: StrategyMerge, valid: true},
 		"three-way valid":    {strategy: StrategyThreeWay, valid: true},
 		"interactive valid":  {strategy: StrategyInteractive, valid: true},
+		"smart valid":        {strategy: StrategySmart, valid: true},
 		"empty invalid":      {strategy: "", valid: false},
 		"unknown invalid":    {strategy: "unknown", valid: false},
 		"uppercase invalid":  {strategy: "OVERWRITE", valid: false},
@@ -37,8 +38,8 @@ func TestAllStrategies(t *testing.T) {
 	strategies := AllStrategies()
 
 	t.Run("returns correct count", func(t *testing.T) {
-		if len(strategies) != 6 {
-			t.Errorf("AllStrategies() returned %d strategies, want 6", len(strategies))
+		if len(strategies) != 7 {
+			t.Errorf("AllStrategies() returned %d strategies, want 7", len(strategies))
 		}
 	})
 
@@ -58,6 +59,7 @@ func TestAllStrategies(t *testing.T) {
 			StrategyMerge,
 			StrategyThreeWay,
 			StrategyInteractive,
+			StrategySmart,
 		}
 		for i, s := range strategies {
 			if s != expectedOrder[i] {
@@ -88,6 +90,7 @@ func TestStrategyString(t *testing.T) {
 		"merge":       {strategy: StrategyMerge, want: "merge"},
 		"three-way":   {strategy: StrategyThreeWay, want: "three-way"},
 		"interactive": {strategy: StrategyInteractive, want: "interactive"},
+		"smart":       {strategy: StrategySmart, want: "smart"},
 	}
 
 	for name, tt := range tests {
@@ -143,6 +146,7 @@ func TestStrategyDescription(t *testing.T) {
 			"merge contains merge":          {strategy: StrategyMerge, contains: "Merge"},
 			"three-way contains merge":      {strategy: StrategyThreeWay, contains: "merge"},
 			"interactive contains conflict": {strategy: StrategyInteractive, contains: "conflict"},
+			"smart contains intelligent":    {strategy: StrategySmart, contains: "Intelligent"},
 		}
 
 		for name, tt := range tests {
@@ -169,6 +173,7 @@ func TestStrategyConstants(t *testing.T) {
 			"merge":       {strategy: StrategyMerge, value: "merge"},
 			"three-way":   {strategy: StrategyThreeWay, value: "three-way"},
 			"interactive": {strategy: StrategyInteractive, value: "interactive"},
+			"smart":       {strategy: StrategySmart, value: "smart"},
 		}
 
 		for name, tt := range tests {

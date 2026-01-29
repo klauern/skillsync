@@ -854,7 +854,7 @@ func syncCommand() *cli.Command {
 				Name:    "strategy",
 				Aliases: []string{"s"},
 				Value:   "overwrite",
-				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive",
+				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive, smart",
 			},
 			&cli.BoolFlag{
 				Name:  "skip-backup",
@@ -1051,7 +1051,7 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 	strategyStr := cmd.String("strategy")
 	strategy := sync.Strategy(strategyStr)
 	if !strategy.IsValid() {
-		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge, three-way, interactive)", strategyStr)
+		return nil, fmt.Errorf("invalid strategy %q (valid: overwrite, skip, newer, merge, three-way, interactive, smart)", strategyStr)
 	}
 
 	return &syncConfig{
