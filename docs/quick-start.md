@@ -123,6 +123,12 @@ skillsync discover --scope user
 
 # Show multiple scopes
 skillsync discover --scope repo,user
+
+# Show only plugin skills (Claude Code only)
+skillsync discover --platform claude-code --scope plugin
+
+# Show user and plugin scopes together
+skillsync discover --scope user,plugin
 ```
 
 ### Interactive TUI Mode
@@ -199,8 +205,10 @@ skillsync sync cursor:repo,user codex:repo
 skillsync sync cursor:user claude-code
 ```
 
-**Valid Source Scopes:** repo, user, admin, system, builtin (can specify multiple)
+**Valid Source Scopes:** repo, user, admin, system, builtin, plugin (can specify multiple)
 **Valid Target Scopes:** repo, user (writable locations only, single scope)
+
+> **Tip:** Use `plugin` scope to sync skills from installed Claude Code plugins to other platforms like Cursor or Codex.
 
 ### Interactive Sync
 
@@ -451,11 +459,14 @@ skillsync dedupe rename old-name new-name --platform cursor --scope user
 
 Skills can exist at different scope levels (from highest to lowest priority):
 
-1. **repo** - Repository-level (`.claude/skills`, `.cursor/skills`, `.codex/skills`)
-2. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`)
-3. **admin** - Administrator-defined
-4. **system** - System-wide installations
-5. **builtin** - Built-in platform skills
+1. **plugin** - Claude Code plugin skills (`~/.claude/plugins/cache/*`) - *read-only*
+2. **repo** - Repository-level (`.claude/skills`, `.cursor/skills`, `.codex/skills`)
+3. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`)
+4. **admin** - Administrator-defined
+5. **system** - System-wide installations
+6. **builtin** - Built-in platform skills
+
+> **Note:** Plugin scope skills are installed from Claude Code plugins and cannot be directly modified. They have the highest precedence, meaning a plugin skill will override any same-named skill in other scopes during discovery.
 
 ### List Skill Locations
 
@@ -519,6 +530,39 @@ skillsync scope prune --scope user --keep-repo
 # Prune from specific platform
 skillsync scope prune --platform cursor --scope user
 ```
+
+### Working with Plugin Skills
+
+Plugin skills are installed from Claude Code plugins and have special characteristics:
+
+- **Read-only:** Plugin skills cannot be modified directly; they're managed by the plugin system
+- **Highest precedence:** Plugin skills override same-named skills from other scopes
+- **Claude Code only:** Plugin scope is exclusive to Claude Code
+
+**Discover plugin skills:**
+
+```bash
+# List all plugin skills
+skillsync discover --platform claude-code --scope plugin
+
+# See plugin skills alongside user skills
+skillsync discover --scope user,plugin
+```
+
+**Sync plugin skills to other platforms:**
+
+```bash
+# Sync all plugin skills to Cursor user scope
+skillsync sync claude-code:plugin cursor:user
+
+# Sync plugin skills to Codex repo scope
+skillsync sync claude-code:plugin codex:repo
+
+# Preview what plugin skills would sync
+skillsync sync --dry-run claude-code:plugin cursor:user
+```
+
+> **Note:** When syncing plugin skills to other platforms, the skills are copied to writable scopes (repo or user) in the target platform. The original plugin skills remain unchanged.
 
 ## Exporting Skills
 

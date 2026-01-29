@@ -866,8 +866,9 @@ func syncCommand() *cli.Command {
      - cursor:repo      Only repo scope
      - cursor:repo,user Both repo and user scopes (source only)
 
-   Valid scopes: repo, user, admin, system, builtin
-   Target scope must be repo or user (writable locations)
+   Valid source scopes: repo, user, admin, system, builtin, plugin
+   Valid target scopes: repo, user (writable locations only)
+   Note: plugin scope contains Claude Code plugin skills (read-only)
 
    Strategies:
      overwrite   - Replace target skills unconditionally (default)
