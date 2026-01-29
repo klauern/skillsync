@@ -4,9 +4,11 @@ package validation
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/util"
 )
@@ -124,15 +126,30 @@ func (r *Result) Summary() string {
 // ValidateSourceTarget performs comprehensive validation before sync operations.
 // Validates source and target platforms, paths, permissions, and skill formats.
 func ValidateSourceTarget(source, target model.Platform, skills []model.Skill, opts Options) (*Result, error) {
+	logging.Debug("validating source and target",
+		logging.Platform(string(source)),
+		slog.String("target_platform", string(target)),
+		logging.Count(len(skills)),
+		logging.Operation("validate"),
+	)
+
 	result := &Result{Valid: true}
 
 	// Validate source platform
 	if err := validatePlatform(source, "source", true); err != nil {
+		logging.Error("source platform validation failed",
+			logging.Platform(string(source)),
+			logging.Err(err),
+		)
 		result.AddError(err)
 	}
 
 	// Validate target platform
 	if err := validatePlatform(target, "target", false); err != nil {
+		logging.Error("target platform validation failed",
+			slog.String("target_platform", string(target)),
+			logging.Err(err),
+		)
 		result.AddError(err)
 	}
 
@@ -163,7 +180,23 @@ func ValidateSourceTarget(source, target model.Platform, skills []model.Skill, o
 
 	// Add informational warnings
 	if len(skills) == 0 {
+		logging.Warn("no skills found to sync")
 		result.AddWarning("No skills found to sync")
+	}
+
+	if result.Valid {
+		logging.Info("validation passed",
+			logging.Platform(string(source)),
+			slog.String("target_platform", string(target)),
+			logging.Count(len(skills)),
+			slog.Int("warnings", len(result.Warnings)),
+		)
+	} else {
+		logging.Error("validation failed",
+			logging.Platform(string(source)),
+			slog.String("target_platform", string(target)),
+			slog.Int("errors", len(result.Errors)),
+		)
 	}
 
 	return result, nil
@@ -375,9 +408,16 @@ func validateWritePermission(platform model.Platform) error {
 // ValidateSkillsFormat validates the format of parsed skills.
 // Useful for validating skills after parsing but before sync.
 func ValidateSkillsFormat(skills []model.Skill, platform model.Platform) (*Result, error) {
+	logging.Debug("validating skills format",
+		logging.Platform(string(platform)),
+		logging.Count(len(skills)),
+		logging.Operation("validate_format"),
+	)
+
 	result := &Result{Valid: true}
 
 	if len(skills) == 0 {
+		logging.Warn("no skills to validate")
 		result.AddWarning("No skills to validate")
 		return result, nil
 	}
@@ -423,6 +463,19 @@ func ValidateSkillsFormat(skills []model.Skill, platform model.Platform) (*Resul
 				result.AddWarning(fmt.Sprintf("skill %q path not accessible: %v", skill.Name, err))
 			}
 		}
+	}
+
+	if result.Valid {
+		logging.Info("skills format validation passed",
+			logging.Platform(string(platform)),
+			logging.Count(len(skills)),
+			slog.Int("warnings", len(result.Warnings)),
+		)
+	} else {
+		logging.Error("skills format validation failed",
+			logging.Platform(string(platform)),
+			slog.Int("errors", len(result.Errors)),
+		)
 	}
 
 	return result, nil

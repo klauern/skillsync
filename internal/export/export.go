@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 )
 
@@ -85,19 +87,49 @@ func New(opts Options) *Exporter {
 
 // Export exports the given skills to the writer in the configured format.
 func (e *Exporter) Export(skills []model.Skill, w io.Writer) error {
+	logging.Debug("starting export",
+		slog.String("format", string(e.opts.Format)),
+		logging.Count(len(skills)),
+		logging.Platform(string(e.opts.Platform)),
+		logging.Operation("export"),
+	)
+
 	// Filter by platform if specified
 	filtered := e.filterByPlatform(skills)
 
+	if len(filtered) != len(skills) {
+		logging.Debug("skills filtered by platform",
+			logging.Count(len(filtered)),
+			slog.Int("original", len(skills)),
+		)
+	}
+
+	var err error
 	switch e.opts.Format {
 	case FormatJSON:
-		return e.exportJSON(filtered, w)
+		err = e.exportJSON(filtered, w)
 	case FormatYAML:
-		return e.exportYAML(filtered, w)
+		err = e.exportYAML(filtered, w)
 	case FormatMarkdown:
-		return e.exportMarkdown(filtered, w)
+		err = e.exportMarkdown(filtered, w)
 	default:
-		return fmt.Errorf("unsupported format: %s", e.opts.Format)
+		err = fmt.Errorf("unsupported format: %s", e.opts.Format)
 	}
+
+	if err != nil {
+		logging.Error("export failed",
+			slog.String("format", string(e.opts.Format)),
+			logging.Err(err),
+		)
+		return err
+	}
+
+	logging.Info("export completed successfully",
+		slog.String("format", string(e.opts.Format)),
+		logging.Count(len(filtered)),
+	)
+
+	return nil
 }
 
 // ExportSingle exports a single skill to the writer.
@@ -155,6 +187,11 @@ func (e *Exporter) toExportSkill(skill model.Skill) exportSkill {
 
 // exportJSON exports skills as JSON.
 func (e *Exporter) exportJSON(skills []model.Skill, w io.Writer) error {
+	logging.Debug("exporting as JSON",
+		logging.Count(len(skills)),
+		slog.Bool("pretty", e.opts.Pretty),
+	)
+
 	exported := make([]exportSkill, len(skills))
 	for i, skill := range skills {
 		exported[i] = e.toExportSkill(skill)
@@ -169,6 +206,11 @@ func (e *Exporter) exportJSON(skills []model.Skill, w io.Writer) error {
 
 // exportYAML exports skills as YAML.
 func (e *Exporter) exportYAML(skills []model.Skill, w io.Writer) error {
+	logging.Debug("exporting as YAML",
+		logging.Count(len(skills)),
+		slog.Bool("pretty", e.opts.Pretty),
+	)
+
 	exported := make([]exportSkill, len(skills))
 	for i, skill := range skills {
 		exported[i] = e.toExportSkill(skill)
@@ -187,6 +229,8 @@ func (e *Exporter) exportYAML(skills []model.Skill, w io.Writer) error {
 
 // exportMarkdown exports skills as Markdown.
 func (e *Exporter) exportMarkdown(skills []model.Skill, w io.Writer) error {
+	logging.Debug("exporting as Markdown", logging.Count(len(skills)))
+
 	var sb strings.Builder
 
 	sb.WriteString("# Exported Skills\n\n")

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	"github.com/klauern/skillsync/internal/cache"
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/export"
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
@@ -875,30 +877,60 @@ func syncCommand() *cli.Command {
 				return err
 			}
 
+			logging.Info("starting sync command",
+				logging.Platform(string(cfg.sourceSpec.Platform)),
+				slog.String("target_platform", string(cfg.targetSpec.Platform)),
+				slog.String("strategy", string(cfg.strategy)),
+				slog.Bool("dry_run", cfg.dryRun),
+				logging.Operation("sync"),
+			)
+
 			interactive := cmd.Bool("interactive")
 
 			// Always parse source skills (use tiered parser for scope filtering)
 			if cfg.sourceSpec.HasScopes() {
 				// User specified scopes - use tiered parser for scope filtering
+				logging.Debug("parsing source skills with scopes",
+					logging.Platform(string(cfg.sourceSpec.Platform)),
+					slog.Any("scopes", cfg.sourceSpec.Scopes),
+				)
 				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes)
 			} else {
 				// No scopes specified - use basic parser (respects env vars for E2E tests)
+				logging.Debug("parsing source skills (all scopes)",
+					logging.Platform(string(cfg.sourceSpec.Platform)),
+				)
 				cfg.sourceSkills, err = parsePlatformSkills(cfg.sourceSpec.Platform)
 			}
 			if err != nil {
+				logging.Error("failed to parse source skills",
+					logging.Platform(string(cfg.sourceSpec.Platform)),
+					logging.Err(err),
+				)
 				return fmt.Errorf("failed to parse source skills: %w", err)
 			}
 
+			logging.Info("source skills parsed",
+				logging.Platform(string(cfg.sourceSpec.Platform)),
+				logging.Count(len(cfg.sourceSkills)),
+			)
+
 			// Interactive TUI mode
 			if interactive {
+				logging.Info("entering interactive TUI mode")
 				return syncSkillsInteractive(cfg)
 			}
 
 			// Validate source skills before sync (unless skipped)
 			if !cfg.skipValidation {
+				logging.Debug("validating source skills")
 				if err := validateSourceSkills(cfg); err != nil {
+					logging.Error("source validation failed", logging.Err(err))
 					return err
 				}
+				logging.Debug("source validation passed")
+			} else {
+				logging.Warn("skipping validation (--skip-validation flag used)")
 			}
 
 			// Show summary and request confirmation (unless --yes or --dry-run)
@@ -915,7 +947,12 @@ func syncCommand() *cli.Command {
 
 			// Create backup before sync (unless skipped or dry-run)
 			if !cfg.dryRun && !cfg.skipBackup {
+				logging.Info("creating backup before sync",
+					logging.Platform(string(cfg.targetSpec.Platform)),
+				)
 				prepareBackup(cfg.targetSpec.Platform)
+			} else if cfg.skipBackup {
+				logging.Warn("skipping backup (--skip-backup flag used)")
 			}
 
 			// Create sync options and execute
@@ -925,11 +962,27 @@ func syncCommand() *cli.Command {
 				TargetScope: cfg.targetSpec.TargetScope(),
 			}
 
+			logging.Info("executing sync",
+				logging.Platform(string(cfg.sourceSpec.Platform)),
+				slog.String("target_platform", string(cfg.targetSpec.Platform)),
+				slog.String("strategy", string(cfg.strategy)),
+			)
+
 			syncer := sync.New()
 			result, err := syncer.SyncWithSkills(cfg.sourceSkills, cfg.targetSpec.Platform, opts)
 			if err != nil {
+				logging.Error("sync failed",
+					logging.Platform(string(cfg.sourceSpec.Platform)),
+					slog.String("target_platform", string(cfg.targetSpec.Platform)),
+					logging.Err(err),
+				)
 				return fmt.Errorf("sync failed: %w", err)
 			}
+
+			logging.Info("sync completed",
+				slog.Int("total_skills", len(cfg.sourceSkills)),
+				slog.Int("conflicts", len(result.Conflicts())),
+			)
 
 			// Handle conflicts if interactive strategy is used
 			if result.HasConflicts() && cfg.strategy == sync.StrategyInteractive {

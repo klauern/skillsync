@@ -3,10 +3,12 @@ package cache
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/util"
 )
@@ -34,8 +36,17 @@ const (
 
 // New creates or loads a cache for the given source name (e.g., "plugins")
 func New(sourceName string) (*Cache, error) {
+	logging.Debug("initializing cache",
+		slog.String("source", sourceName),
+		logging.Operation("cache_init"),
+	)
+
 	cacheDir := filepath.Join(util.SkillsyncConfigPath(), "cache")
 	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
+		logging.Error("failed to create cache directory",
+			logging.Path(cacheDir),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 
@@ -51,13 +62,32 @@ func New(sourceName string) (*Cache, error) {
 	if data, err := os.ReadFile(cachePath); err == nil {
 		if err := json.Unmarshal(data, cache); err != nil {
 			// Corrupted cache, start fresh
+			logging.Warn("corrupted cache, starting fresh",
+				slog.String("source", sourceName),
+				logging.Path(cachePath),
+				logging.Err(err),
+			)
 			cache.Entries = make(map[string]Entry)
 		}
 		// Version mismatch, invalidate cache
 		if cache.Version != cacheVersion {
+			logging.Debug("cache version mismatch, invalidating",
+				slog.String("source", sourceName),
+				slog.String("expected", cacheVersion),
+				slog.String("actual", cache.Version),
+			)
 			cache.Entries = make(map[string]Entry)
 			cache.Version = cacheVersion
+		} else {
+			logging.Debug("cache loaded",
+				slog.String("source", sourceName),
+				logging.Count(len(cache.Entries)),
+			)
 		}
+	} else {
+		logging.Debug("no existing cache found, creating new",
+			slog.String("source", sourceName),
+		)
 	}
 
 	cache.path = cachePath
@@ -68,6 +98,7 @@ func New(sourceName string) (*Cache, error) {
 func (c *Cache) Get(key string) (model.Skill, bool) {
 	entry, exists := c.Entries[key]
 	if !exists {
+		logging.Debug("cache miss", slog.String("key", key))
 		return model.Skill{}, false
 	}
 
@@ -75,11 +106,16 @@ func (c *Cache) Get(key string) (model.Skill, bool) {
 	if info, err := os.Stat(entry.SourcePath); err == nil {
 		if info.ModTime().After(entry.SourceMod) {
 			// Source has been modified, cache is stale
+			logging.Debug("cache stale (source modified)",
+				slog.String("key", key),
+				logging.Path(entry.SourcePath),
+			)
 			delete(c.Entries, key)
 			return model.Skill{}, false
 		}
 	}
 
+	logging.Debug("cache hit", slog.String("key", key))
 	return entry.Skill, true
 }
 
@@ -96,22 +132,57 @@ func (c *Cache) Set(key string, skill model.Skill) {
 		SourcePath: skill.Path,
 		SourceMod:  sourceMod,
 	}
+
+	logging.Debug("cache set",
+		slog.String("key", key),
+		logging.Skill(skill.Name),
+		logging.Path(skill.Path),
+	)
 }
 
 // Save persists the cache to disk
 func (c *Cache) Save() error {
+	logging.Debug("saving cache",
+		logging.Path(c.path),
+		logging.Count(len(c.Entries)),
+	)
+
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
+		logging.Error("failed to marshal cache", logging.Err(err))
 		return err
 	}
+
 	// #nosec G306 - cache files should be readable by user
-	return os.WriteFile(c.path, data, 0o644)
+	if err := os.WriteFile(c.path, data, 0o644); err != nil {
+		logging.Error("failed to write cache file",
+			logging.Path(c.path),
+			logging.Err(err),
+		)
+		return err
+	}
+
+	logging.Debug("cache saved successfully", logging.Path(c.path))
+	return nil
 }
 
 // Clear removes all entries from the cache
 func (c *Cache) Clear() error {
+	logging.Info("clearing cache",
+		logging.Path(c.path),
+		logging.Count(len(c.Entries)),
+	)
+
 	c.Entries = make(map[string]Entry)
-	return os.Remove(c.path)
+	if err := os.Remove(c.path); err != nil && !os.IsNotExist(err) {
+		logging.Error("failed to remove cache file",
+			logging.Path(c.path),
+			logging.Err(err),
+		)
+		return err
+	}
+
+	return nil
 }
 
 // Size returns the number of entries in the cache
@@ -131,6 +202,11 @@ func (c *Cache) IsStale(ttl time.Duration) bool {
 
 // Prune removes stale entries based on TTL
 func (c *Cache) Prune(ttl time.Duration) int {
+	logging.Debug("pruning cache",
+		slog.Duration("ttl", ttl),
+		logging.Count(len(c.Entries)),
+	)
+
 	pruned := 0
 	for key, entry := range c.Entries {
 		if time.Since(entry.CachedAt) > ttl {
@@ -138,5 +214,15 @@ func (c *Cache) Prune(ttl time.Duration) int {
 			pruned++
 		}
 	}
+
+	if pruned > 0 {
+		logging.Info("cache pruned",
+			logging.Count(pruned),
+			slog.Int("remaining", len(c.Entries)),
+		)
+	} else {
+		logging.Debug("no stale entries to prune")
+	}
+
 	return pruned
 }

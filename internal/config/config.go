@@ -3,6 +3,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/util"
 )
@@ -195,27 +197,46 @@ func FilePath() string {
 // If the config file doesn't exist, returns default configuration.
 func Load() (*Config, error) {
 	cfg := Default()
+	configPath := FilePath()
+
+	logging.Debug("loading configuration",
+		logging.Path(configPath),
+		logging.Operation("config_load"),
+	)
 
 	// Try to load from file
-	configPath := FilePath()
 	// #nosec G304 - configPath is constructed from trusted config directory
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// No config file, use defaults with environment overrides
+			logging.Debug("config file not found, using defaults", logging.Path(configPath))
 			cfg.applyEnvironment()
 			return cfg, nil
 		}
+		logging.Error("failed to read config file",
+			logging.Path(configPath),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 
 	// Parse YAML over defaults
 	if err := yaml.Unmarshal(data, cfg); err != nil {
+		logging.Error("failed to parse config file",
+			logging.Path(configPath),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 
 	// Apply environment variable overrides
 	cfg.applyEnvironment()
+
+	logging.Info("configuration loaded successfully",
+		logging.Path(configPath),
+		slog.String("default_strategy", cfg.Sync.DefaultStrategy),
+	)
 
 	return cfg, nil
 }
@@ -224,17 +245,34 @@ func Load() (*Config, error) {
 func LoadFromPath(path string) (*Config, error) {
 	cfg := Default()
 
+	logging.Debug("loading configuration from custom path",
+		logging.Path(path),
+	)
+
 	// #nosec G304 - path is provided by caller
 	data, err := os.ReadFile(path)
 	if err != nil {
+		logging.Error("failed to read config file",
+			logging.Path(path),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
+		logging.Error("failed to parse config file",
+			logging.Path(path),
+			logging.Err(err),
+		)
 		return nil, err
 	}
 
 	cfg.applyEnvironment()
+
+	logging.Info("configuration loaded from custom path",
+		logging.Path(path),
+	)
+
 	return cfg, nil
 }
 
@@ -242,18 +280,34 @@ func LoadFromPath(path string) (*Config, error) {
 func (c *Config) Save() error {
 	configPath := FilePath()
 
+	logging.Debug("saving configuration", logging.Path(configPath))
+
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		logging.Error("failed to create config directory",
+			logging.Path(filepath.Dir(configPath)),
+			logging.Err(err),
+		)
 		return err
 	}
 
 	data, err := yaml.Marshal(c)
 	if err != nil {
+		logging.Error("failed to marshal configuration", logging.Err(err))
 		return err
 	}
 
 	// #nosec G306 - config file should be readable by user
-	return os.WriteFile(configPath, data, 0o644)
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		logging.Error("failed to write config file",
+			logging.Path(configPath),
+			logging.Err(err),
+		)
+		return err
+	}
+
+	logging.Info("configuration saved successfully", logging.Path(configPath))
+	return nil
 }
 
 // SaveToPath writes the configuration to a specific path.
