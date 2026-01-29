@@ -403,3 +403,363 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestProgressCallback_Success(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Create test skill
+	skillContent := `---
+name: progress-skill
+description: Test progress callback
+---
+Test content.
+`
+	skillPath := filepath.Join(sourceDir, "progress-skill.md")
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill file: %v", err)
+	}
+
+	// Track progress events
+	var events []ProgressEvent
+	progressCallback := func(event ProgressEvent) error {
+		events = append(events, event)
+		return nil
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+		Progress:   progressCallback,
+	}
+
+	result, err := s.Sync(model.ClaudeCode, model.Cursor, opts)
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+
+	if len(result.Skills) != 1 {
+		t.Errorf("Expected 1 skill, got %d", len(result.Skills))
+	}
+
+	// Verify progress events were emitted
+	if len(events) < 3 {
+		t.Errorf("Expected at least 3 events (start, skill_start, skill_complete, complete), got %d", len(events))
+	}
+
+	// Check event types
+	if events[0].Type != ProgressEventStart {
+		t.Errorf("First event should be start, got %s", events[0].Type)
+	}
+
+	lastEvent := events[len(events)-1]
+	if lastEvent.Type != ProgressEventComplete {
+		t.Errorf("Last event should be complete, got %s", lastEvent.Type)
+	}
+
+	if lastEvent.PercentComplete != 100 {
+		t.Errorf("Expected 100%% complete, got %d%%", lastEvent.PercentComplete)
+	}
+}
+
+func TestProgressCallback_Cancellation(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Create test skill
+	skillContent := `---
+name: cancel-skill
+description: Test cancellation
+---
+Test content.
+`
+	skillPath := filepath.Join(sourceDir, "cancel-skill.md")
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill file: %v", err)
+	}
+
+	// Cancel on first skill start
+	progressCallback := func(event ProgressEvent) error {
+		if event.Type == ProgressEventSkillStart {
+			return os.ErrClosed // Return an error to cancel
+		}
+		return nil
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+		Progress:   progressCallback,
+	}
+
+	_, err := s.Sync(model.ClaudeCode, model.Cursor, opts)
+	if err == nil {
+		t.Error("Expected error from cancelled sync")
+	}
+}
+
+func TestSyncBidirectional_EmptyPlatforms(t *testing.T) {
+	s := New()
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	opts := Options{
+		DryRun:     true,
+		Strategy:   StrategyOverwrite,
+		SourcePath: dirA,
+		TargetPath: dirB,
+	}
+
+	result, err := s.SyncBidirectional(model.ClaudeCode, model.Cursor, opts)
+	if err != nil {
+		t.Fatalf("Bidirectional sync failed: %v", err)
+	}
+
+	if result.ResultAtoB != nil {
+		t.Error("Expected no A->B sync for empty platforms")
+	}
+
+	if result.ResultBtoA != nil {
+		t.Error("Expected no B->A sync for empty platforms")
+	}
+
+	if len(result.Conflicts) != 0 {
+		t.Errorf("Expected 0 conflicts, got %d", len(result.Conflicts))
+	}
+}
+
+func TestSyncBidirectional_SkillOnlyInA(t *testing.T) {
+	s := New()
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	// Create skill only in A
+	skillContent := `---
+name: only-in-a
+description: Skill only in A
+---
+Content from A.
+`
+	skillPath := filepath.Join(dirA, "only-in-a.md")
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill file: %v", err)
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: dirA,
+		TargetPath: dirB,
+	}
+
+	result, err := s.SyncBidirectional(model.ClaudeCode, model.Cursor, opts)
+	if err != nil {
+		t.Fatalf("Bidirectional sync failed: %v", err)
+	}
+
+	// Skill should be synced A -> B
+	if result.ResultAtoB == nil {
+		t.Fatal("Expected A->B sync result")
+	}
+
+	if len(result.ResultAtoB.Created()) != 1 {
+		t.Errorf("Expected 1 created skill in A->B, got %d", len(result.ResultAtoB.Created()))
+	}
+
+	// No B -> A sync
+	if result.ResultBtoA != nil {
+		t.Error("Expected no B->A sync")
+	}
+
+	// No conflicts
+	if len(result.Conflicts) != 0 {
+		t.Errorf("Expected 0 conflicts, got %d", len(result.Conflicts))
+	}
+}
+
+func TestSyncBidirectional_SkillOnlyInB(t *testing.T) {
+	s := New()
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	// Create skill only in B
+	skillContent := `---
+name: only-in-b
+description: Skill only in B
+---
+Content from B.
+`
+	skillPath := filepath.Join(dirB, "only-in-b.md")
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill file: %v", err)
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: dirA,
+		TargetPath: dirB,
+	}
+
+	result, err := s.SyncBidirectional(model.ClaudeCode, model.Cursor, opts)
+	if err != nil {
+		t.Fatalf("Bidirectional sync failed: %v", err)
+	}
+
+	// No A -> B sync
+	if result.ResultAtoB != nil {
+		t.Error("Expected no A->B sync")
+	}
+
+	// Skill should be synced B -> A
+	if result.ResultBtoA == nil {
+		t.Fatal("Expected B->A sync result")
+	}
+
+	if len(result.ResultBtoA.Created()) != 1 {
+		t.Errorf("Expected 1 created skill in B->A, got %d", len(result.ResultBtoA.Created()))
+	}
+
+	// No conflicts
+	if len(result.Conflicts) != 0 {
+		t.Errorf("Expected 0 conflicts, got %d", len(result.Conflicts))
+	}
+}
+
+func TestSyncBidirectional_ConflictWithNewerStrategy(t *testing.T) {
+	s := New()
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	// Create skill in A (older)
+	skillAContent := `---
+name: conflict-skill
+description: Skill with conflict
+---
+Content from A.
+`
+	skillAPath := filepath.Join(dirA, "conflict-skill.md")
+	if err := os.WriteFile(skillAPath, []byte(skillAContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill A: %v", err)
+	}
+
+	// Wait a moment to ensure different timestamps
+	time.Sleep(10 * time.Millisecond)
+
+	// Create skill in B (newer)
+	skillBContent := `---
+name: conflict-skill
+description: Skill with conflict
+---
+Content from B.
+`
+	skillBPath := filepath.Join(dirB, "conflict-skill.md")
+	if err := os.WriteFile(skillBPath, []byte(skillBContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill B: %v", err)
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyNewer,
+		SourcePath: dirA,
+		TargetPath: dirB,
+	}
+
+	result, err := s.SyncBidirectional(model.ClaudeCode, model.Cursor, opts)
+	if err != nil {
+		t.Fatalf("Bidirectional sync failed: %v", err)
+	}
+
+	// B is newer, so should sync B -> A
+	if result.ResultBtoA == nil {
+		t.Fatal("Expected B->A sync for newer skill")
+	}
+
+	if len(result.ResultBtoA.Updated()) != 1 {
+		t.Errorf("Expected 1 updated skill in B->A, got %d", len(result.ResultBtoA.Updated()))
+	}
+
+	// No A -> B sync (A is older)
+	if result.ResultAtoB != nil {
+		t.Error("Expected no A->B sync for older skill")
+	}
+}
+
+func TestSyncBidirectional_ConflictWithMergeStrategy(t *testing.T) {
+	s := New()
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	// Create conflicting skills
+	skillAContent := `---
+name: merge-conflict
+description: Test merge conflict
+---
+Content from A.
+`
+	skillAPath := filepath.Join(dirA, "merge-conflict.md")
+	if err := os.WriteFile(skillAPath, []byte(skillAContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill A: %v", err)
+	}
+
+	skillBContent := `---
+name: merge-conflict
+description: Test merge conflict
+---
+Content from B.
+`
+	skillBPath := filepath.Join(dirB, "merge-conflict.md")
+	if err := os.WriteFile(skillBPath, []byte(skillBContent), 0o600); err != nil {
+		t.Fatalf("Failed to create skill B: %v", err)
+	}
+
+	opts := Options{
+		DryRun:     true,
+		Strategy:   StrategyMerge,
+		SourcePath: dirA,
+		TargetPath: dirB,
+	}
+
+	result, err := s.SyncBidirectional(model.ClaudeCode, model.Cursor, opts)
+	if err != nil {
+		t.Fatalf("Bidirectional sync failed: %v", err)
+	}
+
+	// Merge strategy should result in conflicts for bidirectional sync
+	if len(result.Conflicts) != 1 {
+		t.Errorf("Expected 1 conflict with merge strategy, got %d", len(result.Conflicts))
+	}
+
+	if result.Conflicts[0].Name != "merge-conflict" {
+		t.Errorf("Expected conflict for 'merge-conflict', got %s", result.Conflicts[0].Name)
+	}
+}
+
+func TestBidirectionalResult_Summary(t *testing.T) {
+	result := &BidirectionalResult{
+		PlatformA: model.ClaudeCode,
+		PlatformB: model.Cursor,
+		Strategy:  StrategyOverwrite,
+		DryRun:    false,
+		Conflicts: []BidirectionalConflict{
+			{
+				Name: "test-conflict",
+			},
+		},
+	}
+
+	summary := result.Summary()
+	if summary == "" {
+		t.Error("Expected non-empty summary")
+	}
+
+	if !result.HasConflicts() {
+		t.Error("Expected HasConflicts to return true")
+	}
+}

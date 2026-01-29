@@ -16,6 +16,60 @@ import (
 	"github.com/klauern/skillsync/internal/validation"
 )
 
+// ProgressEvent represents a synchronization progress event.
+type ProgressEvent struct {
+	// Type of progress event
+	Type ProgressEventType
+
+	// Current skill being processed
+	Skill *model.Skill
+
+	// Current progress (0-100)
+	PercentComplete int
+
+	// Total number of skills to process
+	TotalSkills int
+
+	// Number of skills processed so far
+	ProcessedSkills int
+
+	// Action taken for current skill
+	Action Action
+
+	// Message describing the event
+	Message string
+
+	// Error if something went wrong
+	Error error
+
+	// Conflict details if applicable
+	Conflict *Conflict
+}
+
+// ProgressEventType defines types of progress events.
+type ProgressEventType string
+
+const (
+	// ProgressEventStart indicates sync started
+	ProgressEventStart ProgressEventType = "start"
+
+	// ProgressEventSkillStart indicates a skill started processing
+	ProgressEventSkillStart ProgressEventType = "skill_start"
+
+	// ProgressEventSkillComplete indicates a skill finished processing
+	ProgressEventSkillComplete ProgressEventType = "skill_complete"
+
+	// ProgressEventComplete indicates sync completed
+	ProgressEventComplete ProgressEventType = "complete"
+
+	// ProgressEventError indicates an error occurred
+	ProgressEventError ProgressEventType = "error"
+)
+
+// ProgressCallback is called during synchronization to report progress.
+// If the callback returns an error, synchronization will be aborted.
+type ProgressCallback func(event ProgressEvent) error
+
 // Options configures synchronization behavior.
 type Options struct {
 	// DryRun enables preview mode without making actual changes.
@@ -39,6 +93,14 @@ type Options struct {
 
 	// Verbose enables detailed output.
 	Verbose bool
+
+	// Progress callback for real-time progress reporting.
+	// Optional - if nil, no progress events are emitted.
+	Progress ProgressCallback
+
+	// Bidirectional enables two-way sync (both platforms can be source and target).
+	// When true, syncs in both directions and reconciles conflicts.
+	Bidirectional bool
 }
 
 // DefaultOptions returns the default sync options.
@@ -70,6 +132,15 @@ func New() *Synchronizer {
 		conflictDetector: NewConflictDetector(),
 		merger:           NewMerger(),
 	}
+}
+
+// emitProgress emits a progress event if a callback is configured.
+// Returns an error if the callback fails, allowing cancellation.
+func (s *Synchronizer) emitProgress(opts Options, event ProgressEvent) error {
+	if opts.Progress == nil {
+		return nil
+	}
+	return opts.Progress(event)
 }
 
 // Sync performs synchronization from source to target platform.
@@ -111,10 +182,29 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		logging.Count(len(sourceSkills)),
 	)
 
-	if len(sourceSkills) == 0 {
+	totalSkills := len(sourceSkills)
+
+	// Emit start event
+	if err := s.emitProgress(opts, ProgressEvent{
+		Type:        ProgressEventStart,
+		TotalSkills: totalSkills,
+		Message:     fmt.Sprintf("Starting sync of %d skills", totalSkills),
+	}); err != nil {
+		return result, fmt.Errorf("progress callback failed: %w", err)
+	}
+
+	if totalSkills == 0 {
 		logging.Debug("no skills to sync",
 			logging.Platform(string(source)),
 		)
+		// Emit completion event for empty sync
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     0,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "No skills to sync",
+		})
 		return result, nil // Nothing to sync
 	}
 
@@ -164,9 +254,37 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	}
 
 	// Process each source skill
-	for _, sourceSkill := range sourceSkills {
+	for i, sourceSkill := range sourceSkills {
+		// Emit skill start event
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillStart,
+			Skill:           &sourceSkill,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: i,
+			PercentComplete: (i * 100) / totalSkills,
+			Message:         fmt.Sprintf("Processing %s", sourceSkill.Name),
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
+
 		skillResult := s.processSkill(sourceSkill, target, targetPath, targetSkillMap, opts)
 		result.Skills = append(result.Skills, skillResult)
+
+		// Emit skill complete event
+		processedCount := i + 1
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillComplete,
+			Skill:           &sourceSkill,
+			Action:          skillResult.Action,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: processedCount,
+			PercentComplete: (processedCount * 100) / totalSkills,
+			Message:         skillResult.Message,
+			Error:           skillResult.Error,
+			Conflict:        skillResult.Conflict,
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
 	}
 
 	logging.Debug("sync operation completed",
@@ -174,6 +292,15 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		slog.String("target", string(target)),
 		logging.Count(len(result.Skills)),
 	)
+
+	// Emit completion event
+	_ = s.emitProgress(opts, ProgressEvent{
+		Type:            ProgressEventComplete,
+		TotalSkills:     totalSkills,
+		ProcessedSkills: totalSkills,
+		PercentComplete: 100,
+		Message:         fmt.Sprintf("Sync completed: %d skills processed", totalSkills),
+	})
 
 	return result, nil
 }
@@ -407,8 +534,27 @@ func (s *Synchronizer) SyncWithSkills(
 		slog.String("target_scope", string(opts.TargetScope)),
 	)
 
-	if len(skills) == 0 {
+	totalSkills := len(skills)
+
+	// Emit start event
+	if err := s.emitProgress(opts, ProgressEvent{
+		Type:        ProgressEventStart,
+		TotalSkills: totalSkills,
+		Message:     fmt.Sprintf("Starting sync of %d skills", totalSkills),
+	}); err != nil {
+		return nil, fmt.Errorf("progress callback failed: %w", err)
+	}
+
+	if totalSkills == 0 {
 		logging.Debug("no skills provided to sync")
+		// Emit completion event for empty sync
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     0,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "No skills to sync",
+		})
 		return &Result{
 			Target:   target,
 			Strategy: opts.Strategy,
@@ -485,9 +631,37 @@ func (s *Synchronizer) SyncWithSkills(
 	}
 
 	// Process each skill
-	for _, skill := range skills {
+	for i, skill := range skills {
+		// Emit skill start event
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillStart,
+			Skill:           &skill,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: i,
+			PercentComplete: (i * 100) / totalSkills,
+			Message:         fmt.Sprintf("Processing %s", skill.Name),
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
+
 		skillResult := s.processSkill(skill, target, targetPath, targetSkillMap, opts)
 		result.Skills = append(result.Skills, skillResult)
+
+		// Emit skill complete event
+		processedCount := i + 1
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillComplete,
+			Skill:           &skill,
+			Action:          skillResult.Action,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: processedCount,
+			PercentComplete: (processedCount * 100) / totalSkills,
+			Message:         skillResult.Message,
+			Error:           skillResult.Error,
+			Conflict:        skillResult.Conflict,
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
 	}
 
 	logging.Debug("sync with skills completed",
@@ -495,5 +669,306 @@ func (s *Synchronizer) SyncWithSkills(
 		logging.Count(len(result.Skills)),
 	)
 
+	// Emit completion event
+	_ = s.emitProgress(opts, ProgressEvent{
+		Type:            ProgressEventComplete,
+		TotalSkills:     totalSkills,
+		ProcessedSkills: totalSkills,
+		PercentComplete: 100,
+		Message:         fmt.Sprintf("Sync completed: %d skills processed", totalSkills),
+	})
+
 	return result, nil
+}
+
+// SyncBidirectional performs two-way synchronization between platforms.
+// It syncs changes in both directions and reconciles conflicts based on the strategy.
+func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, opts Options) (*BidirectionalResult, error) {
+	logging.Debug("starting bidirectional sync",
+		slog.String("platform_a", string(platformA)),
+		slog.String("platform_b", string(platformB)),
+		slog.String(logging.KeyStrategy, string(opts.Strategy)),
+		slog.Bool("dry_run", opts.DryRun),
+	)
+
+	biResult := &BidirectionalResult{
+		PlatformA: platformA,
+		PlatformB: platformB,
+		Strategy:  opts.Strategy,
+		DryRun:    opts.DryRun,
+	}
+
+	// Parse skills from both platforms
+	skillsA, err := s.parseSkills(platformA, opts.SourcePath)
+	if err != nil {
+		logging.Error("failed to parse platform A skills",
+			logging.Platform(string(platformA)),
+			logging.Err(err),
+		)
+		return biResult, fmt.Errorf("failed to parse platform A skills: %w", err)
+	}
+
+	skillsB, err := s.parseSkills(platformB, opts.TargetPath)
+	if err != nil {
+		logging.Error("failed to parse platform B skills",
+			logging.Platform(string(platformB)),
+			logging.Err(err),
+		)
+		return biResult, fmt.Errorf("failed to parse platform B skills: %w", err)
+	}
+
+	logging.Debug("parsed skills from both platforms",
+		slog.String("platform_a", string(platformA)),
+		logging.Count(len(skillsA)),
+		slog.String("platform_b", string(platformB)),
+		slog.Int("count_b", len(skillsB)),
+	)
+
+	// Build maps for efficient lookup
+	skillsAMap := make(map[string]model.Skill)
+	for _, skill := range skillsA {
+		skillsAMap[skill.Name] = skill
+	}
+
+	skillsBMap := make(map[string]model.Skill)
+	for _, skill := range skillsB {
+		skillsBMap[skill.Name] = skill
+	}
+
+	// Determine which skills need to be synced in which direction
+	var syncAtoB []model.Skill // Skills to copy from A to B
+	var syncBtoA []model.Skill // Skills to copy from B to A
+	var conflicts []BidirectionalConflict
+
+	// Process skills in A
+	for _, skillA := range skillsA {
+		skillB, existsInB := skillsBMap[skillA.Name]
+
+		if !existsInB {
+			// Skill only in A, copy to B
+			syncAtoB = append(syncAtoB, skillA)
+			continue
+		}
+
+		// Skill exists in both - check for conflicts
+		conflict := s.conflictDetector.DetectConflict(skillA, skillB)
+		if conflict == nil {
+			// Content is identical, skip
+			continue
+		}
+
+		// Determine sync direction based on strategy and timestamps
+		direction := s.determineSyncDirection(skillA, skillB, opts.Strategy)
+		switch direction {
+		case SyncDirectionAtoB:
+			syncAtoB = append(syncAtoB, skillA)
+		case SyncDirectionBtoA:
+			syncBtoA = append(syncBtoA, skillB)
+		case SyncDirectionConflict:
+			conflicts = append(conflicts, BidirectionalConflict{
+				Name:     skillA.Name,
+				SkillA:   skillA,
+				SkillB:   skillB,
+				Conflict: conflict,
+			})
+		}
+	}
+
+	// Process skills only in B
+	for _, skillB := range skillsB {
+		if _, existsInA := skillsAMap[skillB.Name]; !existsInA {
+			// Skill only in B, copy to A
+			syncBtoA = append(syncBtoA, skillB)
+		}
+	}
+
+	logging.Debug("determined sync operations",
+		slog.Int("sync_a_to_b", len(syncAtoB)),
+		slog.Int("sync_b_to_a", len(syncBtoA)),
+		logging.Count(len(conflicts)),
+	)
+
+	// Perform sync A -> B
+	if len(syncAtoB) > 0 {
+		optsAtoB := opts
+		optsAtoB.SourcePath = opts.SourcePath
+		optsAtoB.TargetPath = opts.TargetPath
+		resultAtoB, err := s.SyncWithSkills(syncAtoB, platformB, optsAtoB)
+		if err != nil {
+			logging.Error("failed to sync A to B",
+				logging.Err(err),
+			)
+			return biResult, fmt.Errorf("failed to sync A to B: %w", err)
+		}
+		biResult.ResultAtoB = resultAtoB
+	}
+
+	// Perform sync B -> A
+	if len(syncBtoA) > 0 {
+		optsBtoA := opts
+		optsBtoA.SourcePath = opts.TargetPath
+		optsBtoA.TargetPath = opts.SourcePath
+		resultBtoA, err := s.SyncWithSkills(syncBtoA, platformA, optsBtoA)
+		if err != nil {
+			logging.Error("failed to sync B to A",
+				logging.Err(err),
+			)
+			return biResult, fmt.Errorf("failed to sync B to A: %w", err)
+		}
+		biResult.ResultBtoA = resultBtoA
+	}
+
+	// Store conflicts
+	biResult.Conflicts = conflicts
+
+	logging.Debug("bidirectional sync completed",
+		slog.String("platform_a", string(platformA)),
+		slog.String("platform_b", string(platformB)),
+		slog.Int("synced_a_to_b", len(syncAtoB)),
+		slog.Int("synced_b_to_a", len(syncBtoA)),
+		logging.Count(len(conflicts)),
+	)
+
+	return biResult, nil
+}
+
+// SyncDirection represents the direction to sync a skill.
+type SyncDirection int
+
+const (
+	// SyncDirectionAtoB means sync from platform A to B
+	SyncDirectionAtoB SyncDirection = iota
+
+	// SyncDirectionBtoA means sync from platform B to A
+	SyncDirectionBtoA
+
+	// SyncDirectionConflict means there's a conflict requiring manual resolution
+	SyncDirectionConflict
+)
+
+// determineSyncDirection decides which direction to sync based on strategy.
+func (s *Synchronizer) determineSyncDirection(skillA, skillB model.Skill, strategy Strategy) SyncDirection {
+	switch strategy {
+	case StrategyNewer:
+		// Use timestamp to determine direction
+		if skillA.ModifiedAt.After(skillB.ModifiedAt) {
+			return SyncDirectionAtoB
+		} else if skillB.ModifiedAt.After(skillA.ModifiedAt) {
+			return SyncDirectionBtoA
+		}
+		// Same timestamp - no sync needed, but this shouldn't happen
+		// as conflict detector would have caught identical content
+		return SyncDirectionConflict
+
+	case StrategyOverwrite:
+		// In bidirectional mode with overwrite, prefer A -> B by default
+		// This matches the unidirectional behavior
+		return SyncDirectionAtoB
+
+	case StrategyThreeWay, StrategyInteractive:
+		// These strategies require manual conflict resolution
+		return SyncDirectionConflict
+
+	case StrategyMerge:
+		// Merge strategy doesn't apply cleanly to bidirectional sync
+		// Treat as conflict to be safe
+		return SyncDirectionConflict
+
+	case StrategySkip:
+		// Skip means don't sync conflicts at all
+		return SyncDirectionConflict
+
+	default:
+		// Unknown strategy, treat as conflict
+		return SyncDirectionConflict
+	}
+}
+
+// BidirectionalResult represents the result of a bidirectional sync.
+type BidirectionalResult struct {
+	PlatformA   model.Platform
+	PlatformB   model.Platform
+	Strategy    Strategy
+	DryRun      bool
+	ResultAtoB  *Result
+	ResultBtoA  *Result
+	Conflicts   []BidirectionalConflict
+}
+
+// BidirectionalConflict represents a conflict in bidirectional sync.
+type BidirectionalConflict struct {
+	Name     string
+	SkillA   model.Skill
+	SkillB   model.Skill
+	Conflict *Conflict
+}
+
+// Summary generates a human-readable summary of bidirectional sync results.
+func (r *BidirectionalResult) Summary() string {
+	var summary string
+	if r.DryRun {
+		summary = fmt.Sprintf("Bidirectional sync preview: %s <-> %s (strategy: %s)\n\n",
+			r.PlatformA, r.PlatformB, r.Strategy)
+	} else {
+		summary = fmt.Sprintf("Bidirectional sync: %s <-> %s (strategy: %s)\n\n",
+			r.PlatformA, r.PlatformB, r.Strategy)
+	}
+
+	if r.ResultAtoB != nil {
+		summary += fmt.Sprintf("Direction %s -> %s:\n", r.PlatformA, r.PlatformB)
+		summary += fmt.Sprintf("  Created:   %d\n", len(r.ResultAtoB.Created()))
+		summary += fmt.Sprintf("  Updated:   %d\n", len(r.ResultAtoB.Updated()))
+		summary += fmt.Sprintf("  Skipped:   %d\n", len(r.ResultAtoB.Skipped()))
+		summary += fmt.Sprintf("  Failed:    %d\n\n", len(r.ResultAtoB.Failed()))
+	}
+
+	if r.ResultBtoA != nil {
+		summary += fmt.Sprintf("Direction %s -> %s:\n", r.PlatformB, r.PlatformA)
+		summary += fmt.Sprintf("  Created:   %d\n", len(r.ResultBtoA.Created()))
+		summary += fmt.Sprintf("  Updated:   %d\n", len(r.ResultBtoA.Updated()))
+		summary += fmt.Sprintf("  Skipped:   %d\n", len(r.ResultBtoA.Skipped()))
+		summary += fmt.Sprintf("  Failed:    %d\n\n", len(r.ResultBtoA.Failed()))
+	}
+
+	if len(r.Conflicts) > 0 {
+		summary += fmt.Sprintf("Conflicts requiring manual resolution: %d\n", len(r.Conflicts))
+		for _, conflict := range r.Conflicts {
+			conflictType := "unknown"
+			if conflict.Conflict != nil {
+				conflictType = string(conflict.Conflict.Type)
+			}
+			summary += fmt.Sprintf("  - %s (%s)\n", conflict.Name, conflictType)
+		}
+	}
+
+	return summary
+}
+
+// HasConflicts returns true if there are any conflicts.
+func (r *BidirectionalResult) HasConflicts() bool {
+	return len(r.Conflicts) > 0
+}
+
+// TotalProcessed returns the total number of skills processed in both directions.
+func (r *BidirectionalResult) TotalProcessed() int {
+	total := 0
+	if r.ResultAtoB != nil {
+		total += r.ResultAtoB.TotalProcessed()
+	}
+	if r.ResultBtoA != nil {
+		total += r.ResultBtoA.TotalProcessed()
+	}
+	return total
+}
+
+// TotalChanged returns the total number of skills changed (created or updated) in both directions.
+func (r *BidirectionalResult) TotalChanged() int {
+	total := 0
+	if r.ResultAtoB != nil {
+		total += r.ResultAtoB.TotalChanged()
+	}
+	if r.ResultBtoA != nil {
+		total += r.ResultBtoA.TotalChanged()
+	}
+	return total
 }
