@@ -133,12 +133,14 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		skill.Scripts = extractStringSlice(fm, "scripts")
 		skill.References = extractStringSlice(fm, "references")
 		skill.Assets = extractStringSlice(fm, "assets")
+		skill.Dependencies = extractStringSlice(fm, "dependencies")
 
 		// Store remaining frontmatter fields in metadata
 		knownFields := map[string]bool{
 			"name": true, "description": true, "tools": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
 			"compatibility": true, "scripts": true, "references": true, "assets": true,
+			"dependencies": true,
 		}
 		for key, val := range fm {
 			if !knownFields[key] {
@@ -352,12 +354,14 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 		skill.Scripts = extractStringSlice(fm, "scripts")
 		skill.References = extractStringSlice(fm, "references")
 		skill.Assets = extractStringSlice(fm, "assets")
+		skill.Dependencies = extractStringSlice(fm, "dependencies")
 
 		// Store remaining fields in metadata
 		knownFields := map[string]bool{
 			"name": true, "description": true, "tools": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
 			"compatibility": true, "scripts": true, "references": true, "assets": true,
+			"dependencies": true,
 		}
 		for key, val := range fm {
 			if !knownFields[key] {

@@ -68,9 +68,31 @@ Common configuration files:
   - `name`: Skill identifier
   - `description`: Human-readable description
   - `tools`: Array of required tool permissions
+  - `dependencies`: Array of skill names this skill depends on (optional)
 - **Content**: Markdown-formatted instructions
 - **File extensions**: `.md` for skills, `.json` for configuration
 - **Permissions**: Specified as patterns like `Tool(domain:pattern)` or `Tool(command:*)`
+
+### Skill Dependencies
+
+Skills can declare dependencies on other skills using the `dependencies` field in YAML frontmatter:
+
+```yaml
+---
+name: advanced-skill
+description: A skill that builds on other skills
+dependencies:
+  - basic-skill
+  - helper-skill
+---
+```
+
+When syncing skills with dependencies:
+- Skills are automatically ordered by their dependencies (topological sort)
+- Circular dependencies are detected and reported as errors
+- Missing dependencies are reported as warnings but don't block sync
+- Skills with no dependencies are synced first
+- Dependent skills are synced after their dependencies
 
 ### References
 

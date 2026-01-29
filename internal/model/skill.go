@@ -39,6 +39,7 @@ type Skill struct {
 	Scripts                []string          `json:"scripts,omitempty"`
 	References             []string          `json:"references,omitempty"`
 	Assets                 []string          `json:"assets,omitempty"`
+	Dependencies           []string          `json:"dependencies,omitempty"`
 
 	// PluginInfo contains metadata if this skill was installed via a plugin symlink
 	PluginInfo *PluginInfo `json:"plugin_info,omitempty"`

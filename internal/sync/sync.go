@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/klauern/skillsync/internal/dependency"
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
@@ -162,6 +163,36 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		}
 		logging.Debug("ensured target directory exists",
 			logging.Path(targetPath),
+		)
+	}
+
+	// Resolve skill dependencies and reorder if needed
+	depResult := dependency.Resolve(sourceSkills)
+	if depResult.HasErrors() {
+		for _, err := range depResult.Errors {
+			logging.Warn("dependency error",
+				slog.String("type", err.Type),
+				slog.String("message", err.Message),
+			)
+		}
+		// Continue with original order on errors (graceful degradation)
+	} else if depResult.HasWarnings() {
+		for _, warn := range depResult.Warnings {
+			logging.Warn("dependency warning",
+				slog.String("type", warn.Type),
+				slog.String("message", warn.Message),
+			)
+		}
+		// Use ordered skills if available
+		sourceSkills = depResult.Ordered
+		logging.Debug("skills reordered by dependencies",
+			logging.Count(len(sourceSkills)),
+		)
+	} else if len(depResult.Ordered) > 0 {
+		// Use ordered skills
+		sourceSkills = depResult.Ordered
+		logging.Debug("skills ordered by dependencies",
+			logging.Count(len(sourceSkills)),
 		)
 	}
 
