@@ -219,3 +219,220 @@ func TestNewMerger(t *testing.T) {
 		t.Errorf("Unexpected end marker: %s", m.ConflictMarkerEnd)
 	}
 }
+
+// Benchmark tests for merge operations
+
+func BenchmarkLongestCommonSubsequence(b *testing.B) {
+	m := NewMerger()
+
+	// Test with varying sizes
+	b.Run("small (10 lines)", func(b *testing.B) {
+		a := make([]string, 10)
+		bLines := make([]string, 10)
+		for i := range 10 {
+			a[i] = "line " + string(rune('0'+i))
+			bLines[i] = "line " + string(rune('0'+i))
+		}
+		// Make 20% different
+		bLines[2] = "different line"
+		bLines[7] = "another different line"
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.longestCommonSubsequence(a, bLines)
+		}
+	})
+
+	b.Run("medium (100 lines)", func(b *testing.B) {
+		a := make([]string, 100)
+		bLines := make([]string, 100)
+		for i := range 100 {
+			a[i] = "line " + string(rune('0'+(i%10)))
+			bLines[i] = "line " + string(rune('0'+(i%10)))
+		}
+		// Make 20% different
+		for i := range 20 {
+			bLines[i*5] = "different line " + string(rune('0'+(i%10)))
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.longestCommonSubsequence(a, bLines)
+		}
+	})
+
+	b.Run("large (1000 lines)", func(b *testing.B) {
+		a := make([]string, 1000)
+		bLines := make([]string, 1000)
+		for i := range 1000 {
+			a[i] = "line " + string(rune('0'+(i%10)))
+			bLines[i] = "line " + string(rune('0'+(i%10)))
+		}
+		// Make 10% different
+		for i := range 100 {
+			bLines[i*10] = "different line " + string(rune('0'+(i%10)))
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.longestCommonSubsequence(a, bLines)
+		}
+	})
+}
+
+func BenchmarkTwoWayMerge(b *testing.B) {
+	m := NewMerger()
+
+	// Generate realistic content for benchmarking
+	generateLines := func(n int) string {
+		var sb strings.Builder
+		for i := range n {
+			sb.WriteString("# Section ")
+			sb.WriteString(string(rune('0' + (i % 10))))
+			sb.WriteString("\n\nThis is a paragraph with some content.\n")
+			sb.WriteString("It has multiple lines and realistic structure.\n\n")
+		}
+		return sb.String()
+	}
+
+	b.Run("small (10 lines)", func(b *testing.B) {
+		source := model.Skill{
+			Name:    "test",
+			Content: generateLines(2),
+		}
+		target := model.Skill{
+			Name:    "test",
+			Content: generateLines(2) + "Additional target content\n",
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.TwoWayMerge(source, target)
+		}
+	})
+
+	b.Run("medium (100 lines)", func(b *testing.B) {
+		source := model.Skill{
+			Name:    "test",
+			Content: generateLines(20),
+		}
+		target := model.Skill{
+			Name:    "test",
+			Content: generateLines(20) + "Additional target content\n",
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.TwoWayMerge(source, target)
+		}
+	})
+
+	b.Run("large (1000 lines)", func(b *testing.B) {
+		source := model.Skill{
+			Name:    "test",
+			Content: generateLines(200),
+		}
+		target := model.Skill{
+			Name:    "test",
+			Content: generateLines(200) + "Additional target content\n",
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.TwoWayMerge(source, target)
+		}
+	})
+}
+
+func BenchmarkThreeWayMerge(b *testing.B) {
+	m := NewMerger()
+
+	generateLines := func(n int) string {
+		var sb strings.Builder
+		for i := range n {
+			sb.WriteString("Line ")
+			sb.WriteString(string(rune('0' + (i % 10))))
+			sb.WriteString("\n")
+		}
+		return sb.String()
+	}
+
+	b.Run("small (10 lines)", func(b *testing.B) {
+		baseSkill := model.Skill{
+			Name:    "test",
+			Content: generateLines(10),
+		}
+		source := model.Skill{
+			Name:    "test",
+			Content: generateLines(10) + "Source addition\n",
+		}
+		target := model.Skill{
+			Name:    "test",
+			Content: generateLines(10) + "Target addition\n",
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.ThreeWayMerge(source, target, &baseSkill)
+		}
+	})
+
+	b.Run("medium (100 lines)", func(b *testing.B) {
+		baseSkill := model.Skill{
+			Name:    "test",
+			Content: generateLines(100),
+		}
+		source := model.Skill{
+			Name:    "test",
+			Content: generateLines(100) + "Source addition\n",
+		}
+		target := model.Skill{
+			Name:    "test",
+			Content: generateLines(100) + "Target addition\n",
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.ThreeWayMerge(source, target, &baseSkill)
+		}
+	})
+}
+
+func BenchmarkFindChanges(b *testing.B) {
+	m := NewMerger()
+
+	b.Run("small (10 lines)", func(b *testing.B) {
+		base := make([]string, 10)
+		changed := make([]string, 10)
+		for i := range 10 {
+			base[i] = "line " + string(rune('0'+i))
+			changed[i] = "line " + string(rune('0'+i))
+		}
+		// Make 2 changes
+		changed[3] = "modified line"
+		changed[7] = "another modified line"
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.findChanges(base, changed)
+		}
+	})
+
+	b.Run("medium (100 lines)", func(b *testing.B) {
+		base := make([]string, 100)
+		changed := make([]string, 100)
+		for i := range 100 {
+			base[i] = "line " + string(rune('0'+(i%10)))
+			changed[i] = "line " + string(rune('0'+(i%10)))
+		}
+		// Make 20 changes
+		for i := range 20 {
+			changed[i*5] = "modified line " + string(rune('0'+i))
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = m.findChanges(base, changed)
+		}
+	})
+}

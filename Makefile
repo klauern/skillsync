@@ -31,6 +31,20 @@ test: ## Run tests
 test-coverage: test ## Run tests and display coverage
 	go tool cover -html=coverage.out
 
+.PHONY: bench
+bench: ## Run benchmark tests
+	go test -bench=. -benchmem -benchtime=3s ./...
+
+.PHONY: bench-cpu
+bench-cpu: ## Run benchmarks with CPU profiling
+	go test -bench=. -benchmem -cpuprofile=cpu.prof ./...
+	@echo "View CPU profile with: go tool pprof cpu.prof"
+
+.PHONY: bench-mem
+bench-mem: ## Run benchmarks with memory profiling
+	go test -bench=. -benchmem -memprofile=mem.prof ./...
+	@echo "View memory profile with: go tool pprof mem.prof"
+
 .PHONY: lint
 lint: ## Run golangci-lint
 	golangci-lint run ./...

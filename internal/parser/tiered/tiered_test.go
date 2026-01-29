@@ -619,3 +619,226 @@ func TestParser_GetExistingSearchPaths(t *testing.T) {
 		}
 	}
 }
+
+// Benchmark tests for tiered parser operations
+
+func BenchmarkParse(b *testing.B) {
+	// Create realistic multi-scope scenario
+	tmpDir := b.TempDir()
+
+	// Setup multiple scope directories with skills
+	scopes := []struct {
+		path  string
+		scope model.SkillScope
+	}{
+		{filepath.Join(tmpDir, ".claude", "skills"), model.ScopeUser},
+		{filepath.Join(tmpDir, ".skills"), model.ScopeRepo},
+		{filepath.Join(tmpDir, "skills"), model.ScopePlugin},
+	}
+
+	for _, scope := range scopes {
+		// #nosec G301 - benchmark directory permissions
+		if err := os.MkdirAll(scope.path, 0o750); err != nil {
+			b.Fatalf("failed to create directory: %v", err)
+		}
+
+		// Create 10 skills per scope
+		for i := range 10 {
+			skillContent := `---
+name: skill-` + string(rune('a'+i)) + `
+description: Test skill for benchmarking tiered parser
+---
+
+# Skill Content
+
+This is test content for benchmarking.
+`
+			skillPath := filepath.Join(scope.path, "skill-"+string(rune('a'+i))+".md")
+			// #nosec G306 - benchmark files don't need restrictive permissions
+			if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+				b.Fatalf("failed to create skill file: %v", err)
+			}
+		}
+	}
+
+	p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := p.Parse()
+		if err != nil {
+			b.Fatalf("Parse() failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkParseWithScopeFilter(b *testing.B) {
+	// Create realistic multi-scope scenario
+	tmpDir := b.TempDir()
+
+	// Setup user and repo scope directories
+	userPath := filepath.Join(tmpDir, ".claude", "skills")
+	repoPath := filepath.Join(tmpDir, ".skills")
+
+	// #nosec G301 - benchmark directory permissions
+	if err := os.MkdirAll(userPath, 0o750); err != nil {
+		b.Fatalf("failed to create user directory: %v", err)
+	}
+	// #nosec G301 - benchmark directory permissions
+	if err := os.MkdirAll(repoPath, 0o750); err != nil {
+		b.Fatalf("failed to create repo directory: %v", err)
+	}
+
+	// Create 20 skills in each scope
+	for _, path := range []string{userPath, repoPath} {
+		for i := range 20 {
+			skillContent := `---
+name: skill-` + string(rune('a'+(i%26))) + `-` + string(rune('0'+(i/26))) + `
+description: Test skill
+---
+
+Content here.
+`
+			skillPath := filepath.Join(path, "skill-"+string(rune('a'+(i%26)))+"-"+string(rune('0'+(i/26)))+".md")
+			// #nosec G306 - benchmark files don't need restrictive permissions
+			if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+				b.Fatalf("failed to create skill file: %v", err)
+			}
+		}
+	}
+
+	p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+
+	b.Run("user scope", func(b *testing.B) {
+		b.ResetTimer()
+		for b.Loop() {
+			_, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeUser})
+			if err != nil {
+				b.Fatalf("ParseWithScopeFilter() failed: %v", err)
+			}
+		}
+	})
+
+	b.Run("repo scope", func(b *testing.B) {
+		b.ResetTimer()
+		for b.Loop() {
+			_, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeRepo})
+			if err != nil {
+				b.Fatalf("ParseWithScopeFilter() failed: %v", err)
+			}
+		}
+	})
+
+	b.Run("multiple scopes", func(b *testing.B) {
+		b.ResetTimer()
+		for b.Loop() {
+			_, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeUser, model.ScopeRepo})
+			if err != nil {
+				b.Fatalf("ParseWithScopeFilter() failed: %v", err)
+			}
+		}
+	})
+}
+
+func BenchmarkMergeSkills(b *testing.B) {
+	// Generate realistic skill sets with different precedences
+	generateSkills := func(n int, scope model.SkillScope) []model.Skill {
+		skills := make([]model.Skill, n)
+		for i := range n {
+			skills[i] = model.Skill{
+				Name:        "skill-" + string(rune('a'+(i%26))),
+				Description: "Test skill",
+				Content:     "# Content\n\nTest content for skill.",
+				Platform:    model.ClaudeCode,
+				Scope:       scope,
+			}
+		}
+		return skills
+	}
+
+	b.Run("small (10 skills each)", func(b *testing.B) {
+		set1 := generateSkills(10, model.ScopeUser)
+		set2 := generateSkills(10, model.ScopeRepo)
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = MergeSkills(set1, set2)
+		}
+	})
+
+	b.Run("medium (50 skills each)", func(b *testing.B) {
+		set1 := generateSkills(50, model.ScopeUser)
+		set2 := generateSkills(50, model.ScopeRepo)
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = MergeSkills(set1, set2)
+		}
+	})
+
+	b.Run("large (200 skills each)", func(b *testing.B) {
+		set1 := generateSkills(200, model.ScopeUser)
+		set2 := generateSkills(200, model.ScopeRepo)
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = MergeSkills(set1, set2)
+		}
+	})
+
+	b.Run("with conflicts (50% overlap)", func(b *testing.B) {
+		set1 := generateSkills(50, model.ScopeUser)
+		set2 := generateSkills(50, model.ScopeRepo)
+		// Make half the skills have the same names for conflict resolution
+		for i := range 25 {
+			set2[i].Name = set1[i].Name
+		}
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = MergeSkills(set1, set2)
+		}
+	})
+}
+
+func BenchmarkDeduplicateByName(b *testing.B) {
+	generateSkills := func(n int) []model.Skill {
+		skills := make([]model.Skill, n)
+		for i := range n {
+			skills[i] = model.Skill{
+				Name:        "skill-" + string(rune('a'+(i%10))), // Only 10 unique names
+				Description: "Test skill " + string(rune('0'+(i/10))),
+				Content:     "# Content\n\nTest content.",
+				Platform:    model.ClaudeCode,
+			}
+		}
+		return skills
+	}
+
+	b.Run("small (20 skills, 10 unique)", func(b *testing.B) {
+		skills := generateSkills(20)
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = DeduplicateByName(skills)
+		}
+	})
+
+	b.Run("medium (100 skills, 10 unique)", func(b *testing.B) {
+		skills := generateSkills(100)
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = DeduplicateByName(skills)
+		}
+	})
+
+	b.Run("large (500 skills, 10 unique)", func(b *testing.B) {
+		skills := generateSkills(500)
+
+		b.ResetTimer()
+		for b.Loop() {
+			_ = DeduplicateByName(skills)
+		}
+	})
+}

@@ -403,3 +403,127 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+// Benchmark tests for sync operations
+
+func BenchmarkSync(b *testing.B) {
+	// Create realistic scenario with 50 skills
+	sourceDir := b.TempDir()
+	targetDir := b.TempDir()
+
+	// Create 50 source skill files
+	for i := range 50 {
+		skillContent := `---
+name: skill-` + string(rune('a'+i%26)) + `-` + string(rune('0'+(i/26)%10)) + `
+description: Test skill for benchmarking sync operations
+platforms: [claude-code, cursor]
+---
+
+# Skill Content
+
+This is a test skill with realistic content.
+
+## Usage
+
+Instructions for using this skill go here.
+
+## Examples
+
+- Example 1
+- Example 2
+- Example 3
+`
+		skillPath := filepath.Join(sourceDir, "skill-"+string(rune('a'+i%26))+"-"+string(rune('0'+(i/26)%10))+".md")
+		// #nosec G306 - benchmark files don't need restrictive permissions
+		if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
+			b.Fatalf("Failed to create skill file: %v", err)
+		}
+	}
+
+	s := New()
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	}
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := s.Sync(model.ClaudeCode, model.Cursor, opts)
+		if err != nil {
+			b.Fatalf("Sync failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkProcessSkill(b *testing.B) {
+	s := New()
+	targetDir := b.TempDir()
+
+	// Create a realistic skill
+	skill := model.Skill{
+		Name:        "benchmark-skill",
+		Description: "A skill for benchmarking processSkill",
+		Content:     "# Benchmark Skill\n\nThis is the skill content for benchmarking.",
+		Platform:    model.ClaudeCode,
+		Metadata: map[string]string{
+			"author":  "Test",
+			"version": "1.0.0",
+		},
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: "",
+		TargetPath: targetDir,
+	}
+
+	// Create empty target skills map
+	targetSkills := make(map[string]model.Skill)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_ = s.processSkill(skill, model.Cursor, targetDir, targetSkills, opts)
+	}
+}
+
+func BenchmarkDetermineAction(b *testing.B) {
+	s := New()
+
+	sourceSkill := model.Skill{
+		Name:        "test-skill",
+		Description: "Source skill",
+		Content:     "# Source Content\n\nThis is the source.",
+		Platform:    model.ClaudeCode,
+	}
+
+	targetSkill := model.Skill{
+		Name:        "test-skill",
+		Description: "Target skill (different content)",
+		Content:     "# Target Content\n\nThis is the target.",
+		Platform:    model.Cursor,
+	}
+
+	b.Run("overwrite strategy", func(b *testing.B) {
+		b.ResetTimer()
+		for b.Loop() {
+			_, _, _ = s.determineAction(sourceSkill, targetSkill, true, StrategyOverwrite)
+		}
+	})
+
+	b.Run("skip strategy", func(b *testing.B) {
+		b.ResetTimer()
+		for b.Loop() {
+			_, _, _ = s.determineAction(sourceSkill, targetSkill, true, StrategySkip)
+		}
+	})
+
+	b.Run("merge strategy", func(b *testing.B) {
+		b.ResetTimer()
+		for b.Loop() {
+			_, _, _ = s.determineAction(sourceSkill, targetSkill, true, StrategyMerge)
+		}
+	})
+}

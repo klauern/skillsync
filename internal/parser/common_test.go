@@ -387,3 +387,111 @@ func TestNormalizeContent(t *testing.T) {
 		})
 	}
 }
+
+// Benchmark tests for critical performance paths
+
+func BenchmarkDiscoverFiles(b *testing.B) {
+	// Create realistic file structure with 100+ files
+	tempDir := b.TempDir()
+
+	// Create nested directory structure with multiple levels
+	for i := 0; i < 10; i++ {
+		for j := 0; j < 10; j++ {
+			dir := filepath.Join(tempDir, "level1", "level2", "level3")
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				b.Fatalf("failed to create directory: %v", err)
+			}
+			path := filepath.Join(dir, "skill-"+string(rune('a'+i))+"-"+string(rune('0'+j))+".md")
+			// #nosec G306 - benchmark files don't need restrictive permissions
+			if err := os.WriteFile(path, []byte("test content"), 0o600); err != nil {
+				b.Fatalf("failed to create file: %v", err)
+			}
+		}
+	}
+
+	// Also create some files at root level
+	for i := 0; i < 20; i++ {
+		path := filepath.Join(tempDir, "root-skill-"+string(rune('a'+i))+".md")
+		// #nosec G306 - benchmark files don't need restrictive permissions
+		if err := os.WriteFile(path, []byte("test content"), 0o600); err != nil {
+			b.Fatalf("failed to create file: %v", err)
+		}
+	}
+
+	patterns := []string{"**/*.md"}
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := DiscoverFiles(tempDir, patterns)
+		if err != nil {
+			b.Fatalf("DiscoverFiles failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkSplitFrontmatter(b *testing.B) {
+	// Realistic skill file content
+	content := []byte(`---
+name: test-skill
+description: A comprehensive test skill for benchmarking
+platforms: [claude-code, cursor, codex]
+author: Test Author
+version: 1.0.0
+tags:
+  - testing
+  - benchmark
+  - performance
+---
+# Test Skill
+
+This is a realistic skill file with multiple sections.
+
+## Usage
+
+Instructions for using this skill.
+
+## Examples
+
+Multiple examples of how to use this skill:
+- Example 1
+- Example 2
+- Example 3
+
+## Notes
+
+Additional notes and considerations.
+`)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_ = SplitFrontmatter(content)
+	}
+}
+
+func BenchmarkParseYAMLFrontmatter(b *testing.B) {
+	frontmatter := []byte(`name: test-skill
+description: A comprehensive test skill
+platforms:
+  - claude-code
+  - cursor
+  - codex
+author: Test Author
+version: 1.0.0
+tags:
+  - testing
+  - benchmark
+  - performance
+metadata:
+  created: 2026-01-28
+  updated: 2026-01-28
+  category: development
+`)
+
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := ParseYAMLFrontmatter(frontmatter)
+		if err != nil {
+			b.Fatalf("ParseYAMLFrontmatter failed: %v", err)
+		}
+	}
+}
