@@ -45,6 +45,26 @@ archives:
       - CHANGELOG*
       - docs/*
 
+brews:
+  - name: skillsync
+    repository:
+      owner: klauern
+      name: homebrew-skillsync
+      branch: main
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    homepage: "https://github.com/klauern/skillsync"
+    description: "Sync AI coding skills (Claude Code, Cursor, Codex) across platforms and projects"
+    license: "MIT"
+    directory: Formula
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    install: |
+      bin.install "skillsync"
+    test: |
+      system "#{bin}/skillsync", "--version"
+
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256

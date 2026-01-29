@@ -18,18 +18,45 @@ SkillSync is a command-line tool that helps you manage and synchronize AI coding
 
 ### Prerequisites
 
-- Go 1.25.4 or later
-- Git (for cloning the repository)
 - One or more supported AI coding platforms:
   - Claude Code
   - Cursor
   - Codex
 
-### Build from Source
+### Homebrew (Recommended for macOS/Linux)
 
 ```bash
+# Add the tap
+brew tap klauern/skillsync
+
+# Install skillsync
+brew install skillsync
+
+# Verify installation
+skillsync --version
+```
+
+### Go Install
+
+If you have Go 1.25.4 or later installed:
+
+```bash
+go install github.com/klauern/skillsync/cmd/skillsync@latest
+```
+
+### Pre-built Binaries
+
+Download the appropriate binary for your platform from the [latest release](https://github.com/klauern/skillsync/releases/latest).
+
+### Build from Source
+
+For development or if you prefer to build from source:
+
+```bash
+# Prerequisites: Go 1.25.4 or later, Git
+
 # Clone the repository
-git clone https://github.com/yourusername/skillsync
+git clone https://github.com/klauern/skillsync
 cd skillsync
 
 # Build the binary
