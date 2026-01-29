@@ -57,11 +57,16 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			logging.Path(p.basePath),
 			logging.Err(err),
 		)
-	} else {
-		for _, skill := range agentSkills {
-			seenNames[skill.Name] = true
-			allSkills = append(allSkills, skill)
-		}
+	}
+
+	// Collect all skill directories to exclude their contents from legacy parsing
+	// This prevents reference files (patterns/, references/, etc.) from being treated as skills
+	skillDirs := make(map[string]bool)
+	for _, skill := range agentSkills {
+		skillDir := filepath.Dir(skill.Path)
+		seenNames[skill.Name] = true
+		skillDirs[skillDir] = true
+		allSkills = append(allSkills, skill)
 	}
 
 	// Then, discover legacy skill files - Cursor uses .md and .mdc files
@@ -76,12 +81,23 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		return nil, fmt.Errorf("failed to discover skill files in %q: %w", p.basePath, err)
 	}
 
-	// Filter out SKILL.md files (already parsed by skills parser)
+	// Filter out SKILL.md files and files inside skill directories
+	// This prevents reference files (patterns/, references/, templates/, etc.) from being treated as skills
 	var legacyFiles []string
 	for _, f := range files {
-		if !strings.HasSuffix(f, "SKILL.md") {
-			legacyFiles = append(legacyFiles, f)
+		// Skip SKILL.md files (case-insensitive)
+		base := filepath.Base(f)
+		if strings.EqualFold(base, "SKILL.md") {
+			continue
 		}
+		// Skip files inside skill directories
+		if isInsideSkillDir(f, skillDirs) {
+			logging.Debug("skipping file inside skill directory",
+				logging.Path(f),
+			)
+			continue
+		}
+		legacyFiles = append(legacyFiles, f)
 	}
 
 	logging.Debug("discovered skill files",
@@ -215,6 +231,24 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 // Platform returns the platform identifier for Cursor
 func (p *Parser) Platform() model.Platform {
 	return model.Cursor
+}
+
+// isInsideSkillDir checks if a file path is inside any of the skill directories.
+// This is used to filter out reference files (patterns/, references/, etc.) from legacy parsing.
+func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
+	dir := filepath.Dir(filePath)
+	// Walk up the directory tree to check if any parent is a skill directory
+	for dir != "/" && dir != "." && dir != "" {
+		if skillDirs[dir] {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
 }
 
 // DefaultPath returns the default path for Cursor skills

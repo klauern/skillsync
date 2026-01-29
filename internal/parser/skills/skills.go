@@ -41,8 +41,9 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		return []model.Skill{}, nil
 	}
 
-	// Discover SKILL.md files
-	patterns := []string{"SKILL.md", "**/SKILL.md"}
+	// Discover SKILL.md files (case-insensitive)
+	// The Agent Skills Standard uses SKILL.md, but some users create skill.md
+	patterns := []string{"SKILL.md", "**/SKILL.md", "skill.md", "**/skill.md", "Skill.md", "**/Skill.md"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
 		logging.Error("failed to discover SKILL.md files",
@@ -114,6 +115,22 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		// Extract optional legacy fields
 		skill.Tools = extractStringSlice(fm, "tools")
 
+		// Extract skill type (skill vs prompt/slash-command)
+		if typeStr := extractString(fm, "type"); typeStr != "" {
+			skillType, err := model.ParseSkillType(typeStr)
+			if err != nil {
+				logging.Warn("invalid type in SKILL.md frontmatter",
+					logging.Path(filePath),
+					logging.Err(err),
+				)
+			} else {
+				skill.Type = skillType
+			}
+		}
+
+		// Extract trigger for prompts/slash-commands
+		skill.Trigger = extractString(fm, "trigger")
+
 		// Extract Agent Skills Standard fields
 		if scopeStr := extractString(fm, "scope"); scopeStr != "" {
 			scope, err := model.ParseScope(scopeStr)
@@ -136,7 +153,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 		// Store remaining frontmatter fields in metadata
 		knownFields := map[string]bool{
-			"name": true, "description": true, "tools": true,
+			"name": true, "description": true, "tools": true, "type": true, "trigger": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
 			"compatibility": true, "scripts": true, "references": true, "assets": true,
 		}
@@ -339,6 +356,16 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 		skill.Description = extractString(fm, "description")
 		skill.Tools = extractStringSlice(fm, "tools")
 
+		// Extract skill type (skill vs prompt/slash-command)
+		if typeStr := extractString(fm, "type"); typeStr != "" {
+			if skillType, err := model.ParseSkillType(typeStr); err == nil {
+				skill.Type = skillType
+			}
+		}
+
+		// Extract trigger for prompts/slash-commands
+		skill.Trigger = extractString(fm, "trigger")
+
 		// Extract Agent Skills Standard fields
 		if scopeStr := extractString(fm, "scope"); scopeStr != "" {
 			if scope, err := model.ParseScope(scopeStr); err == nil {
@@ -355,7 +382,7 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 
 		// Store remaining fields in metadata
 		knownFields := map[string]bool{
-			"name": true, "description": true, "tools": true,
+			"name": true, "description": true, "tools": true, "type": true, "trigger": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
 			"compatibility": true, "scripts": true, "references": true, "assets": true,
 		}
@@ -405,26 +432,41 @@ func IsAgentSkillsFormat(content []byte) bool {
 }
 
 // HasSkillDirectory checks if a path contains a valid skill directory structure.
-// A valid skill directory contains a SKILL.md file.
+// A valid skill directory contains a SKILL.md file (case-insensitive check).
 func HasSkillDirectory(path string) bool {
-	skillFile := filepath.Join(path, "SKILL.md")
-	info, err := os.Stat(skillFile)
-	if err != nil {
-		return false
+	// Check common case variations
+	variants := []string{"SKILL.md", "skill.md", "Skill.md"}
+	for _, variant := range variants {
+		skillFile := filepath.Join(path, variant)
+		info, err := os.Stat(skillFile)
+		if err == nil && !info.IsDir() {
+			return true
+		}
 	}
-	return !info.IsDir()
+	return false
 }
 
-// ListSkillDirectories finds all directories containing SKILL.md files.
+// ListSkillDirectories finds all directories containing SKILL.md files (case-insensitive).
 func ListSkillDirectories(basePath string) ([]string, error) {
-	files, err := parser.DiscoverFiles(basePath, []string{"SKILL.md", "**/SKILL.md"})
+	patterns := []string{
+		"SKILL.md", "**/SKILL.md",
+		"skill.md", "**/skill.md",
+		"Skill.md", "**/Skill.md",
+	}
+	files, err := parser.DiscoverFiles(basePath, patterns)
 	if err != nil {
 		return nil, err
 	}
 
+	// Deduplicate directories (in case multiple case variants exist)
+	seen := make(map[string]bool)
 	dirs := make([]string, 0, len(files))
 	for _, f := range files {
-		dirs = append(dirs, filepath.Dir(f))
+		dir := filepath.Dir(f)
+		if !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
+		}
 	}
 	return dirs, nil
 }
@@ -439,9 +481,17 @@ type SkillDirectoryContents struct {
 
 // GetSkillDirectoryContents returns the contents of a skill directory.
 func GetSkillDirectoryContents(skillDir string) (*SkillDirectoryContents, error) {
-	skillFile := filepath.Join(skillDir, "SKILL.md")
-	if _, err := os.Stat(skillFile); err != nil {
-		return nil, fmt.Errorf("SKILL.md not found in %q: %w", skillDir, err)
+	// Find SKILL.md with case-insensitive check
+	var skillFile string
+	for _, variant := range []string{"SKILL.md", "skill.md", "Skill.md"} {
+		candidate := filepath.Join(skillDir, variant)
+		if _, err := os.Stat(candidate); err == nil {
+			skillFile = candidate
+			break
+		}
+	}
+	if skillFile == "" {
+		return nil, fmt.Errorf("SKILL.md not found in %q", skillDir)
 	}
 
 	contents := &SkillDirectoryContents{

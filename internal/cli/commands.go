@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -288,6 +289,11 @@ func discoveryCommand() *cli.Command {
 				Name:  "no-cache",
 				Usage: "Disable plugin skill caching",
 			},
+			&cli.StringFlag{
+				Name:    "type",
+				Aliases: []string{"t"},
+				Usage:   "Filter by skill type (skill, prompt). Comma-separated for multiple.",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			platform := cmd.String("platform")
@@ -297,9 +303,22 @@ func discoveryCommand() *cli.Command {
 			repoURL := cmd.String("repo")
 			noCache := cmd.Bool("no-cache")
 			interactive := cmd.Bool("interactive")
+			typeStr := cmd.String("type")
 
 			// Include plugins by default unless --no-plugins is set
 			includePlugins := !excludePlugins
+
+			// Parse type filter
+			var typeFilter []model.SkillType
+			if typeStr != "" && typeStr != "all" {
+				for _, t := range strings.Split(typeStr, ",") {
+					skillType, err := model.ParseSkillType(strings.TrimSpace(t))
+					if err != nil {
+						return fmt.Errorf("invalid type: %w", err)
+					}
+					typeFilter = append(typeFilter, skillType)
+				}
+			}
 
 			// Parse scope filter
 			var scopeFilter []model.SkillScope
@@ -347,6 +366,11 @@ func discoveryCommand() *cli.Command {
 				}
 			}
 
+			// Filter by skill type if specified
+			if len(typeFilter) > 0 {
+				allSkills = filterBySkillType(allSkills, typeFilter)
+			}
+
 			// Output results
 			if interactive {
 				return discoverSkillsInteractive(allSkills)
@@ -354,6 +378,28 @@ func discoveryCommand() *cli.Command {
 			return outputSkills(allSkills, format)
 		},
 	}
+}
+
+// filterBySkillType filters skills by their type.
+// Skills with empty type are treated as SkillTypeSkill (the default).
+func filterBySkillType(skills []model.Skill, typeFilter []model.SkillType) []model.Skill {
+	if len(typeFilter) == 0 {
+		return skills
+	}
+
+	filtered := make([]model.Skill, 0, len(skills))
+	for _, skill := range skills {
+		// Empty type defaults to skill
+		skillType := skill.Type
+		if skillType == "" {
+			skillType = model.SkillTypeSkill
+		}
+
+		if slices.Contains(typeFilter, skillType) {
+			filtered = append(filtered, skill)
+		}
+	}
+	return filtered
 }
 
 // discoverPluginSkills discovers skills from Claude Code plugins with optional caching.

@@ -31,6 +31,14 @@ type Skill struct {
 	Content     string            `json:"content"`
 	ModifiedAt  time.Time         `json:"modified_at"`
 
+	// Type indicates whether this is a regular skill or a slash command/prompt.
+	// Defaults to SkillTypeSkill if not specified.
+	Type SkillType `json:"type,omitempty"`
+
+	// Trigger is the slash command trigger for prompts (e.g., "/my-command").
+	// Only relevant when Type is SkillTypePrompt.
+	Trigger string `json:"trigger,omitempty"`
+
 	// Agent Skills Standard fields
 	Scope                  SkillScope        `json:"scope,omitempty"`
 	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty"`
