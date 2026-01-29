@@ -1591,7 +1591,7 @@ func TestSyncPluginScopeSource(t *testing.T) {
 
 	// Set up a mock plugin cache directory with skills
 	pluginCacheDir := h.HomeDir() + "/.claude/plugins/cache"
-	if err := os.MkdirAll(pluginCacheDir+"/test-marketplace/test-plugin/1.0.0/test-skill", 0o755); err != nil {
+	if err := os.MkdirAll(pluginCacheDir+"/test-marketplace/test-plugin/1.0.0/test-skill", 0o750); err != nil {
 		t.Fatalf("failed to create plugin cache directory: %v", err)
 	}
 
@@ -1605,7 +1605,7 @@ description: A test skill from plugin cache
 This skill comes from a plugin.
 `
 	pluginSkillPath := pluginCacheDir + "/test-marketplace/test-plugin/1.0.0/test-skill/SKILL.md"
-	if err := os.WriteFile(pluginSkillPath, []byte(pluginSkillContent), 0o644); err != nil {
+	if err := os.WriteFile(pluginSkillPath, []byte(pluginSkillContent), 0o600); err != nil {
 		t.Fatalf("failed to write plugin SKILL.md: %v", err)
 	}
 
@@ -1625,7 +1625,7 @@ This skill comes from a plugin.
     ]
   }
 }`
-	if err := os.WriteFile(pluginsDir+"/installed_plugins.json", []byte(installedPluginsContent), 0o644); err != nil {
+	if err := os.WriteFile(pluginsDir+"/installed_plugins.json", []byte(installedPluginsContent), 0o600); err != nil {
 		t.Fatalf("failed to write installed_plugins.json: %v", err)
 	}
 
