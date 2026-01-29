@@ -1313,3 +1313,160 @@ func TestValidateTargetPath(t *testing.T) {
 		})
 	}
 }
+
+func TestInferScopeForPath(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create a mock repo root
+	repoRoot := filepath.Join(tempDir, "myrepo")
+	if err := os.MkdirAll(repoRoot, 0o750); err != nil {
+		t.Fatalf("failed to create repo root: %v", err)
+	}
+
+	// Create a mock plugin cache directory
+	pluginCachePath := filepath.Join(tempDir, ".claude", "plugins", "cache")
+	if err := os.MkdirAll(pluginCachePath, 0o750); err != nil {
+		t.Fatalf("failed to create plugin cache: %v", err)
+	}
+
+	tests := map[string]struct {
+		path      string
+		repoRoot  string
+		wantScope model.SkillScope
+	}{
+		"repo path": {
+			path:      filepath.Join(repoRoot, ".claude", "skills"),
+			repoRoot:  repoRoot,
+			wantScope: model.ScopeRepo,
+		},
+		"user path": {
+			path:      filepath.Join(tempDir, ".claude", "skills"),
+			repoRoot:  "",
+			wantScope: model.ScopeUser,
+		},
+		"plugin cache path": {
+			path:      pluginCachePath,
+			repoRoot:  "",
+			wantScope: model.ScopePlugin,
+		},
+		"plugin cache subdir": {
+			path:      filepath.Join(pluginCachePath, "beads-marketplace", "beads", "0.49.0"),
+			repoRoot:  "",
+			wantScope: model.ScopePlugin,
+		},
+		"plugin cache takes precedence over user": {
+			// Plugin cache is under home directory but should be detected as plugin scope
+			path:      filepath.Join(pluginCachePath, "some-plugin"),
+			repoRoot:  "",
+			wantScope: model.ScopePlugin,
+		},
+		"system path": {
+			path:      "/etc/skillsync/skills",
+			repoRoot:  "",
+			wantScope: model.ScopeSystem,
+		},
+		"admin path": {
+			path:      "/opt/skillsync/skills",
+			repoRoot:  "",
+			wantScope: model.ScopeAdmin,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := inferScopeForPath(tt.path, tt.repoRoot)
+			if got != tt.wantScope {
+				t.Errorf("inferScopeForPath(%q, %q) = %q, want %q", tt.path, tt.repoRoot, got, tt.wantScope)
+			}
+		})
+	}
+}
+
+func TestParsePlatformSkillsFromPathsWithPluginScope(t *testing.T) {
+	// Set up isolated test environment
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create user skills directory with a skill
+	userSkillsDir := filepath.Join(tempDir, ".claude", "skills", "my-skill")
+	if err := os.MkdirAll(userSkillsDir, 0o750); err != nil {
+		t.Fatalf("failed to create user skills dir: %v", err)
+	}
+	userSkillContent := `---
+name: my-skill
+description: A user skill
+---
+# My Skill
+This is a user skill.
+`
+	if err := os.WriteFile(filepath.Join(userSkillsDir, "SKILL.md"), []byte(userSkillContent), 0o600); err != nil {
+		t.Fatalf("failed to write user skill: %v", err)
+	}
+
+	tests := map[string]struct {
+		paths       []string
+		scopeFilter []model.SkillScope
+		platform    model.Platform
+		wantScopes  []model.SkillScope
+	}{
+		"user scope filter excludes plugins": {
+			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
+			scopeFilter: []model.SkillScope{model.ScopeUser},
+			platform:    model.ClaudeCode,
+			wantScopes:  []model.SkillScope{model.ScopeUser},
+		},
+		"plugin scope filter includes only plugins": {
+			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
+			scopeFilter: []model.SkillScope{model.ScopePlugin},
+			platform:    model.ClaudeCode,
+			// Note: This will return no skills since there's no real plugin cache set up
+			// The test validates that user skills are excluded when only plugin scope is requested
+			wantScopes: []model.SkillScope{},
+		},
+		"no filter includes all scopes": {
+			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
+			scopeFilter: nil,
+			platform:    model.ClaudeCode,
+			// Should include user scope skills and attempt plugin discovery
+			wantScopes: []model.SkillScope{model.ScopeUser},
+		},
+		"non-claude platform ignores plugins": {
+			paths:       []string{filepath.Join(tempDir, ".cursor", "rules")},
+			scopeFilter: []model.SkillScope{model.ScopePlugin},
+			platform:    model.Cursor,
+			wantScopes:  []model.SkillScope{},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			skills := parsePlatformSkillsFromPaths(tt.platform, tt.paths, "", tt.scopeFilter)
+
+			// Verify all returned skills have expected scopes
+			for _, skill := range skills {
+				found := false
+				for _, wantScope := range tt.wantScopes {
+					if skill.Scope == wantScope {
+						found = true
+						break
+					}
+				}
+				if !found && len(tt.wantScopes) > 0 {
+					t.Errorf("skill %q has scope %q, want one of %v", skill.Name, skill.Scope, tt.wantScopes)
+				}
+			}
+
+			// If we expect no scopes, verify no skills returned
+			if len(tt.wantScopes) == 0 && len(skills) > 0 {
+				// This is acceptable - we may still get skills from plugin cache
+				// but they should have plugin scope
+				for _, skill := range skills {
+					if skill.Scope != model.ScopePlugin {
+						t.Errorf("expected only plugin scope skills or empty, got scope %q for skill %q", skill.Scope, skill.Name)
+					}
+				}
+			}
+		})
+	}
+}

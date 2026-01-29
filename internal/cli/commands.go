@@ -1441,11 +1441,36 @@ func parsePlatformSkillsFromPaths(
 		}
 	}
 
+	// For Claude Code, also include plugin cache skills if plugin scope is requested
+	// (or if no scope filter is specified, include all)
+	if platform == model.ClaudeCode && (len(scopeSet) == 0 || scopeSet[model.ScopePlugin]) {
+		pluginSkills := parseClaudePluginCacheSkills()
+		for _, skill := range pluginSkills {
+			if existing, exists := skillsByName[skill.Name]; exists {
+				if skill.Scope.IsHigherPrecedence(existing.Scope) {
+					skillsByName[skill.Name] = skill
+				}
+				continue
+			}
+			skillsByName[skill.Name] = skill
+		}
+	}
+
 	result := make([]model.Skill, 0, len(skillsByName))
 	for _, skill := range skillsByName {
 		result = append(result, skill)
 	}
 	return result
+}
+
+// parseClaudePluginCacheSkills discovers skills from Claude Code's installed plugin cache.
+func parseClaudePluginCacheSkills() []model.Skill {
+	cacheParser := claude.NewCachePluginsParser("")
+	skills, err := cacheParser.Parse()
+	if err != nil {
+		return []model.Skill{}
+	}
+	return skills
 }
 
 func inferScopeForPath(path, repoRoot string) model.SkillScope {
@@ -1457,6 +1482,13 @@ func inferScopeForPath(path, repoRoot string) model.SkillScope {
 		if cleaned == root || strings.HasPrefix(cleaned, rootWithSep) {
 			return model.ScopeRepo
 		}
+	}
+
+	// Check if path is within Claude plugin cache (must check before home directory)
+	pluginCachePath := filepath.Clean(util.ClaudePluginCachePath())
+	pluginCacheWithSep := pluginCachePath + string(os.PathSeparator)
+	if cleaned == pluginCachePath || strings.HasPrefix(cleaned, pluginCacheWithSep) {
+		return model.ScopePlugin
 	}
 
 	home := filepath.Clean(util.HomeDir())
