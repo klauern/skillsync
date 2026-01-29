@@ -20,20 +20,20 @@ import (
 
 // PlatformStats holds statistics for a single platform.
 type PlatformStats struct {
-	Name       string `json:"name"`
-	SkillCount int    `json:"skill_count"`
-	DiskUsage  int64  `json:"disk_usage_bytes"`
+	Name       string   `json:"name"`
+	SkillCount int      `json:"skill_count"`
+	DiskUsage  int64    `json:"disk_usage_bytes"`
 	Paths      []string `json:"paths"`
 }
 
 // Stats holds overall statistics.
 type Stats struct {
-	Platforms     []PlatformStats `json:"platforms"`
-	TotalSkills   int             `json:"total_skills"`
-	TotalDiskUsage int64          `json:"total_disk_usage_bytes"`
-	LastBackup    *time.Time      `json:"last_backup,omitempty"`
-	CacheEnabled  bool            `json:"cache_enabled"`
-	CacheSize     int64           `json:"cache_size_bytes"`
+	Platforms      []PlatformStats `json:"platforms"`
+	TotalSkills    int             `json:"total_skills"`
+	TotalDiskUsage int64           `json:"total_disk_usage_bytes"`
+	LastBackup     *time.Time      `json:"last_backup,omitempty"`
+	CacheEnabled   bool            `json:"cache_enabled"`
+	CacheSize      int64           `json:"cache_size_bytes"`
 }
 
 func statsCommand() *cli.Command {
@@ -187,7 +187,6 @@ func calculateDiskUsage(path string) (int64, error) {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return 0, fmt.Errorf("failed to calculate disk usage: %w", err)
 	}

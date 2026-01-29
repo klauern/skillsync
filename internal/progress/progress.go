@@ -8,9 +8,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/schollz/progressbar/v3"
+
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/ui"
-	"github.com/schollz/progressbar/v3"
 )
 
 // Bar wraps progressbar functionality with integration to skillsync's UI and logging.

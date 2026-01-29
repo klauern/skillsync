@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/permissions"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
@@ -41,6 +42,9 @@ type Config struct {
 
 	// Similarity configures similarity matching thresholds
 	Similarity SimilarityConfig `yaml:"similarity"`
+
+	// Permissions configures permission model for operations
+	Permissions *permissions.Config `yaml:"permissions,omitempty"`
 }
 
 // PlatformsConfig holds platform-specific configuration.
@@ -184,6 +188,7 @@ func Default() *Config {
 			ContentThreshold: 0.6, // 60% match required for content similarity
 			Algorithm:        "combined",
 		},
+		Permissions: permissions.Default(),
 	}
 }
 
@@ -582,6 +587,22 @@ func (c *Config) Validate() *validation.Result {
 	c.validatePlatformPaths(&c.Platforms.ClaudeCode, "platforms.claude_code", result)
 	c.validatePlatformPaths(&c.Platforms.Cursor, "platforms.cursor", result)
 	c.validatePlatformPaths(&c.Platforms.Codex, "platforms.codex", result)
+
+	// Validate permissions configuration
+	if c.Permissions != nil {
+		permResult := c.Permissions.Validate()
+		if !permResult.Valid {
+			for _, err := range permResult.Errors {
+				result.AddError(&validation.Error{
+					Field:   "permissions",
+					Message: err.Error(),
+				})
+			}
+		}
+		for _, warning := range permResult.Warnings {
+			result.AddWarning(fmt.Sprintf("permissions: %s", warning))
+		}
+	}
 
 	return result
 }
