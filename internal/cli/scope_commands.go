@@ -12,9 +12,11 @@ import (
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
+	"github.com/klauern/skillsync/internal/permissions"
 	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/util"
 )
@@ -391,6 +393,33 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 			return nil
 		}
 
+		// Check permissions before performing the operation
+		permConfig, err := permissions.Load()
+		if err != nil {
+			logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+			permConfig = permissions.Default()
+		}
+		checker := permissions.NewChecker(permConfig)
+
+		// Check if writes to target scope are allowed
+		if err := checker.CheckScope(toScope); err != nil {
+			return fmt.Errorf("permission denied: %w", err)
+		}
+
+		// Check if write operation is permitted and get confirmation
+		opDesc := fmt.Sprintf("%s skill %s from %s to %s", operation, skillName, fromScope, toScope)
+		if err := checker.CheckAndConfirm(permissions.OpWrite, opDesc); err != nil {
+			return fmt.Errorf("permission denied: %w", err)
+		}
+
+		// If removing source, check delete permission
+		if removeSource {
+			deleteDesc := fmt.Sprintf("remove source skill %s from %s", skillName, fromScope)
+			if err := checker.CheckAndConfirm(permissions.OpDelete, deleteDesc); err != nil {
+				return fmt.Errorf("permission denied: %w", err)
+			}
+		}
+
 		// Ensure target directory exists
 		// #nosec G301 - skill directories need to be readable by the platform
 		targetDir := filepath.Dir(targetPath)
@@ -684,6 +713,19 @@ func runScopePrune(cmd *cli.Command) error {
 		return errors.New("cannot prune builtin scope")
 	}
 
+	// Check permissions for pruning this scope
+	permConfig, err := permissions.Load()
+	if err != nil {
+		logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+		permConfig = permissions.Default()
+	}
+	checker := permissions.NewChecker(permConfig)
+
+	// Check if deletes from this scope are allowed
+	if err := checker.CheckScope(scopeToPrune); err != nil {
+		return fmt.Errorf("permission denied: %w", err)
+	}
+
 	// Check keep flags
 	if keepRepo && scopeToPrune == model.ScopeRepo {
 		return errors.New("cannot use --keep-repo when pruning repo scope")
@@ -756,16 +798,17 @@ func runScopePrune(cmd *cli.Command) error {
 		return nil
 	}
 
-	// Confirm unless force flag is set
+	// Check permissions before deletion (unless force flag is set)
 	if !force {
-		message := fmt.Sprintf("Remove %d duplicate skill(s)?", len(toPrune))
-		confirmed, err := confirmAction(message, riskLevelWarning)
-		if err != nil {
-			return fmt.Errorf("confirmation error: %w", err)
+		// Build skill names list for context
+		skillNames := make([]string, len(toPrune))
+		for i, skill := range toPrune {
+			skillNames[i] = skill.Name
 		}
-		if !confirmed {
-			fmt.Println("Prune cancelled.")
-			return nil
+
+		deleteDesc := fmt.Sprintf("prune %d duplicate skill(s) from %s scope", len(toPrune), scopeToPrune)
+		if err := checker.CheckAndConfirm(permissions.OpDelete, deleteDesc); err != nil {
+			return fmt.Errorf("permission denied: %w", err)
 		}
 	}
 

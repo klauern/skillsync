@@ -29,6 +29,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
+	"github.com/klauern/skillsync/internal/permissions"
 	"github.com/klauern/skillsync/internal/security"
 	"github.com/klauern/skillsync/internal/similarity"
 	"github.com/klauern/skillsync/internal/sync"
@@ -963,6 +964,29 @@ func syncCommand() *cli.Command {
 				TargetScope: cfg.targetSpec.TargetScope(),
 			}
 
+			// Check permissions before sync (unless dry-run or --yes flag used)
+			if !cfg.dryRun && !cfg.yesFlag {
+				permConfig, err := permissions.Load()
+				if err != nil {
+					logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+					permConfig = permissions.Default()
+				}
+				checker := permissions.NewChecker(permConfig)
+
+				// Check if writes to target scope are allowed
+				if err := checker.CheckScope(opts.TargetScope); err != nil {
+					return fmt.Errorf("permission denied: %w", err)
+				}
+
+				// Check if write operation is permitted and get confirmation
+				targetDesc := fmt.Sprintf("sync %d skills to %s:%s",
+					len(cfg.sourceSkills),
+					cfg.targetSpec.Platform,
+					opts.TargetScope)
+				if err := checker.CheckAndConfirm(permissions.OpWrite, targetDesc); err != nil {
+					return fmt.Errorf("permission denied: %w", err)
+				}
+			}
 			logging.Info("executing sync",
 				logging.Platform(string(cfg.sourceSpec.Platform)),
 				slog.String("target_platform", string(cfg.targetSpec.Platform)),
@@ -2145,16 +2169,19 @@ func deleteBackupsByID(ids []string, force bool) error {
 		fmt.Printf("  - %s (%s, %s)\n", b.ID, b.Platform, formatSize(b.Size))
 	}
 
-	// Confirm unless force flag is set
+	// Check permissions before deletion (unless force flag is set)
 	if !force {
-		message := fmt.Sprintf("Delete %d backup(s)?", len(backupsToDelete))
-		confirmed, err := confirmAction(message, riskLevelWarning)
+		permConfig, err := permissions.Load()
 		if err != nil {
-			return fmt.Errorf("confirmation error: %w", err)
+			logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+			permConfig = permissions.Default()
 		}
-		if !confirmed {
-			fmt.Println("Delete cancelled.")
-			return nil
+		checker := permissions.NewChecker(permConfig)
+
+		// Check if backup deletion is permitted and get confirmation
+		deleteDesc := fmt.Sprintf("delete %d backup(s)", len(backupsToDelete))
+		if err := checker.CheckAndConfirm(permissions.OpBackupDelete, deleteDesc); err != nil {
+			return fmt.Errorf("permission denied: %w", err)
 		}
 	}
 
@@ -2235,16 +2262,19 @@ func deleteBackupsByPolicy(olderThan string, keepLatest int, platform string, fo
 	keptCount := len(backups) - len(toDelete)
 	fmt.Printf("Backups remaining: %d\n", keptCount)
 
-	// Confirm unless force flag is set
+	// Check permissions before deletion (unless force flag is set)
 	if !force {
-		message := fmt.Sprintf("Delete %d backup(s)?", len(toDelete))
-		confirmed, err := confirmAction(message, riskLevelWarning)
+		permConfig, err := permissions.Load()
 		if err != nil {
-			return fmt.Errorf("confirmation error: %w", err)
+			logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+			permConfig = permissions.Default()
 		}
-		if !confirmed {
-			fmt.Println("Delete cancelled.")
-			return nil
+		checker := permissions.NewChecker(permConfig)
+
+		// Check if backup deletion is permitted and get confirmation
+		deleteDesc := fmt.Sprintf("delete %d backup(s) (freeing %s)", len(toDelete), formatSize(totalSize))
+		if err := checker.CheckAndConfirm(permissions.OpBackupDelete, deleteDesc); err != nil {
+			return fmt.Errorf("permission denied: %w", err)
 		}
 	}
 
@@ -2780,6 +2810,29 @@ func executeDelete(result tui.DeleteListResult) error {
 	if len(result.SelectedSkills) == 0 {
 		ui.Info("No skills selected for deletion")
 		return nil
+	}
+
+	// Check permissions before deletion
+	permConfig, err := permissions.Load()
+	if err != nil {
+		logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
+		permConfig = permissions.Default()
+	}
+	checker := permissions.NewChecker(permConfig)
+
+	// Check each skill's scope and get overall confirmation
+	skillNames := make([]string, len(result.SelectedSkills))
+	for i, skill := range result.SelectedSkills {
+		skillNames[i] = skill.Name
+		if err := checker.CheckScope(skill.Scope); err != nil {
+			return fmt.Errorf("permission denied for %s: %w", skill.Name, err)
+		}
+	}
+
+	// Get confirmation for the delete operation
+	deleteDesc := fmt.Sprintf("delete %d skill(s): %s", len(result.SelectedSkills), strings.Join(skillNames, ", "))
+	if err := checker.CheckAndConfirm(permissions.OpDelete, deleteDesc); err != nil {
+		return fmt.Errorf("permission denied: %w", err)
 	}
 
 	// Delete each selected skill
