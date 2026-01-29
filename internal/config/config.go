@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/util"
+	"github.com/klauern/skillsync/internal/validation"
 )
 
 // Config represents the complete skillsync configuration.
@@ -233,9 +235,27 @@ func Load() (*Config, error) {
 	// Apply environment variable overrides
 	cfg.applyEnvironment()
 
+	// Validate configuration
+	validationResult := cfg.Validate()
+
+	// Log warnings
+	for _, warning := range validationResult.Warnings {
+		logging.Warn("configuration warning", slog.String("warning", warning))
+	}
+
+	// Return error if validation failed
+	if validationResult.HasErrors() {
+		logging.Error("configuration validation failed",
+			logging.Path(configPath),
+			slog.Int("error_count", len(validationResult.Errors)),
+		)
+		return nil, fmt.Errorf("configuration validation failed: %w", validationResult.Error())
+	}
+
 	logging.Info("configuration loaded successfully",
 		logging.Path(configPath),
 		slog.String("default_strategy", cfg.Sync.DefaultStrategy),
+		slog.Int("warnings", len(validationResult.Warnings)),
 	)
 
 	return cfg, nil
@@ -269,8 +289,26 @@ func LoadFromPath(path string) (*Config, error) {
 
 	cfg.applyEnvironment()
 
+	// Validate configuration
+	validationResult := cfg.Validate()
+
+	// Log warnings
+	for _, warning := range validationResult.Warnings {
+		logging.Warn("configuration warning", slog.String("warning", warning))
+	}
+
+	// Return error if validation failed
+	if validationResult.HasErrors() {
+		logging.Error("configuration validation failed",
+			logging.Path(path),
+			slog.Int("error_count", len(validationResult.Errors)),
+		)
+		return nil, fmt.Errorf("configuration validation failed: %w", validationResult.Error())
+	}
+
 	logging.Info("configuration loaded from custom path",
 		logging.Path(path),
+		slog.Int("warnings", len(validationResult.Warnings)),
 	)
 
 	return cfg, nil
@@ -442,6 +480,145 @@ func (c *Config) GetStrategy() sync.Strategy {
 		return strategy
 	}
 	return sync.StrategyOverwrite
+}
+
+// Validate validates all configuration fields and returns a Result with any errors or warnings.
+func (c *Config) Validate() *validation.Result {
+	result := &validation.Result{Valid: true}
+
+	// Validate sync strategy
+	strategy := sync.Strategy(c.Sync.DefaultStrategy)
+	if !strategy.IsValid() {
+		result.AddError(&validation.Error{
+			Field:   "sync.default_strategy",
+			Message: fmt.Sprintf("invalid strategy %q (must be: overwrite, skip, newer, merge, three-way, or interactive)", c.Sync.DefaultStrategy),
+		})
+	}
+
+	// Validate backup retention days
+	if c.Sync.BackupRetentionDays < 0 {
+		result.AddError(&validation.Error{
+			Field:   "sync.backup_retention_days",
+			Message: fmt.Sprintf("must be >= 0, got %d", c.Sync.BackupRetentionDays),
+		})
+	}
+	if c.Sync.BackupRetentionDays > 365 {
+		result.AddWarning(fmt.Sprintf("sync.backup_retention_days is very high (%d days), consider reducing to save disk space", c.Sync.BackupRetentionDays))
+	}
+
+	// Validate cache settings
+	if c.Cache.TTL < 0 {
+		result.AddError(&validation.Error{
+			Field:   "cache.ttl",
+			Message: fmt.Sprintf("must be >= 0, got %v", c.Cache.TTL),
+		})
+	}
+	if c.Cache.Enabled && c.Cache.Location == "" {
+		result.AddError(&validation.Error{
+			Field:   "cache.location",
+			Message: "cache is enabled but location is empty",
+		})
+	}
+
+	// Validate output format
+	validFormats := map[string]bool{"table": true, "json": true, "yaml": true}
+	if !validFormats[c.Output.Format] {
+		result.AddError(&validation.Error{
+			Field:   "output.format",
+			Message: fmt.Sprintf("invalid format %q (must be: table, json, or yaml)", c.Output.Format),
+		})
+	}
+
+	// Validate output color
+	validColors := map[string]bool{"auto": true, "always": true, "never": true}
+	if !validColors[c.Output.Color] {
+		result.AddError(&validation.Error{
+			Field:   "output.color",
+			Message: fmt.Sprintf("invalid color setting %q (must be: auto, always, or never)", c.Output.Color),
+		})
+	}
+
+	// Validate backup settings
+	if c.Backup.MaxBackups < 0 {
+		result.AddError(&validation.Error{
+			Field:   "backup.max_backups",
+			Message: fmt.Sprintf("must be >= 0, got %d", c.Backup.MaxBackups),
+		})
+	}
+	if c.Backup.MaxBackups == 0 && c.Backup.Enabled {
+		result.AddWarning("backup.max_backups is 0 (unlimited backups), this may consume significant disk space")
+	}
+	if c.Backup.Enabled && c.Backup.Location == "" {
+		result.AddError(&validation.Error{
+			Field:   "backup.location",
+			Message: "backup is enabled but location is empty",
+		})
+	}
+
+	// Validate similarity thresholds
+	if c.Similarity.NameThreshold < 0.0 || c.Similarity.NameThreshold > 1.0 {
+		result.AddError(&validation.Error{
+			Field:   "similarity.name_threshold",
+			Message: fmt.Sprintf("must be between 0.0 and 1.0, got %.2f", c.Similarity.NameThreshold),
+		})
+	}
+	if c.Similarity.ContentThreshold < 0.0 || c.Similarity.ContentThreshold > 1.0 {
+		result.AddError(&validation.Error{
+			Field:   "similarity.content_threshold",
+			Message: fmt.Sprintf("must be between 0.0 and 1.0, got %.2f", c.Similarity.ContentThreshold),
+		})
+	}
+
+	// Validate similarity algorithm
+	validAlgorithms := map[string]bool{"levenshtein": true, "jaro-winkler": true, "combined": true}
+	if !validAlgorithms[c.Similarity.Algorithm] {
+		result.AddError(&validation.Error{
+			Field:   "similarity.algorithm",
+			Message: fmt.Sprintf("invalid algorithm %q (must be: levenshtein, jaro-winkler, or combined)", c.Similarity.Algorithm),
+		})
+	}
+
+	// Validate platform paths
+	c.validatePlatformPaths(&c.Platforms.ClaudeCode, "platforms.claude_code", result)
+	c.validatePlatformPaths(&c.Platforms.Cursor, "platforms.cursor", result)
+	c.validatePlatformPaths(&c.Platforms.Codex, "platforms.codex", result)
+
+	return result
+}
+
+// validatePlatformPaths validates a platform's skills paths configuration.
+func (c *Config) validatePlatformPaths(pc *PlatformConfig, fieldPrefix string, result *validation.Result) {
+	// Warn about deprecated SkillsPath field
+	if pc.SkillsPath != "" {
+		result.AddWarning(fmt.Sprintf("%s.skills_path is deprecated, use skills_paths (plural) instead", fieldPrefix))
+	}
+
+	// Check if any paths are configured
+	if len(pc.SkillsPaths) == 0 && pc.SkillsPath == "" {
+		result.AddWarning(fmt.Sprintf("%s: no skills paths configured, will use defaults", fieldPrefix))
+		return
+	}
+
+	// Validate each path in SkillsPaths
+	for i, path := range pc.SkillsPaths {
+		if path == "" {
+			result.AddError(&validation.Error{
+				Field:   fmt.Sprintf("%s.skills_paths[%d]", fieldPrefix, i),
+				Message: "path cannot be empty",
+			})
+			continue
+		}
+
+		// Expand path for validation (use current directory as base)
+		expandedPath := util.ExpandPath(path, ".")
+
+		// Check if path exists (warning only, not error - paths can be created)
+		if _, err := os.Stat(expandedPath); os.IsNotExist(err) {
+			result.AddWarning(fmt.Sprintf("%s.skills_paths[%d]: path %q does not exist (will be created if needed)", fieldPrefix, i, path))
+		} else if err != nil {
+			result.AddWarning(fmt.Sprintf("%s.skills_paths[%d]: cannot access path %q: %v", fieldPrefix, i, path, err))
+		}
+	}
 }
 
 // GetSkillsPaths returns all skills paths for this platform, expanded and in order.

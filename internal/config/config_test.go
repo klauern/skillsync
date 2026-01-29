@@ -742,3 +742,348 @@ similarity:
 	// Note: Without special handling, unspecified float64 fields become 0
 	// This is expected YAML behavior - if users want defaults, they shouldn't specify the section
 }
+
+func TestValidate_Valid(t *testing.T) {
+	cfg := Default()
+	result := cfg.Validate()
+
+	if !result.Valid {
+		t.Errorf("expected default config to be valid, got errors: %v", result.Errors)
+	}
+	if result.HasErrors() {
+		t.Errorf("expected no errors, got %d", len(result.Errors))
+	}
+}
+
+func TestValidate_InvalidStrategy(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultStrategy = "invalid-strategy"
+
+	result := cfg.Validate()
+
+	if result.Valid {
+		t.Error("expected validation to fail with invalid strategy")
+	}
+	if !result.HasErrors() {
+		t.Error("expected validation errors")
+	}
+
+	// Check that the error mentions the field and invalid value
+	errMsg := result.Error().Error()
+	if !contains(errMsg, "sync.default_strategy") {
+		t.Errorf("expected error to mention 'sync.default_strategy', got: %s", errMsg)
+	}
+	if !contains(errMsg, "invalid-strategy") {
+		t.Errorf("expected error to mention 'invalid-strategy', got: %s", errMsg)
+	}
+}
+
+func TestValidate_InvalidFormat(t *testing.T) {
+	cfg := Default()
+	cfg.Output.Format = "xml"
+
+	result := cfg.Validate()
+
+	if result.Valid {
+		t.Error("expected validation to fail with invalid format")
+	}
+	if !result.HasErrors() {
+		t.Error("expected validation errors")
+	}
+
+	errMsg := result.Error().Error()
+	if !contains(errMsg, "output.format") {
+		t.Errorf("expected error to mention 'output.format', got: %s", errMsg)
+	}
+}
+
+func TestValidate_InvalidColor(t *testing.T) {
+	cfg := Default()
+	cfg.Output.Color = "maybe"
+
+	result := cfg.Validate()
+
+	if result.Valid {
+		t.Error("expected validation to fail with invalid color")
+	}
+	if !result.HasErrors() {
+		t.Error("expected validation errors")
+	}
+
+	errMsg := result.Error().Error()
+	if !contains(errMsg, "output.color") {
+		t.Errorf("expected error to mention 'output.color', got: %s", errMsg)
+	}
+}
+
+func TestValidate_InvalidAlgorithm(t *testing.T) {
+	cfg := Default()
+	cfg.Similarity.Algorithm = "fuzzy"
+
+	result := cfg.Validate()
+
+	if result.Valid {
+		t.Error("expected validation to fail with invalid algorithm")
+	}
+	if !result.HasErrors() {
+		t.Error("expected validation errors")
+	}
+
+	errMsg := result.Error().Error()
+	if !contains(errMsg, "similarity.algorithm") {
+		t.Errorf("expected error to mention 'similarity.algorithm', got: %s", errMsg)
+	}
+}
+
+func TestValidate_ThresholdsOutOfRange(t *testing.T) {
+	tests := []struct {
+		name          string
+		nameThreshold float64
+		contThreshold float64
+	}{
+		{"name too low", -0.1, 0.7},
+		{"name too high", 1.5, 0.7},
+		{"content too low", 0.7, -0.1},
+		{"content too high", 0.7, 1.5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			cfg.Similarity.NameThreshold = tt.nameThreshold
+			cfg.Similarity.ContentThreshold = tt.contThreshold
+
+			result := cfg.Validate()
+
+			if result.Valid {
+				t.Errorf("expected validation to fail for %s", tt.name)
+			}
+			if !result.HasErrors() {
+				t.Errorf("expected validation errors for %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestValidate_NegativeNumbers(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*Config)
+		expected string
+	}{
+		{
+			"negative backup retention",
+			func(c *Config) { c.Sync.BackupRetentionDays = -1 },
+			"sync.backup_retention_days",
+		},
+		{
+			"negative cache TTL",
+			func(c *Config) { c.Cache.TTL = -1 * time.Hour },
+			"cache.ttl",
+		},
+		{
+			"negative max backups",
+			func(c *Config) { c.Backup.MaxBackups = -1 },
+			"backup.max_backups",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			tt.setup(cfg)
+
+			result := cfg.Validate()
+
+			if result.Valid {
+				t.Errorf("expected validation to fail for %s", tt.name)
+			}
+			if !result.HasErrors() {
+				t.Errorf("expected validation errors for %s", tt.name)
+			}
+
+			errMsg := result.Error().Error()
+			if !contains(errMsg, tt.expected) {
+				t.Errorf("expected error to mention '%s', got: %s", tt.expected, errMsg)
+			}
+		})
+	}
+}
+
+func TestValidate_EmptyLocationWithEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*Config)
+		expected string
+	}{
+		{
+			"cache enabled with empty location",
+			func(c *Config) {
+				c.Cache.Enabled = true
+				c.Cache.Location = ""
+			},
+			"cache.location",
+		},
+		{
+			"backup enabled with empty location",
+			func(c *Config) {
+				c.Backup.Enabled = true
+				c.Backup.Location = ""
+			},
+			"backup.location",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			tt.setup(cfg)
+
+			result := cfg.Validate()
+
+			if result.Valid {
+				t.Errorf("expected validation to fail for %s", tt.name)
+			}
+			if !result.HasErrors() {
+				t.Errorf("expected validation errors for %s", tt.name)
+			}
+
+			errMsg := result.Error().Error()
+			if !contains(errMsg, tt.expected) {
+				t.Errorf("expected error to mention '%s', got: %s", tt.expected, errMsg)
+			}
+		})
+	}
+}
+
+func TestValidate_Warnings(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(*Config)
+		expected string
+	}{
+		{
+			"high backup retention",
+			func(c *Config) { c.Sync.BackupRetentionDays = 400 },
+			"very high",
+		},
+		{
+			"unlimited backups",
+			func(c *Config) {
+				c.Backup.Enabled = true
+				c.Backup.MaxBackups = 0
+			},
+			"unlimited backups",
+		},
+		{
+			"deprecated skills_path",
+			func(c *Config) { c.Platforms.ClaudeCode.SkillsPath = "/tmp/skills" },
+			"deprecated",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Default()
+			tt.setup(cfg)
+
+			result := cfg.Validate()
+
+			if len(result.Warnings) == 0 {
+				t.Errorf("expected warnings for %s", tt.name)
+			}
+
+			foundWarning := false
+			for _, warning := range result.Warnings {
+				if contains(warning, tt.expected) {
+					foundWarning = true
+					break
+				}
+			}
+			if !foundWarning {
+				t.Errorf("expected warning to contain '%s', got warnings: %v", tt.expected, result.Warnings)
+			}
+		})
+	}
+}
+
+func TestValidate_MultipleErrors(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultStrategy = "invalid"
+	cfg.Output.Format = "xml"
+	cfg.Similarity.NameThreshold = 2.0
+
+	result := cfg.Validate()
+
+	if result.Valid {
+		t.Error("expected validation to fail with multiple errors")
+	}
+	if len(result.Errors) < 3 {
+		t.Errorf("expected at least 3 errors, got %d", len(result.Errors))
+	}
+}
+
+func TestLoadFromPath_InvalidConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "invalid.yaml")
+
+	// Write invalid config
+	invalidConfig := `
+sync:
+  default_strategy: "invalid-strategy"
+output:
+  format: "xml"
+similarity:
+  name_threshold: 2.0
+`
+	// #nosec G306 - test file permissions are acceptable
+	if err := os.WriteFile(configPath, []byte(invalidConfig), 0o644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Attempt to load invalid config
+	_, err := LoadFromPath(configPath)
+
+	if err == nil {
+		t.Fatal("expected LoadFromPath to fail with invalid config")
+	}
+
+	// Check error message mentions validation
+	if !contains(err.Error(), "validation failed") {
+		t.Errorf("expected error to mention validation failure, got: %v", err)
+	}
+}
+
+func TestValidate_EmptyPathInSkillsPaths(t *testing.T) {
+	cfg := Default()
+	cfg.Platforms.ClaudeCode.SkillsPaths = []string{".claude/skills", "", "~/.claude/skills"}
+
+	result := cfg.Validate()
+
+	if result.Valid {
+		t.Error("expected validation to fail with empty path")
+	}
+	if !result.HasErrors() {
+		t.Error("expected validation errors")
+	}
+
+	errMsg := result.Error().Error()
+	if !contains(errMsg, "cannot be empty") {
+		t.Errorf("expected error about empty path, got: %s", errMsg)
+	}
+}
+
+// Helper function to check if a string contains a substring (case-insensitive)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
