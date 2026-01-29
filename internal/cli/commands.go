@@ -18,6 +18,7 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/archive"
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/cache"
 	"github.com/klauern/skillsync/internal/config"
@@ -1875,7 +1876,9 @@ func exportCommand() *cli.Command {
      skillsync export
      skillsync export --format yaml
      skillsync export --platform claude-code --format markdown
-     skillsync export --output skills.json`,
+     skillsync export --output skills.json
+     skillsync export --archive --output skills.tar.gz
+     skillsync export --archive --platform cursor --since 2024-01-01`,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "platform",
@@ -1886,7 +1889,7 @@ func exportCommand() *cli.Command {
 				Name:    "format",
 				Aliases: []string{"f"},
 				Value:   "json",
-				Usage:   "Output format: json, yaml, markdown",
+				Usage:   "Output format: json, yaml, markdown (ignored when --archive is used)",
 			},
 			&cli.StringFlag{
 				Name:    "output",
@@ -1901,6 +1904,18 @@ func exportCommand() *cli.Command {
 				Name:  "compact",
 				Usage: "Compact output (no pretty-printing)",
 			},
+			&cli.BoolFlag{
+				Name:  "archive",
+				Usage: "Create tar.gz archive with manifest (portable format for backup/migration)",
+			},
+			&cli.StringFlag{
+				Name:  "since",
+				Usage: "Filter skills modified after date (RFC3339 or YYYY-MM-DD format)",
+			},
+			&cli.StringFlag{
+				Name:  "before",
+				Usage: "Filter skills modified before date (RFC3339 or YYYY-MM-DD format)",
+			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			return runExport(cmd)
@@ -1910,11 +1925,12 @@ func exportCommand() *cli.Command {
 
 // runExport executes the export command.
 func runExport(cmd *cli.Command) error {
-	// Parse format
-	formatStr := cmd.String("format")
-	format, err := export.ParseFormat(formatStr)
-	if err != nil {
-		return err
+	// Validate format early (unless archive mode)
+	if !cmd.Bool("archive") {
+		formatStr := cmd.String("format")
+		if _, err := export.ParseFormat(formatStr); err != nil {
+			return err
+		}
 	}
 
 	// Parse platform filter
@@ -1928,14 +1944,6 @@ func runExport(cmd *cli.Command) error {
 		platform = p
 	}
 
-	// Build export options
-	opts := export.Options{
-		Format:          format,
-		Pretty:          !cmd.Bool("compact"),
-		IncludeMetadata: !cmd.Bool("no-metadata"),
-		Platform:        platform,
-	}
-
 	// Discover skills
 	skills, err := discoverSkillsForExport(platform)
 	if err != nil {
@@ -1945,6 +1953,24 @@ func runExport(cmd *cli.Command) error {
 	if len(skills) == 0 {
 		fmt.Fprintln(os.Stderr, "No skills found to export.")
 		return nil
+	}
+
+	// Handle archive mode
+	if cmd.Bool("archive") {
+		return runExportArchive(cmd, skills, platform)
+	}
+
+	// Standard export mode
+	// Parse format (already validated above)
+	formatStr := cmd.String("format")
+	format, _ := export.ParseFormat(formatStr)
+
+	// Build export options
+	opts := export.Options{
+		Format:          format,
+		Pretty:          !cmd.Bool("compact"),
+		IncludeMetadata: !cmd.Bool("no-metadata"),
+		Platform:        platform,
 	}
 
 	// Create exporter
@@ -1980,6 +2006,82 @@ func runExport(cmd *cli.Command) error {
 	return nil
 }
 
+// runExportArchive creates a tar.gz archive of skills.
+func runExportArchive(cmd *cli.Command, skills []model.Skill, platform model.Platform) error {
+	// Parse date filters
+	var since, before time.Time
+	var err error
+
+	if sinceStr := cmd.String("since"); sinceStr != "" {
+		since, err = parseDate(sinceStr)
+		if err != nil {
+			return fmt.Errorf("invalid --since date: %w", err)
+		}
+	}
+
+	if beforeStr := cmd.String("before"); beforeStr != "" {
+		before, err = parseDate(beforeStr)
+		if err != nil {
+			return fmt.Errorf("invalid --before date: %w", err)
+		}
+	}
+
+	// Build archive options
+	archiveOpts := archive.CreateOptions{
+		Platform:    platform,
+		Since:       since,
+		Before:      before,
+		IncludeMeta: !cmd.Bool("no-metadata"),
+	}
+
+	// Determine output destination
+	outputPath := cmd.String("output")
+	if outputPath == "" {
+		outputPath = fmt.Sprintf("skillsync-export-%s.tar.gz", time.Now().Format("20060102-150405"))
+	}
+
+	// Create archive file
+	// #nosec G304 - outputPath is provided by user
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create archive file: %w", err)
+	}
+	defer file.Close()
+
+	// Create archive
+	if err := archive.Create(skills, file, archiveOpts); err != nil {
+		return fmt.Errorf("failed to create archive: %w", err)
+	}
+
+	// Get file stats for reporting
+	stat, err := file.Stat()
+	if err == nil {
+		fmt.Fprintf(os.Stderr, "Created archive: %s (%.2f MB, %d skills)\n",
+			outputPath, float64(stat.Size())/(1024*1024), len(skills))
+	} else {
+		fmt.Fprintf(os.Stderr, "Created archive: %s (%d skills)\n", outputPath, len(skills))
+	}
+
+	return nil
+}
+
+// parseDate parses a date string in RFC3339 or YYYY-MM-DD format.
+func parseDate(s string) (time.Time, error) {
+	// Try RFC3339 first
+	t, err := time.Parse(time.RFC3339, s)
+	if err == nil {
+		return t, nil
+	}
+
+	// Try YYYY-MM-DD format
+	t, err = time.Parse("2006-01-02", s)
+	if err == nil {
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("invalid date format (use RFC3339 or YYYY-MM-DD): %s", s)
+}
+
 // discoverSkillsForExport discovers skills optionally filtered by platform.
 func discoverSkillsForExport(platform model.Platform) ([]model.Skill, error) {
 	var platforms []model.Platform
@@ -2002,6 +2104,115 @@ func discoverSkillsForExport(platform model.Platform) ([]model.Skill, error) {
 	}
 
 	return allSkills, nil
+}
+
+func importCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "import",
+		Usage:     "Import skills from archive",
+		UsageText: "skillsync import [options] <archive-file>",
+		Description: `Import skills from a tar.gz archive created by 'skillsync export --archive'.
+
+   The archive must contain a manifest.json file with skill metadata.
+   Skills are imported to their platform-specific directories.
+
+   Examples:
+     skillsync import skills.tar.gz
+     skillsync import --platform claude-code skills.tar.gz
+     skillsync import --dry-run skills.tar.gz
+     skillsync import --target-dir ./restored skills.tar.gz`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Filter by platform during import (claude-code, cursor, codex)",
+			},
+			&cli.StringFlag{
+				Name:  "target-dir",
+				Usage: "Target directory for import (default: platform default directories)",
+			},
+			&cli.BoolFlag{
+				Name:    "dry-run",
+				Aliases: []string{"d"},
+				Usage:   "Preview import without writing files",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			return runImport(cmd)
+		},
+	}
+}
+
+// runImport executes the import command.
+func runImport(cmd *cli.Command) error {
+	// Get archive file path
+	args := cmd.Args()
+	if args.Len() < 1 {
+		return fmt.Errorf("archive file path is required")
+	}
+	archivePath := args.Get(0)
+
+	// Parse platform filter
+	var platform model.Platform
+	platformStr := cmd.String("platform")
+	if platformStr != "" {
+		p, err := model.ParsePlatform(platformStr)
+		if err != nil {
+			return fmt.Errorf("invalid platform: %w", err)
+		}
+		platform = p
+	}
+
+	// Open archive file
+	// #nosec G304 - archivePath is provided by user
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to open archive: %w", err)
+	}
+	defer file.Close()
+
+	// Build extract options
+	extractOpts := archive.ExtractOptions{
+		TargetDir: cmd.String("target-dir"),
+		Platform:  platform,
+		DryRun:    cmd.Bool("dry-run"),
+	}
+
+	// Extract archive
+	skills, manifest, err := archive.Extract(file, extractOpts)
+	if err != nil {
+		return fmt.Errorf("failed to extract archive: %w", err)
+	}
+
+	// Report results
+	if extractOpts.DryRun {
+		fmt.Fprintf(os.Stderr, "Dry-run: would import %d skill(s) from archive\n", len(skills))
+	} else {
+		fmt.Fprintf(os.Stderr, "Imported %d skill(s) from archive\n", len(skills))
+	}
+
+	// Print manifest info
+	fmt.Fprintf(os.Stderr, "\nArchive Info:\n")
+	fmt.Fprintf(os.Stderr, "  Version: %s\n", manifest.Version)
+	fmt.Fprintf(os.Stderr, "  Created: %s\n", manifest.CreatedAt.Format(time.RFC3339))
+	if manifest.Platform != "" {
+		fmt.Fprintf(os.Stderr, "  Platform: %s\n", manifest.Platform)
+	}
+	fmt.Fprintf(os.Stderr, "  Total Skills: %d\n", manifest.SkillCount)
+
+	// Print skill summary
+	if len(skills) > 0 {
+		fmt.Fprintf(os.Stderr, "\nImported Skills:\n")
+		for _, skill := range skills {
+			status := "✓"
+			if extractOpts.DryRun {
+				status = "⋯"
+			}
+			fmt.Fprintf(os.Stderr, "  %s %s (%s)\n", status, skill.Name, skill.Platform)
+		}
+	}
+
+	return nil
 }
 
 func backupCommand() *cli.Command {

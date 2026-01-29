@@ -54,6 +54,7 @@ func Run(ctx context.Context, args []string) error {
 			compareCommand(),
 			dedupeCommand(),
 			exportCommand(),
+			importCommand(),
 			backupCommand(),
 			promoteCommand(),
 			demoteCommand(),

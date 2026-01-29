@@ -547,9 +547,11 @@ skillsync scope prune --scope user --keep-repo
 skillsync scope prune --platform cursor --scope user
 ```
 
-## Exporting Skills
+## Exporting and Importing Skills
 
-Export skills to various formats for documentation or backup:
+### Exporting Skills
+
+Export skills to various formats for documentation, backup, or migration:
 
 ```bash
 # Export all skills as JSON (default)
@@ -573,6 +575,50 @@ skillsync export --compact --output skills-compact.json
 # Exclude metadata
 skillsync export --no-metadata --format json
 ```
+
+### Creating Portable Archives
+
+For backup or migration, create a portable tar.gz archive:
+
+```bash
+# Create archive with all skills
+skillsync export --archive --output backup.tar.gz
+
+# Create archive with date filtering
+skillsync export --archive --since 2024-01-01 --output recent-skills.tar.gz
+
+# Archive specific platform only
+skillsync export --archive --platform cursor --output cursor-backup.tar.gz
+```
+
+Archives include:
+- Skills in JSON format with full metadata
+- Manifest file with archive info and skill index
+- Platform and scope information preserved
+
+### Importing from Archives
+
+Restore skills from a portable archive:
+
+```bash
+# Import all skills from archive
+skillsync import backup.tar.gz
+
+# Preview what would be imported (dry-run)
+skillsync import --dry-run backup.tar.gz
+
+# Import specific platform only
+skillsync import --platform cursor backup.tar.gz
+
+# Import to custom directory
+skillsync import --target-dir ./restored backup.tar.gz
+```
+
+**Use cases for import/export:**
+- 📦 **Backup and Recovery**: Create regular backups and restore when needed
+- 🔄 **Machine Migration**: Move skills to a new machine
+- 👥 **Team Sharing**: Share skill collections with teammates
+- 🚀 **Platform Migration**: Export from one platform, import to another
 
 ## Interactive TUI Dashboard
 

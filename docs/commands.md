@@ -14,6 +14,7 @@ Complete reference for all SkillSync commands, flags, and usage patterns.
   - [compare](#compare)
   - [dedupe](#dedupe)
   - [export](#export)
+  - [import](#import)
   - [backup](#backup)
   - [promote](#promote)
   - [demote](#demote)
@@ -26,12 +27,12 @@ Complete reference for all SkillSync commands, flags, and usage patterns.
 
 ## Overview
 
-SkillSync provides 12 commands for managing AI coding skills across platforms:
+SkillSync provides 13 commands for managing AI coding skills across platforms:
 
 - **Configuration**: `config`, `version`
 - **Discovery**: `discover`, `tui`
 - **Synchronization**: `sync`, `compare`, `dedupe`
-- **Export/Backup**: `export`, `backup`
+- **Export/Import/Backup**: `export`, `import`, `backup`
 - **Scope Management**: `promote`, `demote`, `scope`
 
 ### Command Syntax
@@ -628,7 +629,7 @@ Rename 2 skills? [y/N]:
 
 ### export
 
-Export skills to various formats.
+Export skills to various formats for documentation, backup, or migration.
 
 **Usage:**
 
@@ -641,10 +642,13 @@ skillsync export [flags]
 | Flag | Aliases | Default | Description |
 |------|---------|---------|-------------|
 | `--platform` | `-p` | all | Platform to export |
-| `--format` | `-f` | json | Export format (json, yaml, markdown, tar) |
-| `--output` | `-o` | stdout | Output file path |
-| `--no-metadata` | | false | Exclude metadata (format-dependent) |
+| `--format` | `-f` | json | Export format (json, yaml, markdown) - ignored with --archive |
+| `--output` | `-o` | stdout | Output file path (auto-generated for archive) |
+| `--no-metadata` | | false | Exclude metadata fields |
 | `--compact` | | false | Compact JSON/YAML (no pretty-print) |
+| `--archive` | | false | Create portable tar.gz archive with manifest |
+| `--since` | | | Filter skills modified after date (YYYY-MM-DD or RFC3339) |
+| `--before` | | | Filter skills modified before date (YYYY-MM-DD or RFC3339) |
 
 **Export Formats:**
 
@@ -653,7 +657,7 @@ skillsync export [flags]
 | `json` | .json | API integration, scripting |
 | `yaml` | .yaml | Human-readable, version control |
 | `markdown` | .md | Documentation, sharing |
-| `tar` | .tar.gz | Backup, archive, transfer |
+| `archive` | .tar.gz | Portable backup, migration, transfer (use --archive flag) |
 
 **Examples:**
 
@@ -673,8 +677,14 @@ skillsync export --format json --compact
 # Markdown documentation
 skillsync export --format markdown --output SKILLS.md
 
-# Create tarball backup
-skillsync export --format tar --output backup.tar.gz
+# Create portable archive (recommended for backup/migration)
+skillsync export --archive --output backup.tar.gz
+
+# Create archive with date filtering
+skillsync export --archive --since 2024-01-01 --output recent-skills.tar.gz
+
+# Export only cursor skills to archive
+skillsync export --archive --platform cursor
 
 # Minimal JSON (no metadata)
 skillsync export --format json --no-metadata
@@ -723,22 +733,112 @@ Modified: 2026-01-27
 ...
 ```
 
-**Tar Archive:**
+**Archive Format:**
 
-Creates a compressed tarball with platform/scope directory structure:
+The `--archive` flag creates a compressed tar.gz archive containing:
+- Skills serialized as JSON with full metadata
+- `manifest.json` with archive metadata and skill index
+- SHA256 checksums for integrity verification
 
+Archive structure:
 ```
 backup.tar.gz
-├── cursor/
-│   ├── user/
-│   │   ├── commit-helper.md
-│   │   └── debug-wizard.md
-│   └── repo/
-│       └── test-runner.md
-└── claudecode/
-    └── user/
-        └── my-skill.md
+├── manifest.json           # Archive metadata and skill index
+└── skills/
+    ├── claude-code-skill1.json
+    ├── cursor-skill2.json
+    └── codex-skill3.json
 ```
+
+**Manifest Structure:**
+```json
+{
+  "version": "1.0",
+  "created_at": "2026-01-28T14:30:00Z",
+  "platform": "claude-code",
+  "skill_count": 3,
+  "skills": [
+    {
+      "name": "skill1",
+      "platform": "claude-code",
+      "scope": "user",
+      "modified_at": "2026-01-27T10:00:00Z",
+      "filename": "skills/claude-code-skill1.json",
+      "size": 1024,
+      "metadata": {...}
+    }
+  ]
+}
+```
+
+Archives are portable and can be imported on different machines using the `import` command.
+
+---
+
+### import
+
+Import skills from a portable tar.gz archive created by `skillsync export --archive`.
+
+**Usage:**
+
+```bash
+skillsync import [flags] <archive-file>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<archive-file>` | Path to tar.gz archive to import |
+
+**Flags:**
+
+| Flag | Aliases | Default | Description |
+|------|---------|---------|-------------|
+| `--platform` | `-p` | all | Filter by platform during import |
+| `--target-dir` | | default | Target directory for extraction |
+| `--dry-run` | `-d` | false | Preview import without writing files |
+
+**Examples:**
+
+```bash
+# Import all skills from archive
+skillsync import backup.tar.gz
+
+# Preview import (dry-run)
+skillsync import --dry-run backup.tar.gz
+
+# Import only cursor skills
+skillsync import --platform cursor backup.tar.gz
+
+# Import to custom directory
+skillsync import --target-dir ./restored backup.tar.gz
+```
+
+**Output:**
+
+```
+Imported 12 skill(s) from archive
+
+Archive Info:
+  Version: 1.0
+  Created: 2026-01-28T14:30:00Z
+  Platform: claude-code
+  Total Skills: 12
+
+Imported Skills:
+  ✓ commit-helper (claude-code)
+  ✓ debug-wizard (claude-code)
+  ✓ test-runner (cursor)
+  ...
+```
+
+**Use Cases:**
+
+- **Migration**: Move skills between machines
+- **Backup Recovery**: Restore from backup archives
+- **Team Sharing**: Share skill collections with teammates
+- **Platform Migration**: Export from one platform, import to another
 
 ---
 
