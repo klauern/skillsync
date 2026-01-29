@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/progress"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -304,6 +305,19 @@ func DeleteBackup(backupID string) error {
 func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 	var backups []Metadata
 
+	// Count files first for progress tracking
+	var fileCount int64
+	filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			fileCount++
+		}
+		return nil
+	})
+
+	// Create progress bar
+	bar := progress.Simple(fileCount, "Backing up files")
+	defer bar.Finish()
+
 	// Walk directory
 	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -322,6 +336,7 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 		}
 
 		backups = append(backups, *metadata)
+		bar.Add(1)
 		return nil
 	})
 	if err != nil {

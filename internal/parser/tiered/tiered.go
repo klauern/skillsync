@@ -8,6 +8,7 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/progress"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -58,6 +59,10 @@ func New(cfg Config) *Parser {
 // Skills are merged with precedence-based deduplication.
 func (p *Parser) Parse() ([]model.Skill, error) {
 	searchPaths := util.GetAllSearchPaths(p.pathConfig)
+
+	// Create progress bar for multi-path search
+	bar := progress.Simple(int64(len(searchPaths)), "Parsing skill directories")
+	defer bar.Finish()
 
 	// Collect skills from all paths, tracking seen names for deduplication
 	skillsByName := make(map[string]model.Skill)
@@ -113,6 +118,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 				skillsByName[skill.Name] = skill
 			}
 		}
+		bar.Add(1)
 	}
 
 	// Convert map to slice

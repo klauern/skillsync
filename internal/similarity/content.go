@@ -7,6 +7,7 @@ import (
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/progress"
 )
 
 // ContentMatch represents a pair of skills with their content similarity score.
@@ -73,6 +74,14 @@ func (m *ContentMatcher) FindSimilar(skills []model.Skill) []ContentMatch {
 
 	var matches []ContentMatch
 
+	// Calculate total comparisons for progress tracking (n choose 2)
+	n := int64(len(skills))
+	totalComparisons := (n * (n - 1)) / 2
+
+	// Create progress bar for O(n^2) comparison operation
+	bar := progress.Simple(totalComparisons, "Finding similar content")
+	defer bar.Finish()
+
 	// Compare all pairs (O(n^2) but typically small number of skills)
 	for i := range len(skills) {
 		skillI := skills[i]
@@ -92,6 +101,7 @@ func (m *ContentMatcher) FindSimilar(skills []model.Skill) []ContentMatch {
 					slog.Float64("score", score),
 				)
 			}
+			bar.Add(1)
 		}
 	}
 
