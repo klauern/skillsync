@@ -12,10 +12,10 @@ import (
 
 func TestParsePluginKey(t *testing.T) {
 	tests := []struct {
-		name                  string
-		input                 string
-		wantPluginName        string
-		wantMarketplace       string
+		name            string
+		input           string
+		wantPluginName  string
+		wantMarketplace string
 	}{
 		{
 			name:            "standard format",

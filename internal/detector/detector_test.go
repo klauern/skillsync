@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/klauern/skillsync/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/klauern/skillsync/internal/model"
 )
 
 func TestDetectPlatform(t *testing.T) {
@@ -15,7 +16,7 @@ func TestDetectPlatform(t *testing.T) {
 		// Create temporary directory
 		tmpDir := t.TempDir()
 		skillsDir := filepath.Join(tmpDir, "skills")
-		require.NoError(t, os.MkdirAll(skillsDir, 0755))
+		require.NoError(t, os.MkdirAll(skillsDir, 0o755))
 
 		// Set environment variable
 		t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", skillsDir)
@@ -85,7 +86,7 @@ func TestDetectPlatform(t *testing.T) {
 	t.Run("env var takes precedence over default path", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		envPath := filepath.Join(tmpDir, "env-skills")
-		require.NoError(t, os.MkdirAll(envPath, 0755))
+		require.NoError(t, os.MkdirAll(envPath, 0o755))
 
 		t.Setenv("SKILLSYNC_CODEX_PATH", envPath)
 
@@ -121,8 +122,8 @@ func TestDetectAll(t *testing.T) {
 
 		claudePath := filepath.Join(tmpDir, "claude")
 		cursorPath := filepath.Join(tmpDir, "cursor")
-		require.NoError(t, os.MkdirAll(claudePath, 0755))
-		require.NoError(t, os.MkdirAll(cursorPath, 0755))
+		require.NoError(t, os.MkdirAll(claudePath, 0o755))
+		require.NoError(t, os.MkdirAll(cursorPath, 0o755))
 
 		t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", claudePath)
 		t.Setenv("SKILLSYNC_CURSOR_PATH", cursorPath)
@@ -152,7 +153,7 @@ func TestIsInstalled(t *testing.T) {
 	t.Run("returns true when platform detected", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillsDir := filepath.Join(tmpDir, "skills")
-		require.NoError(t, os.MkdirAll(skillsDir, 0755))
+		require.NoError(t, os.MkdirAll(skillsDir, 0o755))
 
 		t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", skillsDir)
 
@@ -180,7 +181,7 @@ func TestGetConfigPath(t *testing.T) {
 	t.Run("returns path when platform detected", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		skillsDir := filepath.Join(tmpDir, "skills")
-		require.NoError(t, os.MkdirAll(skillsDir, 0755))
+		require.NoError(t, os.MkdirAll(skillsDir, 0o755))
 
 		t.Setenv("SKILLSYNC_CURSOR_PATH", skillsDir)
 

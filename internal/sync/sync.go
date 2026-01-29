@@ -946,13 +946,13 @@ func (s *Synchronizer) determineSyncDirection(skillA, skillB model.Skill, strate
 
 // BidirectionalResult represents the result of a bidirectional sync.
 type BidirectionalResult struct {
-	PlatformA   model.Platform
-	PlatformB   model.Platform
-	Strategy    Strategy
-	DryRun      bool
-	ResultAtoB  *Result
-	ResultBtoA  *Result
-	Conflicts   []BidirectionalConflict
+	PlatformA  model.Platform
+	PlatformB  model.Platform
+	Strategy   Strategy
+	DryRun     bool
+	ResultAtoB *Result
+	ResultBtoA *Result
+	Conflicts  []BidirectionalConflict
 }
 
 // BidirectionalConflict represents a conflict in bidirectional sync.
