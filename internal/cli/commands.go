@@ -934,8 +934,6 @@ func syncCommand() *cli.Command {
 
 			// Handle conflicts if interactive strategy is used
 			if result.HasConflicts() && cfg.strategy == sync.StrategyInteractive {
-				resolver := NewConflictResolver()
-
 				// Gather conflicts
 				var conflicts []*sync.Conflict
 				for _, sr := range result.Conflicts() {
@@ -944,21 +942,59 @@ func syncCommand() *cli.Command {
 					}
 				}
 
-				// Display summary and resolve
-				resolver.DisplayConflictSummary(conflicts)
-				resolved, err := resolver.ResolveConflicts(conflicts)
+				var resolved map[string]string
+
+				// Try TUI first, fall back to CLI if TTY not available
+				tuiResult, err := tui.RunConflictList(conflicts)
 				if err != nil {
-					return fmt.Errorf("conflict resolution failed: %w", err)
+					// TTY not available (e.g., in tests or CI), fall back to CLI resolver
+					resolver := NewConflictResolver()
+					resolver.DisplayConflictSummary(conflicts)
+					resolved, err = resolver.ResolveConflicts(conflicts)
+					if err != nil {
+						return fmt.Errorf("conflict resolution failed: %w", err)
+					}
+				} else {
+					// Handle TUI cancellation
+					if tuiResult.Action == tui.ConflictActionNone || tuiResult.Action == tui.ConflictActionCancel {
+						fmt.Println("Conflict resolution cancelled")
+						return nil
+					}
+
+					// Convert TUI resolutions to resolved content map
+					resolved = make(map[string]string)
+					for _, resolution := range tuiResult.Resolutions {
+						if resolution.Resolution == sync.ResolutionSkip {
+							continue
+						}
+
+						// For merge resolution, use the provided content
+						if resolution.Resolution == sync.ResolutionMerge {
+							resolved[resolution.SkillName] = resolution.Content
+						} else {
+							// For source/target, find the appropriate content from conflicts
+							for _, conflict := range conflicts {
+								if conflict.SkillName == resolution.SkillName {
+									if resolution.Resolution == sync.ResolutionUseSource {
+										resolved[resolution.SkillName] = conflict.Source.Content
+									} else if resolution.Resolution == sync.ResolutionUseTarget {
+										resolved[resolution.SkillName] = conflict.Target.Content
+									}
+									break
+								}
+							}
+						}
+					}
 				}
 
 				// Apply resolved content
-				if !cfg.dryRun {
+				if !cfg.dryRun && len(resolved) > 0 {
 					if err := applyResolvedConflicts(result, resolved); err != nil {
 						return fmt.Errorf("failed to apply resolved conflicts: %w", err)
 					}
 				}
 
-				fmt.Printf("\nResolved %d conflict(s)\n", len(resolved))
+				fmt.Printf("\n✓ Resolved %d conflict(s)\n", len(resolved))
 			}
 
 			displaySyncResults(result)

@@ -165,13 +165,19 @@ Synchronize skills between platforms with various strategies.
 # Sync from Claude Code to Cursor (overwrite strategy)
 skillsync sync claude-code cursor
 
-# Sync with interactive conflict resolution
+# Sync with interactive TUI mode for skill selection
 skillsync sync claude-code cursor --interactive
+
+# Use interactive conflict resolution strategy
+skillsync sync claude-code cursor --strategy interactive
 
 # Dry-run to preview changes
 skillsync sync claude-code cursor --dry-run
 
-# Use merge strategy
+# Use three-way merge with automatic conflict detection
+skillsync sync claude-code cursor --strategy three-way
+
+# Use merge strategy (concatenates content)
 skillsync sync claude-code cursor --strategy merge
 
 # Skip backup creation
@@ -185,9 +191,13 @@ skillsync sync claude-code cursor --yes
 - `overwrite` - Replace destination skills (default)
 - `skip` - Keep existing destination skills
 - `newer` - Copy only if source is newer
-- `merge` - Merge content from both sources
-- `three-way` - Intelligent three-way merge with conflict detection
-- `interactive` - Prompt for each conflict
+- `merge` - Merge content from both sources with separator
+- `three-way` - Intelligent three-way merge using LCS algorithm with conflict detection
+- `interactive` - Prompt for each conflict with TUI interface (falls back to CLI in non-TTY environments)
+
+**Interactive Modes:**
+- `--interactive` flag: TUI mode for selecting which skills to sync, with diff preview
+- `--strategy interactive`: TUI/CLI conflict resolution for handling conflicts during sync
 
 **Platform Specification Format:**
 ```
@@ -779,22 +789,40 @@ If `skillsync platforms` doesn't detect your platform:
 
 If sync operations produce conflicts:
 
-1. **Use interactive mode**:
+1. **Use interactive conflict resolution** (recommended):
    ```bash
-   skillsync sync claude-code cursor --interactive
+   skillsync sync claude-code cursor --strategy interactive
    ```
 
-2. **Preview with dry-run**:
-   ```bash
-   skillsync sync claude-code cursor --dry-run
-   ```
+   This launches a TUI where you can:
+   - View detailed diffs for each conflict
+   - Choose to use source, target, or merge content
+   - Resolve conflicts one by one with visual feedback
+   - Auto-falls back to CLI prompts in non-TTY environments (CI/CD)
 
-3. **Try three-way merge**:
+2. **Use three-way merge** (automatic):
    ```bash
    skillsync sync claude-code cursor --strategy three-way
    ```
 
-4. **Check backup**:
+   Uses the Longest Common Subsequence (LCS) algorithm to intelligently merge:
+   - Detects conflicts only when both sides modify the same region
+   - Successfully merges non-overlapping changes automatically
+   - Marks unresolvable conflicts with conflict markers (`<<<<<<< SOURCE`, `=======`, `>>>>>>> TARGET`)
+
+3. **Preview with dry-run**:
+   ```bash
+   skillsync sync claude-code cursor --dry-run
+   ```
+
+4. **Use skill selection TUI**:
+   ```bash
+   skillsync sync claude-code cursor --interactive
+   ```
+
+   Select which skills to sync with diff preview before syncing
+
+5. **Check backup**:
    ```bash
    skillsync backup list
    skillsync backup rollback
