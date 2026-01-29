@@ -20,6 +20,7 @@ import (
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/cache"
 	"github.com/klauern/skillsync/internal/config"
+	"github.com/klauern/skillsync/internal/detector"
 	"github.com/klauern/skillsync/internal/export"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
@@ -3386,4 +3387,78 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 	}
 
 	return nil
+}
+
+func platformsCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "platforms",
+		Aliases: []string{"detect"},
+		Usage:   "Detect installed AI coding platforms",
+		UsageText: `skillsync platforms [options]
+   skillsync platforms               # List all detected platforms
+   skillsync platforms --format json # Output as JSON`,
+		Description: `Detect which AI coding assistant platforms are installed on this system.
+
+   Checks for: claude-code, cursor, codex
+
+   Detection methods:
+   - Environment variables (SKILLSYNC_*_PATH)
+   - Default user paths (~/.claude/skills, ~/.cursor/skills, ~/.codex/skills)
+   - Platform-specific indicator files
+   - Project-local configurations
+
+   Output shows detected platforms with their config paths and confidence levels.`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "format",
+				Aliases: []string{"f"},
+				Value:   "table",
+				Usage:   "Output format: table, json, yaml",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			format := cmd.String("format")
+
+			detected, err := detector.DetectAll()
+			if err != nil {
+				return fmt.Errorf("failed to detect platforms: %w", err)
+			}
+
+			if len(detected) == 0 {
+				fmt.Println("No platforms detected.")
+				fmt.Println("\nSupported platforms:")
+				fmt.Println("  - claude-code (~/.claude/skills)")
+				fmt.Println("  - cursor      (~/.cursor/skills)")
+				fmt.Println("  - codex       (~/.codex/skills)")
+				return nil
+			}
+
+			// Output based on format
+			switch format {
+			case "json":
+				encoder := json.NewEncoder(os.Stdout)
+				encoder.SetIndent("", "  ")
+				if err := encoder.Encode(detected); err != nil {
+					return fmt.Errorf("failed to encode JSON: %w", err)
+				}
+			case "yaml":
+				encoder := yaml.NewEncoder(os.Stdout)
+				if err := encoder.Encode(detected); err != nil {
+					return fmt.Errorf("failed to encode YAML: %w", err)
+				}
+			default: // table
+				fmt.Printf("\nDetected platforms (%d):\n\n", len(detected))
+				for _, d := range detected {
+					confidenceStr := fmt.Sprintf("%.0f%%", d.Confidence*100)
+					fmt.Printf("  %s  %s  %s\n",
+						ui.Info(fmt.Sprintf("%-12s", d.Platform)),
+						ui.Warning(fmt.Sprintf("%-10s", confidenceStr)),
+						d.ConfigPath)
+					fmt.Printf("    %s\n\n", ui.Dim(fmt.Sprintf("Source: %s", d.Source)))
+				}
+			}
+
+			return nil
+		},
+	}
 }
