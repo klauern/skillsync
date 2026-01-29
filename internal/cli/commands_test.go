@@ -903,11 +903,11 @@ func TestCheckWritePermission(t *testing.T) {
 			},
 			wantErr: false,
 		},
-		"non-existent path falls back to current dir": {
+		"non-existent path returns error": {
 			setup: func(_ *testing.T) string {
 				return "/non/existent/path"
 			},
-			wantErr: false, // Falls back to "." which should be writable
+			wantErr: true, // Non-existent paths should return an error
 		},
 	}
 
