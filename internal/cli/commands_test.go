@@ -1286,6 +1286,16 @@ func TestValidateTargetPath(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		"non-existing with missing parent but writable ancestor": {
+			setup: func() string {
+				ancestor := filepath.Join(tempDir, "ancestor")
+				if err := os.MkdirAll(ancestor, 0o750); err != nil {
+					t.Fatalf("failed to create test dir: %v", err)
+				}
+				return filepath.Join(ancestor, "missing-parent", "child")
+			},
+			wantErr: false,
+		},
 	}
 
 	for name, tt := range tests {
