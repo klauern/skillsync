@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/util"
 )
@@ -1087,8 +1088,41 @@ description: New content
 New content from source.
 `)
 
-	// TODO: When backup integration is added, backup would be created here
-	// For now, this demonstrates the workflow
+	// Create backup before sync operation
+	t.Setenv("SKILLSYNC_HOME", t.TempDir())
+	backupOpts := backup.Options{
+		Platform:    "cursor",
+		Description: "Backup before overwrite test",
+		Tags:        []string{"integration-test"},
+	}
+	metadata, err := backup.CreateBackup(targetPath, backupOpts)
+	util.AssertNoError(t, err)
+
+	// Verify backup metadata
+	util.AssertEqual(t, metadata.Platform, "cursor")
+	util.AssertEqual(t, metadata.SourcePath, targetPath)
+	util.AssertEqual(t, metadata.Description, "Backup before overwrite test")
+	util.AssertEqual(t, len(metadata.Tags), 1)
+	util.AssertEqual(t, metadata.Tags[0], "integration-test")
+
+	// Verify backup file exists
+	backupInfo, err := os.Stat(metadata.BackupPath)
+	util.AssertNoError(t, err)
+	if backupInfo.IsDir() {
+		t.Error("Expected backup path to be a file, not a directory")
+	}
+
+	// Verify backup content matches original
+	// #nosec G304 - test file path is controlled
+	backupContent, err := os.ReadFile(metadata.BackupPath)
+	util.AssertNoError(t, err)
+	util.AssertEqual(t, string(backupContent), originalContent)
+
+	// Verify backup hash is valid SHA256 (64 hex characters)
+	util.AssertEqual(t, len(metadata.Hash), 64)
+
+	// Verify backup size matches
+	util.AssertEqual(t, metadata.Size, int64(len(originalContent)))
 
 	opts := Options{
 		DryRun:     false,
