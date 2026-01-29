@@ -415,7 +415,7 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 // It deduplicates against existingSkills to avoid showing the same skill twice
 // (e.g., when a skill exists both as a dev symlink and in the cache).
 func discoverClaudePluginCacheSkills(existingSkills []model.Skill) ([]model.Skill, error) {
-	cacheParser := claude.NewCachePluginsParser("")
+	cacheParser := claude.New(util.ClaudePluginCachePath())
 	cacheSkills, err := cacheParser.Parse()
 	if err != nil {
 		return nil, err
