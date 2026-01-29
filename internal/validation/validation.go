@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/util"
@@ -56,14 +58,20 @@ type Options struct {
 	CheckConflicts bool
 	// StrictMode enables additional validation checks
 	StrictMode bool
+	// ValidateCompatibility validates skill compatibility version requirements
+	ValidateCompatibility bool
+	// ValidateAgentSkillsSpec validates against Agent Skills Standard specification
+	ValidateAgentSkillsSpec bool
 }
 
 // DefaultOptions returns the default validation options.
 func DefaultOptions() Options {
 	return Options{
-		RequireWritePermission: true,
-		CheckConflicts:         true,
-		StrictMode:             false,
+		RequireWritePermission:  true,
+		CheckConflicts:          true,
+		StrictMode:              false,
+		ValidateCompatibility:   true,
+		ValidateAgentSkillsSpec: true,
 	}
 }
 
@@ -144,6 +152,19 @@ func ValidateSourceTarget(source, target model.Platform, skills []model.Skill, o
 	for i, skill := range skills {
 		if err := validateSkill(skill, i, opts); err != nil {
 			result.AddError(fmt.Errorf("skill %d (%s): %w", i, skill.Name, err))
+		}
+
+		// Additional validation checks if enabled
+		if opts.ValidateCompatibility {
+			if err := validateCompatibility(skill, i); err != nil {
+				result.AddError(fmt.Errorf("skill %d (%s): %w", i, skill.Name, err))
+			}
+		}
+
+		if opts.ValidateAgentSkillsSpec {
+			if err := validateAgentSkillsSpec(skill, i); err != nil {
+				result.AddError(fmt.Errorf("skill %d (%s): %w", i, skill.Name, err))
+			}
 		}
 	}
 
@@ -535,4 +556,135 @@ func GetPlatformPathForScope(platform model.Platform, scope model.SkillScope) (s
 	default:
 		return "", fmt.Errorf("unsupported target scope %q (only 'repo' or 'user' allowed)", scope)
 	}
+}
+
+// validateCompatibility validates skill compatibility version requirements.
+// Compatibility map format: {"claude-code": ">=1.0.0", "cursor": ">=0.5.0"}
+func validateCompatibility(skill model.Skill, index int) error {
+	if len(skill.Compatibility) == 0 {
+		return nil // No compatibility requirements
+	}
+
+	// Version constraint pattern: >=, >, <=, <, =, or plain version
+	versionPattern := regexp.MustCompile(`^(>=|>|<=|<|=)?\s*(\d+\.\d+\.\d+)$`)
+
+	for platform, constraint := range skill.Compatibility {
+		// Validate platform is recognized
+		if platform != "claude-code" && platform != "cursor" && platform != "codex" {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].compatibility", index),
+				Message: fmt.Sprintf("unknown platform %q in compatibility (expected: claude-code, cursor, codex)", platform),
+			}
+		}
+
+		// Validate constraint format
+		if !versionPattern.MatchString(constraint) {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].compatibility.%s", index, platform),
+				Message: fmt.Sprintf("invalid version constraint %q (expected format: >=1.0.0, >1.0.0, <=1.0.0, <1.0.0, =1.0.0, or 1.0.0)", constraint),
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateAgentSkillsSpec validates skill against Agent Skills Standard specification.
+// Spec: https://github.com/anthropics/agent-skills-standard and https://agentskills.io
+func validateAgentSkillsSpec(skill model.Skill, index int) error {
+	// Required fields per Agent Skills Standard
+	if skill.Name == "" {
+		return &Error{
+			Field:   fmt.Sprintf("skills[%d].name", index),
+			Message: "name is required by Agent Skills Standard",
+		}
+	}
+
+	if skill.Description == "" {
+		return &Error{
+			Field:   fmt.Sprintf("skills[%d].description", index),
+			Message: "description is required by Agent Skills Standard",
+		}
+	}
+
+	// Validate scope if present
+	if skill.Scope != "" {
+		validScopes := []model.SkillScope{
+			model.ScopeBuiltin,
+			model.ScopeSystem,
+			model.ScopeAdmin,
+			model.ScopeUser,
+			model.ScopeRepo,
+			model.ScopePlugin,
+		}
+		valid := false
+		for _, vs := range validScopes {
+			if skill.Scope == vs {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].scope", index),
+				Message: fmt.Sprintf("invalid scope %q (expected: builtin, system, admin, user, repo, or plugin)", skill.Scope),
+			}
+		}
+	}
+
+	// Validate license format if present (basic SPDX check)
+	if skill.License != "" {
+		license := strings.TrimSpace(skill.License)
+		if license == "" {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].license", index),
+				Message: "license cannot be empty when specified",
+			}
+		}
+		// Common SPDX licenses (not exhaustive, just common ones)
+		commonLicenses := []string{"MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "ISC", "MPL-2.0", "LGPL-3.0", "AGPL-3.0"}
+		recognized := false
+		for _, cl := range commonLicenses {
+			if strings.EqualFold(license, cl) {
+				recognized = true
+				break
+			}
+		}
+		if !recognized {
+			// Not an error, just note it's non-standard
+			// Could add as warning in future
+		}
+	}
+
+	// Validate scripts are non-empty paths if present
+	for i, script := range skill.Scripts {
+		if strings.TrimSpace(script) == "" {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].scripts[%d]", index, i),
+				Message: "script path cannot be empty",
+			}
+		}
+	}
+
+	// Validate references are non-empty if present
+	for i, ref := range skill.References {
+		if strings.TrimSpace(ref) == "" {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].references[%d]", index, i),
+				Message: "reference path cannot be empty",
+			}
+		}
+	}
+
+	// Validate assets are non-empty if present
+	for i, asset := range skill.Assets {
+		if strings.TrimSpace(asset) == "" {
+			return &Error{
+				Field:   fmt.Sprintf("skills[%d].assets[%d]", index, i),
+				Message: "asset path cannot be empty",
+			}
+		}
+	}
+
+	return nil
 }

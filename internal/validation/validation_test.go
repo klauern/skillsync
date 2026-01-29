@@ -33,11 +33,12 @@ func TestValidateSourceTarget_Valid(t *testing.T) {
 
 	skills := []model.Skill{
 		{
-			Name:     "test",
-			Platform: model.ClaudeCode,
-			Path:     skillPath,
-			Content:  "# Test Skill",
-			Metadata: make(map[string]string),
+			Name:        "test",
+			Description: "Test skill",
+			Platform:    model.ClaudeCode,
+			Path:        skillPath,
+			Content:     "# Test Skill",
+			Metadata:    make(map[string]string),
 		},
 	}
 
@@ -498,5 +499,336 @@ func TestValidateWritePermission(t *testing.T) {
 
 		// This would require mocking platform path
 		t.Skip("requires platform path mocking - tested via integration")
+	})
+}
+
+func TestValidateCompatibility(t *testing.T) {
+	tests := []struct {
+		name          string
+		compatibility map[string]string
+		wantErr       bool
+		errContains   string
+	}{
+		{
+			name:          "no compatibility requirements",
+			compatibility: nil,
+			wantErr:       false,
+		},
+		{
+			name: "valid version constraints",
+			compatibility: map[string]string{
+				"claude-code": ">=1.0.0",
+				"cursor":      ">0.5.0",
+				"codex":       "<=2.0.0",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid constraint with spaces",
+			compatibility: map[string]string{
+				"claude-code": ">= 1.0.0",
+			},
+			wantErr: false,
+		},
+		{
+			name: "plain version without operator",
+			compatibility: map[string]string{
+				"claude-code": "1.0.0",
+			},
+			wantErr: false,
+		},
+		{
+			name: "unknown platform",
+			compatibility: map[string]string{
+				"unknown-platform": ">=1.0.0",
+			},
+			wantErr:     true,
+			errContains: "unknown platform",
+		},
+		{
+			name: "invalid version format",
+			compatibility: map[string]string{
+				"claude-code": ">=1.0",
+			},
+			wantErr:     true,
+			errContains: "invalid version constraint",
+		},
+		{
+			name: "invalid operator",
+			compatibility: map[string]string{
+				"claude-code": "~>1.0.0",
+			},
+			wantErr:     true,
+			errContains: "invalid version constraint",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			skill := model.Skill{
+				Name:          "test",
+				Platform:      model.ClaudeCode,
+				Compatibility: tt.compatibility,
+			}
+
+			err := validateCompatibility(skill, 0)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateCompatibility() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr && err != nil {
+				var vErr *Error
+				if !errors.As(err, &vErr) {
+					t.Errorf("expected validation.Error, got %T", err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateAgentSkillsSpec(t *testing.T) {
+	tests := []struct {
+		name        string
+		skill       model.Skill
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid skill with all required fields",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing name",
+			skill: model.Skill{
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+			},
+			wantErr:     true,
+			errContains: "name is required",
+		},
+		{
+			name: "missing description",
+			skill: model.Skill{
+				Name:     "test",
+				Platform: model.ClaudeCode,
+			},
+			wantErr:     true,
+			errContains: "description is required",
+		},
+		{
+			name: "valid scope",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Scope:       model.ScopeUser,
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid scope",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Scope:       model.SkillScope("invalid"),
+			},
+			wantErr:     true,
+			errContains: "invalid scope",
+		},
+		{
+			name: "empty license when specified",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				License:     "   ",
+			},
+			wantErr:     true,
+			errContains: "license cannot be empty",
+		},
+		{
+			name: "valid license",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				License:     "MIT",
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty script path",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Scripts:     []string{"script1.sh", ""},
+			},
+			wantErr:     true,
+			errContains: "script path cannot be empty",
+		},
+		{
+			name: "empty reference",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				References:  []string{"ref1.md", "  "},
+			},
+			wantErr:     true,
+			errContains: "reference path cannot be empty",
+		},
+		{
+			name: "empty asset",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Assets:      []string{"asset1.png", ""},
+			},
+			wantErr:     true,
+			errContains: "asset path cannot be empty",
+		},
+		{
+			name: "valid complete skill",
+			skill: model.Skill{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Scope:       model.ScopePlugin,
+				License:     "Apache-2.0",
+				Scripts:     []string{"setup.sh", "teardown.sh"},
+				References:  []string{"doc.md"},
+				Assets:      []string{"icon.png"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAgentSkillsSpec(tt.skill, 0)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateAgentSkillsSpec() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr && err != nil {
+				var vErr *Error
+				if !errors.As(err, &vErr) {
+					t.Errorf("expected validation.Error, got %T", err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateSourceTarget_WithNewValidations(t *testing.T) {
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	sourceDir := filepath.Join(tmpDir, "source")
+
+	// #nosec G301 - test directory permissions are acceptable
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+
+	// Create test skill file
+	skillPath := filepath.Join(sourceDir, "test.md")
+	// #nosec G306 - test file permissions are acceptable
+	if err := os.WriteFile(skillPath, []byte("# Test Skill"), 0o644); err != nil {
+		t.Fatalf("failed to create test skill: %v", err)
+	}
+
+	t.Run("compatibility validation enabled", func(t *testing.T) {
+		skills := []model.Skill{
+			{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Path:        skillPath,
+				Content:     "# Test Skill",
+				Compatibility: map[string]string{
+					"claude-code": ">=1.0.0",
+				},
+			},
+		}
+
+		opts := Options{
+			RequireWritePermission:  false,
+			CheckConflicts:          false,
+			ValidateCompatibility:   true,
+			ValidateAgentSkillsSpec: false,
+		}
+
+		// We expect this to fail because platform paths don't exist
+		// but it should process compatibility validation
+		result, _ := ValidateSourceTarget(model.ClaudeCode, model.Cursor, skills, opts)
+
+		// Even if other validations fail, compatibility should be checked
+		// We can't test success easily without mocking paths
+		if result == nil {
+			t.Error("expected result, got nil")
+		}
+	})
+
+	t.Run("agent skills spec validation enabled", func(t *testing.T) {
+		skills := []model.Skill{
+			{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Path:        skillPath,
+				Content:     "# Test Skill",
+			},
+		}
+
+		opts := Options{
+			RequireWritePermission:  false,
+			CheckConflicts:          false,
+			ValidateCompatibility:   false,
+			ValidateAgentSkillsSpec: true,
+		}
+
+		result, _ := ValidateSourceTarget(model.ClaudeCode, model.Cursor, skills, opts)
+
+		if result == nil {
+			t.Error("expected result, got nil")
+		}
+	})
+
+	t.Run("invalid compatibility in skill", func(t *testing.T) {
+		skills := []model.Skill{
+			{
+				Name:        "test",
+				Description: "Test skill",
+				Platform:    model.ClaudeCode,
+				Path:        skillPath,
+				Content:     "# Test Skill",
+				Compatibility: map[string]string{
+					"invalid-platform": ">=1.0.0",
+				},
+			},
+		}
+
+		opts := Options{
+			RequireWritePermission:  false,
+			CheckConflicts:          false,
+			ValidateCompatibility:   true,
+			ValidateAgentSkillsSpec: false,
+		}
+
+		result, _ := ValidateSourceTarget(model.ClaudeCode, model.Cursor, skills, opts)
+
+		if result != nil && result.Valid {
+			t.Error("expected validation to fail with invalid platform in compatibility")
+		}
 	})
 }
