@@ -48,6 +48,7 @@ func TestTransformer_TransformPath(t *testing.T) {
 	tests := []struct {
 		name       string
 		sourcePath string
+		skillName  string
 		target     model.Platform
 		expected   string
 	}{
@@ -75,11 +76,25 @@ func TestTransformer_TransformPath(t *testing.T) {
 			target:     model.Codex,
 			expected:   "AGENTS.md",
 		},
+		{
+			name:       "skill directory to codex",
+			sourcePath: "/source/my-skill/SKILL.md",
+			skillName:  "my-skill",
+			target:     model.Codex,
+			expected:   "my-skill/SKILL.md",
+		},
+		{
+			name:       "skill directory to claude",
+			sourcePath: "/source/my-skill/SKILL.md",
+			skillName:  "my-skill",
+			target:     model.ClaudeCode,
+			expected:   "my-skill.md",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			skill := model.Skill{Path: tt.sourcePath}
+			skill := model.Skill{Path: tt.sourcePath, Name: tt.skillName}
 			result := tr.transformPath(skill, tt.target)
 			if result != tt.expected {
 				t.Errorf("transformPath() = %v, want %v", result, tt.expected)
@@ -99,7 +114,7 @@ func TestTransformer_TransformContent(t *testing.T) {
 	}
 
 	// Transform to Claude Code (should include tools)
-	content, err := tr.transformContent(skill, model.ClaudeCode)
+	content, err := tr.transformContent(skill, model.ClaudeCode, "test-skill.md")
 	if err != nil {
 		t.Fatalf("transformContent failed: %v", err)
 	}
@@ -109,6 +124,50 @@ func TestTransformer_TransformContent(t *testing.T) {
 	}
 	if !strings.Contains(content, "The main content") {
 		t.Error("Content should contain main content")
+	}
+}
+
+func TestTransformer_TransformContent_CodexSkillFile(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "test-skill",
+		Description: "test description",
+		Content:     "Main content",
+	}
+
+	content, err := tr.transformContent(skill, model.Codex, "test-skill/SKILL.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if !strings.HasPrefix(content, "---\n") {
+		t.Error("Codex SKILL.md content should include frontmatter")
+	}
+	if !strings.Contains(content, "name: test-skill") {
+		t.Error("Frontmatter should include name")
+	}
+	if !strings.Contains(content, "description: test description") {
+		t.Error("Frontmatter should include description")
+	}
+}
+
+func TestTransformer_TransformContent_CodexAgents(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "agents",
+		Description: "Agent instructions",
+		Content:     "Main content",
+	}
+
+	content, err := tr.transformContent(skill, model.Codex, "AGENTS.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if strings.HasPrefix(content, "---\n") {
+		t.Error("Codex AGENTS.md content should not include frontmatter")
 	}
 }
 

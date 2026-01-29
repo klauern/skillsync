@@ -245,7 +245,7 @@ func (m DashboardModel) View() string {
 	b.WriteString(title)
 	b.WriteString("\n\n")
 
-	// Menu items
+	// Menu items (fixed layout - no inline descriptions)
 	for i, item := range m.items {
 		var line string
 		if i == m.cursor {
@@ -255,16 +255,14 @@ func (m DashboardModel) View() string {
 		}
 		b.WriteString(line)
 		b.WriteString("\n")
-
-		// Show description for selected item
-		if i == m.cursor {
-			desc := dashboardStyles.Description.Render(item.Description)
-			b.WriteString(desc)
-			b.WriteString("\n")
-		}
 	}
 
 	b.WriteString("\n")
+
+	// Description area (fixed position below menu)
+	desc := dashboardStyles.Description.Render(m.items[m.cursor].Description)
+	b.WriteString(desc)
+	b.WriteString("\n\n")
 
 	// Status bar
 	status := "Use ↑/↓ to navigate, Enter to select"

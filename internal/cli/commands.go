@@ -1394,12 +1394,11 @@ func validateTargetPath(targetPlatform model.Platform) error {
 	if err := validation.ValidatePath(targetPath, targetPlatform); err != nil {
 		var vErr *validation.Error
 		if errors.As(err, &vErr) && strings.Contains(vErr.Message, "path does not exist") {
-			// Target doesn't exist - validate parent directory is writable
-			parentDir := filepath.Dir(targetPath)
-			if err := validation.ValidatePath(parentDir, targetPlatform); err != nil {
+			// Target doesn't exist - validate nearest existing parent is writable
+			parentDir, err := nearestExistingDir(filepath.Dir(targetPath))
+			if err != nil {
 				return fmt.Errorf("target parent directory validation failed: %w", err)
 			}
-			// Check write permission on parent
 			if err := checkWritePermission(parentDir); err != nil {
 				return fmt.Errorf("target directory not writable: %w", err)
 			}
@@ -1411,14 +1410,39 @@ func validateTargetPath(targetPlatform model.Platform) error {
 	return nil
 }
 
+// nearestExistingDir walks up from the provided path until it finds an existing directory.
+func nearestExistingDir(path string) (string, error) {
+	cur := path
+	for {
+		info, err := os.Stat(cur)
+		if err == nil {
+			if !info.IsDir() {
+				return "", fmt.Errorf("path is not a directory: %s", cur)
+			}
+			return cur, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", fmt.Errorf("no existing parent directory found for %q", path)
+		}
+		cur = parent
+	}
+}
+
 // checkWritePermission verifies a directory is writable
 func checkWritePermission(path string) error {
-	// If path doesn't exist, check parent
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		path = "." // fallback to current directory
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("cannot access directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory: %s", path)
 	}
 
-	testFile := path + "/.skillsync-write-test"
+	testFile := filepath.Join(path, ".skillsync-write-test")
 	// #nosec G304 - testFile is constructed from validated path and is not user input
 	f, err := os.Create(testFile)
 	if err != nil {
