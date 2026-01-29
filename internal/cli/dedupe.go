@@ -17,13 +17,39 @@ func dedupeCommand() *cli.Command {
 		Name:    "dedupe",
 		Aliases: []string{"dedup", "cleanup"},
 		Usage:   "Remediate duplicate or similar skills",
+		UsageText: `skillsync dedupe <subcommand> [options]
+   skillsync dedupe delete my-skill --platform cursor --scope user
+   skillsync dedupe rename my-skill new-name --platform cursor --scope repo`,
 		Description: `Commands for cleaning up duplicate or similar skills found by the compare command.
 
-   Use these commands after running 'skillsync compare' to identify similar skills.
+   Typical workflow:
+   1. Run 'skillsync compare' to find similar skills
+   2. Review the output and decide which duplicates to remove or rename
+   3. Use 'skillsync dedupe delete' to remove exact duplicates
+   4. Use 'skillsync dedupe rename' to differentiate similar but distinct skills
 
    Subcommands:
-     delete  - Remove a duplicate skill
-     rename  - Rename a skill to differentiate it`,
+     delete  - Remove a duplicate skill from a specific platform/scope
+     rename  - Rename a skill to differentiate it from similar skills
+
+   Both commands require explicit --platform and --scope flags to prevent
+   accidental deletions or renames.
+
+   Examples:
+     # Preview deletion
+     skillsync dedupe delete my-skill -p cursor -s user --dry-run
+
+     # Delete a duplicate (with confirmation)
+     skillsync dedupe delete my-skill -p cursor -s user
+
+     # Force delete without confirmation
+     skillsync dedupe delete my-skill -p cursor -s user --force
+
+     # Rename to differentiate
+     skillsync dedupe rename my-skill project-my-skill -p cursor -s repo
+
+     # Preview rename
+     skillsync dedupe rename my-skill v2-my-skill -p cursor -s user --dry-run`,
 		Commands: []*cli.Command{
 			dedupeDeleteCommand(),
 			dedupeRenameCommand(),

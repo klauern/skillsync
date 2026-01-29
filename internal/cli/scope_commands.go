@@ -149,16 +149,31 @@ func scopeCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "scope",
 		Usage: "Manage skill scopes and locations",
-		Description: `Commands for managing skills across different scopes.
+		UsageText: `skillsync scope <subcommand> [options]
+   skillsync scope list my-skill           # Show where a skill exists
+   skillsync scope list --all              # List all skills by scope
+   skillsync scope prune --scope user      # Remove duplicates from user scope`,
+		Description: `Manage skills across different scopes and locations.
 
    Scopes (in precedence order, highest first):
-     repo    - Repository-level skills local to a specific project
-     user    - User-level skills in the user's home directory
-     admin   - Administrator-defined skills
-     system  - System-wide skills installed at the system level
-     builtin - Built-in skills that ship with the platform
+     repo    - Repository-level skills local to a specific project (writable)
+     user    - User-level skills in the user's home directory (writable)
+     admin   - Administrator-defined skills (read-only)
+     system  - System-wide skills installed at the system level (read-only)
+     builtin - Built-in skills that ship with the platform (read-only)
 
-   Higher-precedence skills override lower-precedence ones with the same name.`,
+   Higher-precedence skills override lower-precedence ones with the same name.
+   For example, a repo-level skill named "commit" will be used instead of a
+   user-level skill with the same name.
+
+   Subcommands:
+     list  - Show all locations where a skill exists across scopes
+     prune - Remove duplicate skills from lower-priority scopes
+
+   Examples:
+     skillsync scope list my-skill              # Find where my-skill exists
+     skillsync scope list --all --platform cursor  # All cursor skills by scope
+     skillsync scope prune --scope user --dry-run  # Preview prune operation`,
 		Commands: []*cli.Command{
 			scopeListCommand(),
 			scopePruneCommand(),

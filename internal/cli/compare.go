@@ -38,9 +38,28 @@ func compareCommand() *cli.Command {
    - Potential candidates for consolidation
    - Redundant skills within a single platform (use --same-platform)
 
-   Similarity matching:
-   - Name similarity: Compares skill names using Levenshtein and Jaro-Winkler algorithms
-   - Content similarity: Compares skill content using LCS and Jaccard algorithms
+   Similarity Algorithms:
+
+   Name Similarity (Jaro-Winkler distance):
+     - Handles typos and minor variations in skill names
+     - Prefix-weighted (e.g., "commit-helper" vs "commit-assist" scores higher)
+     - Score range: 0.0 (completely different) to 1.0 (identical)
+
+   Content Similarity (Levenshtein distance):
+     - Measures character-level edit distance between skill content
+     - Normalized by content length for fair comparison
+     - Score range: 0.0 (no match) to 1.0 (exact match)
+
+   Combined Score:
+     - Weighted average: (name * 0.4) + (content * 0.6)
+     - Content weighted higher since actual functionality matters more
+
+   Threshold Interpretation:
+     1.0      - Exact match
+     0.9-0.99 - Near-identical (minor whitespace/comment differences)
+     0.8-0.89 - Very similar (likely duplicates)
+     0.7-0.79 - Similar (worth reviewing)
+     < 0.7    - Different (not shown by default)
 
    Output formats:
    - table: Summary table of similar skill pairs (default)
@@ -48,7 +67,14 @@ func compareCommand() *cli.Command {
    - side-by-side: Side-by-side comparison
    - summary: Statistics only
    - json: Machine-readable JSON output
-   - yaml: Machine-readable YAML output`,
+   - yaml: Machine-readable YAML output
+
+   Examples:
+     skillsync compare                              # Find all similar skills
+     skillsync compare -n 0.9 -c 0.9               # Strict matching (very similar only)
+     skillsync compare --name-only                  # Fast name-only comparison
+     skillsync compare --platform cursor --same-platform  # Find cursor duplicates
+     skillsync compare --format json                # JSON output for scripting`,
 		Flags: []cli.Flag{
 			&cli.Float64Flag{
 				Name:    "name-threshold",
