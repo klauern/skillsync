@@ -225,9 +225,16 @@ func TestTransformer_BuildFrontmatter_Codex(t *testing.T) {
 
 	fm := tr.buildFrontmatter(skill, model.Codex)
 
-	// Codex returns nil frontmatter (plain markdown)
-	if fm != nil {
-		t.Error("Codex frontmatter should be nil")
+	// buildFrontmatter always returns a map (filtering is done via shouldIncludeFrontmatter)
+	// For Codex, it includes name and description like other platforms
+	if fm == nil {
+		t.Error("Codex frontmatter should not be nil")
+	}
+	if fm["name"] != "test" {
+		t.Error("Codex frontmatter should include name")
+	}
+	if fm["description"] != "desc" {
+		t.Error("Codex frontmatter should include description")
 	}
 }
 

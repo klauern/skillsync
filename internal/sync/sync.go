@@ -210,6 +210,7 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 }
 
 // processSkill handles syncing a single skill.
+// It preserves the source structure: symlinks become symlinks, directories become directories.
 func (s *Synchronizer) processSkill(
 	source model.Skill,
 	targetPlatform model.Platform,
@@ -227,26 +228,37 @@ func (s *Synchronizer) processSkill(
 		Skill: source,
 	}
 
-	// Transform the skill for the target platform
-	transformed, err := s.transformer.Transform(source, targetPlatform)
-	if err != nil {
-		logging.Warn("transformation failed",
-			logging.Skill(source.Name),
-			logging.Err(err),
-		)
-		result.Action = ActionFailed
-		result.Error = fmt.Errorf("transformation failed: %w", err)
-		return result
-	}
+	// Detect source type and get source root path
+	sourceType, sourceRootPath := detectSourceType(source.Path)
 
-	logging.Debug("skill transformed",
+	logging.Debug("detected source type",
 		logging.Skill(source.Name),
-		logging.Path(transformed.Path),
+		slog.String("source_type", sourceType.String()),
+		logging.Path(sourceRootPath),
 	)
 
-	// Determine target file path
-	targetFilePath := filepath.Join(targetPath, transformed.Path)
-	result.TargetPath = targetFilePath
+	// For symlinks and directories, use the skill name directly.
+	// For files, use the transformed path (legacy behavior).
+	var targetEntryPath string
+	if sourceType == SourceTypeSymlink || sourceType == SourceTypeDirectory {
+		// Preserve structure: target is just the skill name in the target directory
+		targetEntryPath = filepath.Join(targetPath, source.Name)
+	} else {
+		// Legacy file behavior: transform path for target platform
+		transformed, err := s.transformer.Transform(source, targetPlatform)
+		if err != nil {
+			logging.Warn("transformation failed",
+				logging.Skill(source.Name),
+				logging.Err(err),
+			)
+			result.Action = ActionFailed
+			result.Error = fmt.Errorf("transformation failed: %w", err)
+			return result
+		}
+		targetEntryPath = filepath.Join(targetPath, transformed.Path)
+	}
+
+	result.TargetPath = targetEntryPath
 
 	// Check if skill exists in target
 	existingSkill, exists := existingSkills[source.Name]
@@ -269,44 +281,125 @@ func (s *Synchronizer) processSkill(
 		return result
 	}
 
-	// Get content to write
-	content := transformed.Content
-
-	// Handle merge strategy
-	if action == ActionMerged && exists {
-		logging.Debug("merging content",
-			logging.Skill(source.Name),
-		)
-		content = s.transformer.MergeContent(transformed.Content, existingSkill.Content, source.Name)
-	}
-
-	// Write the file (unless dry run)
+	// Execute the sync (unless dry run)
 	if !opts.DryRun {
-		if err := os.MkdirAll(filepath.Dir(targetFilePath), 0o750); err != nil {
-			logging.Error("failed to create target subdirectory",
+		// Remove any existing entry at target path to avoid duplicates
+		if err := removeExisting(targetEntryPath); err != nil {
+			logging.Error("failed to remove existing entry",
 				logging.Skill(source.Name),
-				logging.Path(targetFilePath),
+				logging.Path(targetEntryPath),
 				logging.Err(err),
 			)
 			result.Action = ActionFailed
-			result.Error = fmt.Errorf("failed to create target subdirectory: %w", err)
+			result.Error = fmt.Errorf("failed to remove existing entry: %w", err)
 			return result
 		}
-		// #nosec G306 - skill files should be readable
-		if err := os.WriteFile(targetFilePath, []byte(content), 0o644); err != nil {
-			logging.Error("failed to write skill file",
+
+		// Create based on source type
+		switch sourceType {
+		case SourceTypeSymlink:
+			// Recreate symlink with same target
+			symlinkTarget := getSymlinkTarget(sourceRootPath)
+			if symlinkTarget == "" {
+				// Fallback: try from PluginInfo
+				if source.PluginInfo != nil && source.PluginInfo.SymlinkTarget != "" {
+					symlinkTarget = source.PluginInfo.SymlinkTarget
+				}
+			}
+
+			if symlinkTarget == "" {
+				logging.Error("failed to determine symlink target",
+					logging.Skill(source.Name),
+					logging.Path(sourceRootPath),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to determine symlink target for %q", sourceRootPath)
+				return result
+			}
+
+			if err := os.Symlink(symlinkTarget, targetEntryPath); err != nil {
+				logging.Error("failed to create symlink",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to create symlink: %w", err)
+				return result
+			}
+
+			logging.Debug("created symlink",
 				logging.Skill(source.Name),
-				logging.Path(targetFilePath),
-				logging.Err(err),
+				logging.Path(targetEntryPath),
+				slog.String("target", symlinkTarget),
 			)
-			result.Action = ActionFailed
-			result.Error = fmt.Errorf("failed to write file: %w", err)
-			return result
+
+		case SourceTypeDirectory:
+			// Copy directory structure
+			if err := copyDir(sourceRootPath, targetEntryPath); err != nil {
+				logging.Error("failed to copy directory",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to copy directory: %w", err)
+				return result
+			}
+
+			logging.Debug("copied directory",
+				logging.Skill(source.Name),
+				logging.Path(targetEntryPath),
+			)
+
+		case SourceTypeFile:
+			// Legacy behavior: write transformed content
+			transformed, err := s.transformer.Transform(source, targetPlatform)
+			if err != nil {
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("transformation failed: %w", err)
+				return result
+			}
+
+			content := transformed.Content
+
+			// Handle merge strategy
+			if action == ActionMerged && exists {
+				logging.Debug("merging content",
+					logging.Skill(source.Name),
+				)
+				content = s.transformer.MergeContent(transformed.Content, existingSkill.Content, source.Name)
+			}
+
+			// Ensure parent directory exists
+			if err := os.MkdirAll(filepath.Dir(targetEntryPath), 0o750); err != nil {
+				logging.Error("failed to create target subdirectory",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to create target subdirectory: %w", err)
+				return result
+			}
+
+			// #nosec G306 - skill files should be readable
+			if err := os.WriteFile(targetEntryPath, []byte(content), 0o644); err != nil {
+				logging.Error("failed to write skill file",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to write file: %w", err)
+				return result
+			}
+
+			logging.Debug("wrote skill file",
+				logging.Skill(source.Name),
+				logging.Path(targetEntryPath),
+			)
 		}
-		logging.Debug("wrote skill file",
-			logging.Skill(source.Name),
-			logging.Path(targetFilePath),
-		)
 	}
 
 	return result
