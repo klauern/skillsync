@@ -278,6 +278,16 @@ func (s *Synchronizer) processSkill(
 
 	// Write the file (unless dry run)
 	if !opts.DryRun {
+		if err := os.MkdirAll(filepath.Dir(targetFilePath), 0o750); err != nil {
+			logging.Error("failed to create target subdirectory",
+				logging.Skill(source.Name),
+				logging.Path(targetFilePath),
+				logging.Err(err),
+			)
+			result.Action = ActionFailed
+			result.Error = fmt.Errorf("failed to create target subdirectory: %w", err)
+			return result
+		}
 		// #nosec G306 - skill files should be readable
 		if err := os.WriteFile(targetFilePath, []byte(content), 0o644); err != nil {
 			logging.Error("failed to write skill file",

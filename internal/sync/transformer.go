@@ -43,7 +43,7 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 	)
 
 	// Transform content based on target platform requirements
-	content, err := t.transformContent(skill, targetPlatform)
+	content, err := t.transformContent(skill, targetPlatform, transformed.Path)
 	if err != nil {
 		logging.Warn("content transformation failed",
 			logging.Skill(skill.Name),
@@ -67,6 +67,18 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 // transformPath generates the appropriate file path for the target platform.
 func (t *Transformer) transformPath(skill model.Skill, target model.Platform) string {
 	baseName := filepath.Base(skill.Path)
+	if isSkillFile(baseName) && skill.Name != "" {
+		switch target {
+		case model.Codex:
+			return filepath.Join(skill.Name, "SKILL.md")
+		case model.Cursor:
+			return skill.Name + ".md"
+		case model.ClaudeCode:
+			return skill.Name + ".md"
+		default:
+			return baseName
+		}
+	}
 	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 
 	switch target {
@@ -92,9 +104,12 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 }
 
 // transformContent transforms skill content for the target platform.
-func (t *Transformer) transformContent(skill model.Skill, target model.Platform) (string, error) {
+func (t *Transformer) transformContent(skill model.Skill, target model.Platform, targetPath string) (string, error) {
 	// Build frontmatter based on target platform
-	frontmatter := t.buildFrontmatter(skill, target)
+	var frontmatter map[string]any
+	if shouldIncludeFrontmatter(target, targetPath) {
+		frontmatter = t.buildFrontmatter(skill, target)
+	}
 
 	var sb strings.Builder
 
@@ -144,11 +159,6 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
 			fm["alwaysApply"] = alwaysApply
 		}
-
-	case model.Codex:
-		// Codex typically doesn't use frontmatter in AGENTS.md
-		// Return empty for plain markdown
-		return nil
 	}
 
 	// Include other metadata that's platform-agnostic
@@ -164,6 +174,17 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 	}
 
 	return fm
+}
+
+func isSkillFile(path string) bool {
+	return strings.EqualFold(filepath.Base(path), "SKILL.md")
+}
+
+func shouldIncludeFrontmatter(target model.Platform, targetPath string) bool {
+	if target == model.Codex {
+		return isSkillFile(targetPath)
+	}
+	return true
 }
 
 // transformMetadata transforms metadata for the target platform.
