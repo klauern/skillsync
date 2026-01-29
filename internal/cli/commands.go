@@ -58,6 +58,7 @@ func configCommand() *cli.Command {
 			configInitCommand(),
 			configPathCommand(),
 			configEditCommand(),
+			configSetCommand(),
 		},
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: show configuration
@@ -234,6 +235,234 @@ func editConfig() error {
 	// This is safer and more portable
 	fmt.Printf("\nRun: %s %s\n", editor, configPath)
 	return nil
+}
+
+func configSetCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "set",
+		Usage: "Configure permission settings",
+		Description: `Configure permission settings for skillsync operations.
+
+   Examples:
+     # Set permission level
+     skillsync config set permission-level read-only
+     skillsync config set permission-level write
+     skillsync config set permission-level destructive
+
+     # Configure scope permissions
+     skillsync config set scope allow-user-scope true
+     skillsync config set scope allow-repo-scope false
+     skillsync config set scope allow-system-scope false
+
+     # Configure confirmation requirements
+     skillsync config set confirm delete true
+     skillsync config set confirm overwrite false
+     skillsync config set confirm backup-delete true
+     skillsync config set confirm promote-with-removal true`,
+		Commands: []*cli.Command{
+			configSetPermissionLevelCommand(),
+			configSetScopeCommand(),
+			configSetConfirmCommand(),
+		},
+	}
+}
+
+func configSetPermissionLevelCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "permission-level",
+		Usage:     "Set the default permission level",
+		UsageText: "skillsync config set permission-level <level>",
+		Description: `Set the default permission level for operations.
+
+   Valid levels:
+     read-only    - Allow only read operations (list, show, compare)
+     write        - Allow read and non-destructive writes (sync, backup)
+     destructive  - Allow all operations including delete and overwrite
+
+   Examples:
+     skillsync config set permission-level read-only
+     skillsync config set permission-level write
+     skillsync config set permission-level destructive`,
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			if args.Len() < 1 {
+				return fmt.Errorf("permission level is required (read-only, write, or destructive)")
+			}
+			level := args.Get(0)
+			return setPermissionLevel(level)
+		},
+	}
+}
+
+func configSetScopeCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "scope",
+		Usage:     "Configure scope write permissions",
+		UsageText: "skillsync config set scope <scope-name> <true|false>",
+		Description: `Configure which scopes are writable.
+
+   Valid scope names:
+     allow-user-scope    - Allow writes to user scope (~/.{platform}/skills)
+     allow-repo-scope    - Allow writes to repo scope (.{platform}/skills)
+     allow-system-scope  - Allow writes to system scope (admin paths, dangerous)
+
+   Examples:
+     skillsync config set scope allow-user-scope true
+     skillsync config set scope allow-repo-scope false
+     skillsync config set scope allow-system-scope false`,
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			if args.Len() < 2 {
+				return fmt.Errorf("scope name and value are required (e.g., allow-user-scope true)")
+			}
+			scopeName := args.Get(0)
+			valueStr := args.Get(1)
+			return setScopePermission(scopeName, valueStr)
+		},
+	}
+}
+
+func configSetConfirmCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "confirm",
+		Usage:     "Configure confirmation requirements",
+		UsageText: "skillsync config set confirm <operation> <true|false>",
+		Description: `Configure which operations require user confirmation.
+
+   Valid operations:
+     delete                - Delete operations
+     overwrite             - Overwrite existing files
+     backup-delete         - Delete backup files
+     promote-with-removal  - Promote/demote with source removal
+
+   Examples:
+     skillsync config set confirm delete true
+     skillsync config set confirm overwrite false
+     skillsync config set confirm backup-delete true
+     skillsync config set confirm promote-with-removal true`,
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			if args.Len() < 2 {
+				return fmt.Errorf("operation name and value are required (e.g., delete true)")
+			}
+			operation := args.Get(0)
+			valueStr := args.Get(1)
+			return setConfirmRequirement(operation, valueStr)
+		},
+	}
+}
+
+// setPermissionLevel sets the default permission level in the config.
+func setPermissionLevel(levelStr string) error {
+	// Load current permissions config
+	permConfig, err := permissions.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load permissions config: %w", err)
+	}
+
+	// Validate the level
+	level := permissions.Level(levelStr)
+	if !level.IsValid() {
+		return fmt.Errorf("invalid permission level: %q (must be read-only, write, or destructive)", levelStr)
+	}
+
+	// Update the level
+	permConfig.DefaultLevel = level
+
+	// Save the config
+	if err := permConfig.Save(); err != nil {
+		return fmt.Errorf("failed to save permissions config: %w", err)
+	}
+
+	fmt.Printf("✓ Permission level set to: %s\n", level)
+	return nil
+}
+
+// setScopePermission sets a scope permission in the config.
+func setScopePermission(scopeName, valueStr string) error {
+	// Load current permissions config
+	permConfig, err := permissions.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load permissions config: %w", err)
+	}
+
+	// Parse the boolean value
+	value, err := parseBool(valueStr)
+	if err != nil {
+		return fmt.Errorf("invalid value: %w (must be true or false)", err)
+	}
+
+	// Update the appropriate scope permission
+	switch scopeName {
+	case "allow-user-scope":
+		permConfig.ScopePermissions.AllowUserScope = value
+	case "allow-repo-scope":
+		permConfig.ScopePermissions.AllowRepoScope = value
+	case "allow-system-scope":
+		permConfig.ScopePermissions.AllowSystemScope = value
+		if value {
+			fmt.Println("⚠️  WARNING: System scope writes are dangerous!")
+		}
+	default:
+		return fmt.Errorf("invalid scope name: %q (must be allow-user-scope, allow-repo-scope, or allow-system-scope)", scopeName)
+	}
+
+	// Save the config
+	if err := permConfig.Save(); err != nil {
+		return fmt.Errorf("failed to save permissions config: %w", err)
+	}
+
+	fmt.Printf("✓ Scope permission %s set to: %v\n", scopeName, value)
+	return nil
+}
+
+// setConfirmRequirement sets a confirmation requirement in the config.
+func setConfirmRequirement(operation, valueStr string) error {
+	// Load current permissions config
+	permConfig, err := permissions.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load permissions config: %w", err)
+	}
+
+	// Parse the boolean value
+	value, err := parseBool(valueStr)
+	if err != nil {
+		return fmt.Errorf("invalid value: %w (must be true or false)", err)
+	}
+
+	// Update the appropriate confirmation requirement
+	switch operation {
+	case "delete":
+		permConfig.RequireConfirmation.Delete = value
+	case "overwrite":
+		permConfig.RequireConfirmation.Overwrite = value
+	case "backup-delete":
+		permConfig.RequireConfirmation.BackupDelete = value
+	case "promote-with-removal":
+		permConfig.RequireConfirmation.PromoteWithRemoval = value
+	default:
+		return fmt.Errorf("invalid operation: %q (must be delete, overwrite, backup-delete, or promote-with-removal)", operation)
+	}
+
+	// Save the config
+	if err := permConfig.Save(); err != nil {
+		return fmt.Errorf("failed to save permissions config: %w", err)
+	}
+
+	fmt.Printf("✓ Confirmation requirement for %s set to: %v\n", operation, value)
+	return nil
+}
+
+// parseBool parses a boolean value from string.
+func parseBool(s string) (bool, error) {
+	switch s {
+	case "true", "1", "yes", "y":
+		return true, nil
+	case "false", "0", "no", "n":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value: %q", s)
+	}
 }
 
 func discoveryCommand() *cli.Command {
