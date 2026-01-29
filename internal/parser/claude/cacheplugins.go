@@ -209,6 +209,9 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 	if entry.Version != "" {
 		metadata["plugin_version"] = entry.Version
 	}
+	if entry.Scope != "" {
+		metadata["install_scope"] = entry.Scope
+	}
 	metadata["source"] = "plugin-cache"
 
 	// Get file modification time
@@ -222,11 +225,12 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 
 	// Create PluginInfo for this skill
 	pluginInfo := &model.PluginInfo{
-		PluginName:  entry.PluginKey,
-		Marketplace: entry.Marketplace,
-		Version:     entry.Version,
-		InstallPath: entry.InstallPath,
-		IsDev:       false, // Cache plugins are never dev
+		PluginName:   entry.PluginKey,
+		Marketplace:  entry.Marketplace,
+		Version:      entry.Version,
+		InstallPath:  entry.InstallPath,
+		IsDev:        false, // Cache plugins are never dev
+		InstallScope: entry.Scope,
 	}
 
 	return model.Skill{

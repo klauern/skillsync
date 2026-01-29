@@ -337,23 +337,23 @@ func TestDetectPluginSource_RelativeSymlink(t *testing.T) {
 
 func TestDetectPluginSource_MultipleDevPathPatterns(t *testing.T) {
 	tests := map[string]struct {
-		sourcePath     string
+		sourcePath      string
 		wantMarketplace string
 	}{
 		"standard dev path": {
-			sourcePath:     "/Users/test/dev/my-marketplace/plugins/test-skill",
+			sourcePath:      "/Users/test/dev/my-marketplace/plugins/test-skill",
 			wantMarketplace: "my-marketplace",
 		},
 		"go dev path": {
-			sourcePath:     "/Users/test/dev/go/awesome-project/skills/my-skill",
+			sourcePath:      "/Users/test/dev/go/awesome-project/skills/my-skill",
 			wantMarketplace: "awesome-project",
 		},
 		"src dev path": {
-			sourcePath:     "/Users/test/dev/src/company-tools/skill-a",
+			sourcePath:      "/Users/test/dev/src/company-tools/skill-a",
 			wantMarketplace: "company-tools",
 		},
 		"projects dev path": {
-			sourcePath:     "/Users/test/dev/projects/internal-skills/helper",
+			sourcePath:      "/Users/test/dev/projects/internal-skills/helper",
 			wantMarketplace: "internal-skills",
 		},
 	}
@@ -411,5 +411,73 @@ func TestPluginIndex_EmptyIndex(t *testing.T) {
 	entry = index.LookupByPathPrefix("/some/path/nested")
 	if entry != nil {
 		t.Errorf("expected nil for empty index, got %+v", entry)
+	}
+}
+
+func TestPluginInstallation_IsEnabled(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := map[string]struct {
+		installation PluginInstallation
+		want         bool
+	}{
+		"nil enabled means enabled": {
+			installation: PluginInstallation{
+				Scope:       "user",
+				InstallPath: "/some/path",
+			},
+			want: true,
+		},
+		"explicit true": {
+			installation: PluginInstallation{
+				Enabled:     &trueVal,
+				Scope:       "user",
+				InstallPath: "/some/path",
+			},
+			want: true,
+		},
+		"explicit false": {
+			installation: PluginInstallation{
+				Enabled:     &falseVal,
+				Scope:       "user",
+				InstallPath: "/some/path",
+			},
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.installation.IsEnabled()
+			if got != tt.want {
+				t.Errorf("IsEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPluginIndexEntry_ScopeAndEnabled(t *testing.T) {
+	entry := &PluginIndexEntry{
+		PluginKey:   "test@marketplace",
+		PluginName:  "test",
+		Marketplace: "marketplace",
+		Version:     "1.0.0",
+		InstallPath: "/some/path",
+		Scope:       "user",
+		Enabled:     true,
+	}
+
+	if entry.Scope != "user" {
+		t.Errorf("Scope = %q, want %q", entry.Scope, "user")
+	}
+	if !entry.Enabled {
+		t.Error("Enabled should be true")
+	}
+
+	// Test project scope
+	entry.Scope = "project"
+	if entry.Scope != "project" {
+		t.Errorf("Scope = %q, want %q", entry.Scope, "project")
 	}
 }

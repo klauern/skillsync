@@ -322,9 +322,10 @@ Help with creating conventional commits.
 	// Verify first skill details
 	var commitsSkill, worktreeSkill model.Skill
 	for _, s := range skills {
-		if s.Name == "conventional-commits" {
+		switch s.Name {
+		case "conventional-commits":
 			commitsSkill = s
-		} else if s.Name == "worktree-manager" {
+		case "worktree-manager":
 			worktreeSkill = s
 		}
 	}
@@ -454,5 +455,155 @@ func TestCachePluginsParser_ParseSkipsNonexistentPlugins(t *testing.T) {
 
 	if skills[0].PluginInfo.PluginName != "existing@marketplace" {
 		t.Errorf("expected skill from 'existing@marketplace', got %q", skills[0].PluginInfo.PluginName)
+	}
+}
+
+func TestCachePluginsParser_ParseSkillFile_WithScope(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a mock plugin directory
+	pluginDir := filepath.Join(tmpDir, "marketplace", "scoped-plugin", "1.0.0")
+	skillDir := filepath.Join(pluginDir, "my-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	// Create a SKILL.md file
+	skillContent := `---
+name: scoped-skill
+description: A skill with scope
+---
+# Scoped Skill
+Content.
+`
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	// #nosec G306 - test file
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	parser := NewCachePluginsParser(tmpDir)
+
+	tests := map[string]struct {
+		scope         string
+		wantScope     string
+		wantMetaScope string
+	}{
+		"user scope": {
+			scope:         "user",
+			wantScope:     "user",
+			wantMetaScope: "user",
+		},
+		"project scope": {
+			scope:         "project",
+			wantScope:     "project",
+			wantMetaScope: "project",
+		},
+		"empty scope": {
+			scope:         "",
+			wantScope:     "",
+			wantMetaScope: "",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			entry := &PluginIndexEntry{
+				PluginKey:   "scoped-plugin@marketplace",
+				PluginName:  "scoped-plugin",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+				Scope:       tt.scope,
+				Enabled:     true,
+			}
+
+			skill, err := parser.parseSkillFile(skillPath, entry)
+			if err != nil {
+				t.Fatalf("failed to parse skill file: %v", err)
+			}
+
+			// Verify InstallScope is set on PluginInfo
+			if skill.PluginInfo == nil {
+				t.Fatal("expected PluginInfo to be set")
+			}
+
+			if skill.PluginInfo.InstallScope != tt.wantScope {
+				t.Errorf("PluginInfo.InstallScope = %q, want %q", skill.PluginInfo.InstallScope, tt.wantScope)
+			}
+
+			// Verify install_scope metadata
+			if tt.wantMetaScope != "" {
+				if skill.Metadata["install_scope"] != tt.wantMetaScope {
+					t.Errorf("metadata install_scope = %q, want %q", skill.Metadata["install_scope"], tt.wantMetaScope)
+				}
+			} else {
+				// Empty scope should not be in metadata
+				if _, ok := skill.Metadata["install_scope"]; ok {
+					t.Errorf("expected install_scope not to be set for empty scope, got %q", skill.Metadata["install_scope"])
+				}
+			}
+
+			// Skill scope should always be ScopePlugin regardless of install scope
+			if skill.Scope != model.ScopePlugin {
+				t.Errorf("skill.Scope = %s, want %s", skill.Scope, model.ScopePlugin)
+			}
+		})
+	}
+}
+
+func TestCachePluginsParser_ParseWithPluginIndex_ScopePreserved(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create plugin directory with a skill
+	pluginDir := filepath.Join(tmpDir, "marketplace", "test-plugin", "1.0.0")
+	skillDir := filepath.Join(pluginDir, "test-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	// Create SKILL.md
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Test Skill\nContent"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Create mock plugin index with scope
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "test-plugin@marketplace",
+				PluginName:  "test-plugin",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+				Scope:       "user",
+				Enabled:     true,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(skills))
+	}
+
+	skill := skills[0]
+
+	// Verify InstallScope is preserved
+	if skill.PluginInfo.InstallScope != "user" {
+		t.Errorf("PluginInfo.InstallScope = %q, want %q", skill.PluginInfo.InstallScope, "user")
+	}
+
+	// Verify metadata contains install_scope
+	if skill.Metadata["install_scope"] != "user" {
+		t.Errorf("metadata install_scope = %q, want %q", skill.Metadata["install_scope"], "user")
 	}
 }

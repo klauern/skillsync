@@ -3,6 +3,7 @@ package claude
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,12 +15,19 @@ import (
 
 // PluginInstallation represents a single plugin installation entry from installed_plugins.json.
 type PluginInstallation struct {
+	Enabled      *bool  `json:"enabled,omitempty"` // nil means enabled (default true)
 	Scope        string `json:"scope"`
 	InstallPath  string `json:"installPath"`
 	Version      string `json:"version"`
 	InstalledAt  string `json:"installedAt"`
 	LastUpdated  string `json:"lastUpdated"`
 	GitCommitSha string `json:"gitCommitSha"`
+}
+
+// IsEnabled returns whether the plugin installation is enabled.
+// Returns true if Enabled is nil (not specified) or explicitly true.
+func (pi *PluginInstallation) IsEnabled() bool {
+	return pi.Enabled == nil || *pi.Enabled
 }
 
 // InstalledPluginsFile represents the structure of installed_plugins.json.
@@ -47,6 +55,10 @@ type PluginIndexEntry struct {
 	Version string
 	// InstallPath is the absolute installation path
 	InstallPath string
+	// Scope is the install scope from installed_plugins.json (e.g., "user", "project")
+	Scope string
+	// Enabled indicates whether this plugin installation is enabled
+	Enabled bool
 }
 
 // LoadPluginIndex loads and parses the Claude Code installed plugins manifest.
@@ -84,6 +96,15 @@ func LoadPluginIndex() *PluginIndex {
 		pluginName, marketplace := parsePluginKey(pluginKey)
 
 		for _, inst := range installations {
+			// Skip disabled plugins
+			if !inst.IsEnabled() {
+				logging.Debug("skipping disabled plugin",
+					slog.String("plugin", pluginKey),
+					logging.Path(inst.InstallPath),
+				)
+				continue
+			}
+
 			// Normalize the install path for consistent lookup
 			normalizedPath := filepath.Clean(inst.InstallPath)
 
@@ -93,6 +114,8 @@ func LoadPluginIndex() *PluginIndex {
 				Marketplace: marketplace,
 				Version:     inst.Version,
 				InstallPath: normalizedPath,
+				Scope:       inst.Scope,
+				Enabled:     inst.IsEnabled(),
 			}
 
 			index.byInstallPath[normalizedPath] = entry

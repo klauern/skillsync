@@ -18,6 +18,9 @@ type PluginInfo struct {
 	IsDev bool `json:"is_dev,omitempty"`
 	// SymlinkTarget is the raw symlink target before resolution
 	SymlinkTarget string `json:"symlink_target,omitempty"`
+	// InstallScope is the scope at which the plugin was installed (e.g., "user", "project")
+	// This reflects where the plugin was installed, not the skill's precedence scope.
+	InstallScope string `json:"install_scope,omitempty"`
 }
 
 // Skill represents a unified agent skill across platforms
