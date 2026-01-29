@@ -20,6 +20,21 @@ make run              # Build and run
 ./bin/skillsync       # Direct binary execution
 ```
 
+### Creating New Skills
+```bash
+skillsync new <name> --platform <platform> [options]
+
+# Examples
+skillsync new my-skill --platform claude-code --scope repo
+skillsync new my-workflow --platform cursor --template workflow
+skillsync new my-util --template utility --description "Helper functions"
+
+# Built-in templates:
+#   command-wrapper - Wrap external commands/tools
+#   workflow        - Orchestrate multiple steps
+#   utility         - Helper functionality
+```
+
 ### Testing
 ```bash
 make test             # Run tests with coverage
