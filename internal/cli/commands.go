@@ -1629,18 +1629,20 @@ func backupCommand() *cli.Command {
 		Description: `Manage backups of skill files.
 
    Backups are automatically created before sync operations.
-   Use these commands to view, verify, and manage backups.
+   Use these commands to view, verify, restore, and rollback backups.
 
    Examples:
      skillsync backup list                    # List all backups
      skillsync backup list --platform claude-code
      skillsync backup list --format json
-     skillsync backup restore <backup-id>     # Restore a backup`,
+     skillsync backup restore <backup-id>     # Restore a backup
+     skillsync backup rollback --file <path>  # Rollback to latest backup`,
 		Commands: []*cli.Command{
 			backupListCommand(),
 			backupRestoreCommand(),
 			backupDeleteCommand(),
 			backupVerifyCommand(),
+			backupRollbackCommand(),
 		},
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: list backups
@@ -2037,6 +2039,231 @@ func verifyAllBackups(platform string) error {
 	}
 
 	fmt.Printf("Verification complete: %d OK\n", ok)
+	return nil
+}
+
+func backupRollbackCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "rollback",
+		Usage: "Rollback to a previous backup version of a file",
+		UsageText: `skillsync backup rollback [options] [backup-id]
+   skillsync backup rollback <backup-id>                # Rollback to specific backup by ID
+   skillsync backup rollback --file /path/to/file       # Rollback to latest backup of file
+   skillsync backup rollback --file /path/to/file --list # Show backup history for file
+   skillsync backup rollback <backup-id> --target /custom/path
+   skillsync backup rollback <backup-id> --force        # Skip confirmation`,
+		Description: `Rollback to a previous backup version using the automatic backup mechanism.
+
+   Two modes of operation:
+   1. Rollback by backup ID: Specify a backup ID to restore that exact version
+   2. Rollback by file path: Use --file to rollback to the most recent backup
+
+   Use --list with --file to view backup history for a specific file before
+   deciding which version to restore.
+
+   The rollback operation:
+   - Verifies backup integrity using SHA256 checksums
+   - Shows backup details before confirmation
+   - Warns if target file will be overwritten
+   - Supports custom target path with --target
+   - Can be forced with --force to skip confirmation
+
+   Examples:
+     # Show backup history for a file
+     skillsync backup rollback --file ~/.claude/skills/myskill.md --list
+
+     # Rollback to latest backup of a file
+     skillsync backup rollback --file ~/.claude/skills/myskill.md
+
+     # Rollback to specific backup version
+     skillsync backup rollback 20240128-143022-abc12345
+
+     # Rollback with custom target location
+     skillsync backup rollback 20240128-143022-abc12345 --target /tmp/restored.md`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "file",
+				Aliases: []string{"f"},
+				Usage:   "Source file path to rollback (uses latest backup)",
+			},
+			&cli.BoolFlag{
+				Name:    "list",
+				Aliases: []string{"l"},
+				Usage:   "List backup history for --file (does not rollback)",
+			},
+			&cli.StringFlag{
+				Name:    "target",
+				Aliases: []string{"t"},
+				Usage:   "Custom target path for rollback (defaults to original source path)",
+			},
+			&cli.BoolFlag{
+				Name:    "force",
+				Usage:   "Skip confirmation prompt before overwriting",
+			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Preview rollback without making changes",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			args := cmd.Args()
+			filePath := cmd.String("file")
+			listFlag := cmd.Bool("list")
+			targetPath := cmd.String("target")
+			force := cmd.Bool("force")
+			dryRun := cmd.Bool("dry-run")
+
+			// Mode 1: List backup history for a file
+			if listFlag {
+				if filePath == "" {
+					return errors.New("--file is required when using --list")
+				}
+				return listBackupHistory(filePath)
+			}
+
+			// Mode 2: Rollback by file path (latest backup)
+			if filePath != "" {
+				return rollbackByFile(filePath, targetPath, force, dryRun)
+			}
+
+			// Mode 3: Rollback by backup ID
+			if args.Len() < 1 {
+				return errors.New("backup ID is required (or use --file to rollback by file path)")
+			}
+
+			backupID := args.Get(0)
+			return rollbackByID(backupID, targetPath, force, dryRun)
+		},
+	}
+}
+
+// listBackupHistory shows all backups for a specific source file
+func listBackupHistory(sourcePath string) error {
+	history, err := backup.GetBackupHistory(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to get backup history: %w", err)
+	}
+
+	if len(history) == 0 {
+		fmt.Printf("No backups found for: %s\n", sourcePath)
+		return nil
+	}
+
+	fmt.Printf("\nBackup history for: %s\n", sourcePath)
+	fmt.Printf("Found %d backup(s):\n\n", len(history))
+
+	// Display in table format
+	fmt.Printf("%-30s %-12s %-20s %s\n", "BACKUP ID", "PLATFORM", "CREATED", "SIZE")
+	fmt.Println(strings.Repeat("-", 80))
+	for _, b := range history {
+		fmt.Printf("%-30s %-12s %-20s %s\n",
+			b.ID,
+			b.Platform,
+			b.CreatedAt.Format("2006-01-02 15:04:05"),
+			formatSize(b.Size))
+	}
+
+	fmt.Printf("\nUse 'skillsync backup rollback <backup-id>' to restore a specific version\n")
+	fmt.Printf("Use 'skillsync backup rollback --file %s' to restore the latest version\n", sourcePath)
+
+	return nil
+}
+
+// rollbackByFile rollbacks to the latest backup of a specific file
+func rollbackByFile(sourcePath, targetPath string, force, dryRun bool) error {
+	history, err := backup.GetBackupHistory(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to get backup history: %w", err)
+	}
+
+	if len(history) == 0 {
+		return fmt.Errorf("no backups found for: %s", sourcePath)
+	}
+
+	// Use the most recent backup (first in the sorted list)
+	latestBackup := history[0]
+
+	fmt.Printf("Rolling back to latest backup:\n")
+	fmt.Printf("  Backup ID: %s\n", latestBackup.ID)
+	fmt.Printf("  Created:   %s\n", latestBackup.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Println()
+
+	return rollbackByID(latestBackup.ID, targetPath, force, dryRun)
+}
+
+// rollbackByID rollbacks to a specific backup by ID
+func rollbackByID(backupID, targetPath string, force, dryRun bool) error {
+	// Load index to get backup metadata
+	index, err := backup.LoadIndex()
+	if err != nil {
+		return fmt.Errorf("failed to load backup index: %w", err)
+	}
+
+	// Find the backup
+	metadata, exists := index.Backups[backupID]
+	if !exists {
+		return fmt.Errorf("backup %q not found", backupID)
+	}
+
+	// Use original source path if no target specified
+	if targetPath == "" {
+		targetPath = metadata.SourcePath
+	}
+
+	// Check if target file exists
+	targetExists := false
+	if _, err := os.Stat(targetPath); err == nil {
+		targetExists = true
+	}
+
+	// Verify backup integrity before rollback
+	if err := backup.VerifyBackup(backupID); err != nil {
+		return fmt.Errorf("backup verification failed: %w", err)
+	}
+
+	// Display rollback details
+	fmt.Println("\nRollback Details:")
+	fmt.Printf("  Backup ID: %s\n", metadata.ID)
+	fmt.Printf("  Platform:  %s\n", metadata.Platform)
+	fmt.Printf("  Size:      %s\n", formatSize(metadata.Size))
+	fmt.Printf("  Created:   %s\n", metadata.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("  Source:    %s\n", metadata.SourcePath)
+	fmt.Printf("  Target:    %s\n", targetPath)
+
+	if targetExists {
+		fmt.Println("\n⚠️  Target file already exists and will be overwritten.")
+	}
+
+	if dryRun {
+		fmt.Println("\n[DRY RUN] Would rollback to this backup (no changes made)")
+		return nil
+	}
+
+	// Confirm unless force flag is set
+	if !force {
+		message := fmt.Sprintf("Rollback to backup %s?", backupID)
+		level := riskLevelInfo
+		if targetExists {
+			level = riskLevelWarning
+		}
+
+		confirmed, err := confirmAction(message, level)
+		if err != nil {
+			return fmt.Errorf("confirmation error: %w", err)
+		}
+		if !confirmed {
+			fmt.Println("Rollback cancelled.")
+			return nil
+		}
+	}
+
+	// Perform the rollback (using existing RestoreBackup function)
+	if err := backup.RestoreBackup(backupID, targetPath); err != nil {
+		return fmt.Errorf("rollback failed: %w", err)
+	}
+
+	fmt.Printf("\n✓ Successfully rolled back to backup: %s\n", backupID)
+	fmt.Printf("  File restored to: %s\n", targetPath)
 	return nil
 }
 

@@ -554,6 +554,41 @@ func TestBackupRestoreCommand(t *testing.T) {
 	}
 }
 
+func TestBackupRollbackCommand(t *testing.T) {
+	tests := map[string]struct {
+		args    []string
+		wantErr bool
+	}{
+		"rollback without backup ID or file": {
+			args:    []string{"skillsync", "backup", "rollback"},
+			wantErr: true,
+		},
+		"rollback with non-existent ID": {
+			args:    []string{"skillsync", "backup", "rollback", "non-existent-id"},
+			wantErr: true,
+		},
+		"rollback with --list but no --file": {
+			args:    []string{"skillsync", "backup", "rollback", "--list"},
+			wantErr: true,
+		},
+		"rollback with --file for non-existent file": {
+			args:    []string{"skillsync", "backup", "rollback", "--file", "/nonexistent/path"},
+			wantErr: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			err := Run(ctx, tt.args)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Run() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestBackupVerifyCommand(t *testing.T) {
 	tests := map[string]struct {
 		args       []string

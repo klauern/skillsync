@@ -392,3 +392,60 @@ func TestGetStats(t *testing.T) {
 		t.Error("expected non-zero total size")
 	}
 }
+
+func TestGetBackupHistory(t *testing.T) {
+	// Setup temp environment
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	// Create test file
+	testFile := filepath.Join(tempHome, "test.md")
+
+	// Create multiple backups of the same file
+	opts := Options{Platform: "claude-code"}
+
+	var backupIDs []string
+	for i := range 3 {
+		content := fmt.Sprintf("test content version %d", i)
+		if err := os.WriteFile(testFile, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+		metadata, err := CreateBackup(testFile, opts)
+		if err != nil {
+			t.Fatalf("CreateBackup failed: %v", err)
+		}
+		backupIDs = append(backupIDs, metadata.ID)
+		time.Sleep(10 * time.Millisecond) // Ensure different timestamps
+	}
+
+	// Get backup history for the file
+	history, err := GetBackupHistory(testFile)
+	if err != nil {
+		t.Fatalf("GetBackupHistory failed: %v", err)
+	}
+
+	// Verify we got all 3 backups
+	util.AssertEqual(t, len(history), 3)
+
+	// Verify sorted by creation time (newest first)
+	if history[0].ID != backupIDs[2] {
+		t.Errorf("expected newest backup first, got %s, want %s", history[0].ID, backupIDs[2])
+	}
+	if history[2].ID != backupIDs[0] {
+		t.Errorf("expected oldest backup last, got %s, want %s", history[2].ID, backupIDs[0])
+	}
+
+	// Verify all backups are for the same source path
+	for _, b := range history {
+		if b.SourcePath != testFile {
+			t.Errorf("expected source path %s, got %s", testFile, b.SourcePath)
+		}
+	}
+
+	// Test with non-existent file
+	emptyHistory, err := GetBackupHistory("/nonexistent/file.md")
+	if err != nil {
+		t.Fatalf("GetBackupHistory failed for non-existent file: %v", err)
+	}
+	util.AssertEqual(t, len(emptyHistory), 0)
+}

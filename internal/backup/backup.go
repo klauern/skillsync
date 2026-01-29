@@ -263,3 +263,30 @@ func VerifyBackup(backupID string) error {
 
 	return nil
 }
+
+// GetBackupHistory returns all backups for a specific source file, sorted by creation time (newest first)
+func GetBackupHistory(sourcePath string) ([]Metadata, error) {
+	index, err := LoadIndex()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load backup index: %w", err)
+	}
+
+	// Filter backups by source path
+	var history []Metadata
+	for _, backup := range index.Backups {
+		if backup.SourcePath == sourcePath {
+			history = append(history, backup)
+		}
+	}
+
+	// Sort by creation time (newest first)
+	for i := 0; i < len(history)-1; i++ {
+		for j := i + 1; j < len(history); j++ {
+			if history[i].CreatedAt.Before(history[j].CreatedAt) {
+				history[i], history[j] = history[j], history[i]
+			}
+		}
+	}
+
+	return history, nil
+}
