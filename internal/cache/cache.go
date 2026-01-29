@@ -33,8 +33,11 @@ const (
 )
 
 // New creates or loads a cache for the given source name (e.g., "plugins")
-func New(sourceName string) (*Cache, error) {
-	cacheDir := filepath.Join(util.SkillsyncConfigPath(), "cache")
+// If cacheDir is empty, defaults to ~/.skillsync/cache
+func New(sourceName string, cacheDir string) (*Cache, error) {
+	if cacheDir == "" {
+		cacheDir = filepath.Join(util.SkillsyncConfigPath(), "cache")
+	}
 	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
 		return nil, err
 	}

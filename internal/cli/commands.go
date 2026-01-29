@@ -290,7 +290,7 @@ func discoveryCommand() *cli.Command {
 				Usage: "Disable plugin skill caching",
 			},
 		},
-		Action: func(_ context.Context, cmd *cli.Command) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			platform := cmd.String("platform")
 			scopeStr := cmd.String("scope")
 			format := cmd.String("format")
@@ -340,7 +340,7 @@ func discoveryCommand() *cli.Command {
 
 			// Discover plugin skills if requested
 			if includePlugins {
-				pluginSkills, err := discoverPluginSkills(repoURL, !noCache)
+				pluginSkills, err := discoverPluginSkills(ctx, repoURL, !noCache)
 				if err != nil {
 					fmt.Printf("Warning: failed to discover plugins: %v\n", err)
 				} else {
@@ -361,7 +361,7 @@ func discoveryCommand() *cli.Command {
 // It discovers skills from:
 // 1. ~/.skillsync/plugins/ - cloned plugin repositories
 // 2. ~/.claude/plugins/cache/ - installed Claude Code plugins
-func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) {
+func discoverPluginSkills(ctx context.Context, repoURL string, useCache bool) ([]model.Skill, error) {
 	var pluginParser *plugin.Parser
 
 	if repoURL != "" {
@@ -372,8 +372,9 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 
 	// Try to use cache for local plugins (not for remote repos which need git pull)
 	if useCache && repoURL == "" {
-		skillCache, err := cache.New("plugins")
-		if err == nil && skillCache.Size() > 0 && !skillCache.IsStale(cache.DefaultTTL) {
+		cfg := getConfig(ctx)
+		skillCache, err := cache.New("plugins", cfg.Cache.Location)
+		if err == nil && skillCache.Size() > 0 && !skillCache.IsStale(cfg.Cache.TTL) {
 			// Return cached skills
 			var skills []model.Skill
 			for _, entry := range skillCache.Entries {
@@ -400,7 +401,8 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 
 	// Cache the results for local plugins
 	if useCache && repoURL == "" && len(skills) > 0 {
-		skillCache, err := cache.New("plugins")
+		cfg := getConfig(ctx)
+		skillCache, err := cache.New("plugins", cfg.Cache.Location)
 		if err == nil {
 			for _, skill := range skills {
 				skillCache.Set(skill.Name, skill)
@@ -2134,8 +2136,8 @@ func backupRollbackCommand() *cli.Command {
 				Usage:   "Custom target path for rollback (defaults to original source path)",
 			},
 			&cli.BoolFlag{
-				Name:    "force",
-				Usage:   "Skip confirmation prompt before overwriting",
+				Name:  "force",
+				Usage: "Skip confirmation prompt before overwriting",
 			},
 			&cli.BoolFlag{
 				Name:  "dry-run",
@@ -2586,14 +2588,14 @@ func tuiCommand() *cli.Command {
    - Configuration settings
 
    Use arrow keys to navigate, Enter to select, and q to quit.`,
-		Action: func(_ context.Context, _ *cli.Command) error {
-			return runTUI()
+		Action: func(ctx context.Context, _ *cli.Command) error {
+			return runTUI(ctx)
 		},
 	}
 }
 
 // runTUI launches the interactive TUI dashboard and handles view navigation.
-func runTUI() error {
+func runTUI(ctx context.Context) error {
 	for {
 		result, err := tui.RunDashboard()
 		if err != nil {
@@ -2606,7 +2608,7 @@ func runTUI() error {
 			return nil
 
 		case tui.DashboardViewDiscover:
-			if err := runDiscoverTUI(); err != nil {
+			if err := runDiscoverTUI(ctx); err != nil {
 				return err
 			}
 
@@ -2641,7 +2643,7 @@ func runTUI() error {
 			}
 
 		case tui.DashboardViewScope:
-			if err := runScopeTUI(); err != nil {
+			if err := runScopeTUI(ctx); err != nil {
 				return err
 			}
 
@@ -2664,7 +2666,7 @@ func runTUI() error {
 }
 
 // runDiscoverTUI runs the discover skills TUI view.
-func runDiscoverTUI() error {
+func runDiscoverTUI(ctx context.Context) error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
@@ -2677,7 +2679,7 @@ func runDiscoverTUI() error {
 	}
 
 	// Include plugin skills
-	pluginSkills, err := discoverPluginSkills("", true)
+	pluginSkills, err := discoverPluginSkills(ctx, "", true)
 	if err == nil {
 		allSkills = append(allSkills, pluginSkills...)
 	}
@@ -3005,7 +3007,7 @@ func executeDelete(result tui.DeleteListResult) error {
 }
 
 // runScopeTUI runs the scope management TUI view.
-func runScopeTUI() error {
+func runScopeTUI(ctx context.Context) error {
 	// Discover skills from all platforms
 	var allSkills []model.Skill
 	for _, p := range model.AllPlatforms() {
@@ -3018,7 +3020,7 @@ func runScopeTUI() error {
 	}
 
 	// Include plugin skills
-	pluginSkills, err := discoverPluginSkills("", true)
+	pluginSkills, err := discoverPluginSkills(ctx, "", true)
 	if err == nil {
 		allSkills = append(allSkills, pluginSkills...)
 	}

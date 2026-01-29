@@ -21,6 +21,23 @@ var (
 	BuildDate = "unknown"
 )
 
+type contextKey string
+
+const configKey contextKey = "config"
+
+// getConfig retrieves the config from context, falling back to defaults if not present
+func getConfig(ctx context.Context) *config.Config {
+	if cfg, ok := ctx.Value(configKey).(*config.Config); ok {
+		return cfg
+	}
+	// Fallback to loading from file/defaults
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Default()
+	}
+	return cfg
+}
+
 // Run executes the CLI application with the given context and arguments.
 func Run(ctx context.Context, args []string) error {
 	app := &cli.Command{
@@ -40,8 +57,34 @@ func Run(ctx context.Context, args []string) error {
 				Name:  "no-color",
 				Usage: "Disable colored output",
 			},
+			&cli.StringFlag{
+				Name:  "cache-dir",
+				Usage: "Override cache directory location (default: ~/.skillsync/cache)",
+			},
+			&cli.DurationFlag{
+				Name:  "cache-ttl",
+				Usage: "Override cache time-to-live (e.g., 1h, 30m)",
+			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			// Load config from file and environment
+			cfg, err := config.Load()
+			if err != nil {
+				// If config fails, use defaults
+				cfg = config.Default()
+			}
+
+			// Apply CLI flag overrides (highest precedence)
+			if cacheDir := cmd.String("cache-dir"); cacheDir != "" {
+				cfg.Cache.Location = cacheDir
+			}
+			if cacheTTL := cmd.Duration("cache-ttl"); cacheTTL > 0 {
+				cfg.Cache.TTL = cacheTTL
+			}
+
+			// Store config in context for commands to access
+			ctx = context.WithValue(ctx, configKey, cfg)
+
 			configureColors(cmd)
 			return ctx, configureLogging(cmd)
 		},

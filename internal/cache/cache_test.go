@@ -14,7 +14,7 @@ func TestNew(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("SKILLSYNC_HOME", tmpDir)
 
-	cache, err := New("test")
+	cache, err := New("test", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestCacheSetAndGet(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	cache, err := New("test")
+	cache, err := New("test", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -95,7 +95,7 @@ func TestCacheSaveAndLoad(t *testing.T) {
 	}
 
 	// Create and populate cache
-	cache1, err := New("test-persist")
+	cache1, err := New("test-persist", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestCacheSaveAndLoad(t *testing.T) {
 	}
 
 	// Load cache in new instance
-	cache2, err := New("test-persist")
+	cache2, err := New("test-persist", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -145,7 +145,7 @@ func TestCacheStaleDetection(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	cache, err := New("test-stale")
+	cache, err := New("test-stale", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestCachePrune(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	cache, err := New("test-prune")
+	cache, err := New("test-prune", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -223,7 +223,7 @@ func TestCacheClear(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	cache, err := New("test-clear")
+	cache, err := New("test-clear", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -261,7 +261,7 @@ func TestCacheStaleSourceFile(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	cache, err := New("test-source-stale")
+	cache, err := New("test-source-stale", "")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
