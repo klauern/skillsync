@@ -1,0 +1,15 @@
+[toml]
+model = "gpt-4o-mini"
+approval_policy = "strict"
+sandbox_mode = "default"
+profile = "production"
+
+[tui]
+notifications = false
+animations = false
+
+[history]
+persistence = "none"
+
+[features]
+shell_tool = true

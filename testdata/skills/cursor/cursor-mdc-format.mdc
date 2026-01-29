@@ -1,0 +1,11 @@
+---
+name: cursor-mdc-format
+description: Cursor skill using .mdc file extension
+globs:
+  - "**/*.py"
+  - "**/*.pyi"
+alwaysApply: false
+---
+# Cursor .mdc Format
+
+This Cursor skill uses the .mdc file extension (Cursor-specific format).

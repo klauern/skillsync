@@ -1,0 +1,23 @@
+[toml]
+model = "gpt-4o-mini"
+approval_policy = "on-failure"
+sandbox_mode = "restricted"
+instructions = "You are a helpful assistant. Always explain your reasoning."
+developer_instructions = "Use functional programming patterns where possible."
+profile = "development"
+
+[tui]
+notifications = true
+animations = true
+
+[history]
+persistence = "all"
+max_bytes = 10485760
+
+[features]
+shell_tool = false
+
+[mcp_servers]
+[mcp_servers."example-server"]
+command = "python"
+args = ["-m", "mcp_server"]
