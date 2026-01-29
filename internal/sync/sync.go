@@ -74,6 +74,8 @@ func New() *Synchronizer {
 
 // Sync performs synchronization from source to target platform.
 func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Result, error) {
+	defer logging.Timer("sync")()
+
 	logging.Debug("starting sync operation",
 		logging.Platform(string(source)),
 		logging.Operation("sync"),

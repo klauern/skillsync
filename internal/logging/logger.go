@@ -3,10 +3,13 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"runtime/debug"
 	"sync"
+	"time"
 )
 
 // Level aliases for convenience.
@@ -179,14 +182,54 @@ func Operation(op string) slog.Attr {
 }
 
 // Err returns a slog attribute for error logging.
+// When the default logger is at debug level, it includes a stack trace.
 func Err(err error) slog.Attr {
 	if err == nil {
 		return slog.Attr{}
 	}
+
+	// Check if we're at debug level and should include stack trace
+	logger := Default()
+	if logger.Enabled(context.Background(), LevelDebug) {
+		stack := debug.Stack()
+		return slog.Group(KeyError,
+			slog.Any("error", err),
+			slog.String("stack", string(stack)),
+		)
+	}
+
 	return slog.Any(KeyError, err)
 }
 
 // Count returns a slog attribute for item counts.
 func Count(n int) slog.Attr {
 	return slog.Int(KeyCount, n)
+}
+
+// Duration returns a slog attribute for operation duration.
+// The duration is formatted as a human-readable string (e.g., "1.234s", "123.4ms").
+func Duration(d time.Duration) slog.Attr {
+	return slog.String(KeyDuration, d.String())
+}
+
+// Timer helps measure operation duration for debug logging.
+// Usage:
+//
+//	defer Timer("operation_name")()
+//
+// At debug level, logs the operation name and duration when the function returns.
+func Timer(operation string) func() {
+	if !Default().Enabled(context.Background(), LevelDebug) {
+		// Not at debug level, return no-op
+		return func() {}
+	}
+
+	start := time.Now()
+	return func() {
+		elapsed := time.Since(start)
+		Debug(fmt.Sprintf("%s completed", operation),
+			Operation(operation),
+			Duration(elapsed),
+		)
+	}
 }

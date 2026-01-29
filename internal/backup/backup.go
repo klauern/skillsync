@@ -32,6 +32,8 @@ type Options struct {
 
 // CreateBackup creates a backup of the specified file or directory
 func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
+	defer logging.Timer("create_backup")()
+
 	logging.Debug("starting backup creation",
 		logging.Path(sourcePath),
 		logging.Platform(opts.Platform),
@@ -147,6 +149,8 @@ func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 
 // RestoreBackup restores a backup to the specified target path
 func RestoreBackup(backupID string, targetPath string) error {
+	defer logging.Timer("restore_backup")()
+
 	logging.Debug("starting backup restore",
 		slog.String("backup_id", backupID),
 		logging.Path(targetPath),

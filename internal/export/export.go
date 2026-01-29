@@ -87,6 +87,8 @@ func New(opts Options) *Exporter {
 
 // Export exports the given skills to the writer in the configured format.
 func (e *Exporter) Export(skills []model.Skill, w io.Writer) error {
+	defer logging.Timer("export")()
+
 	logging.Debug("starting export",
 		slog.String("format", string(e.opts.Format)),
 		logging.Count(len(skills)),

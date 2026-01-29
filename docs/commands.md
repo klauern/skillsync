@@ -56,16 +56,46 @@ These flags work with all commands:
 
 | Flag | Aliases | Description |
 |------|---------|-------------|
-| `--verbose` | | Enable info-level logging |
-| `--debug` | | Enable debug-level logging (implies --verbose) |
+| `--verbose` | | Enable info-level logging with detailed operation progress |
+| `--debug` | | Enable debug-level logging with timing, source locations, and stack traces (implies --verbose) |
 | `--no-color` | | Disable colored output |
+
+### Verbose Mode
+
+Verbose mode (`--verbose`) enables info-level logging that shows:
+- Configuration loading and paths
+- Major operation milestones (sync start/complete, backup created, etc.)
+- Skill counts and statistics
+- Platform-specific operations
+
+Use verbose mode to understand what skillsync is doing during normal operations.
+
+### Debug Mode
+
+Debug mode (`--debug`) enables debug-level logging with extensive detail:
+- **Operation timing**: Duration of long-running operations (sync, backup, export)
+- **Source locations**: File and line numbers for each log entry
+- **Stack traces**: Full call stacks when errors occur
+- **Internal state**: Discovery counts, parsing progress, cache operations
+- **All verbose output**: Includes everything from verbose mode
+
+Use debug mode for troubleshooting issues or understanding internal behavior.
 
 **Examples:**
 
 ```bash
-skillsync --debug sync cursor claudecode       # Debug logging
-skillsync --no-color discover --platform cursor # No colors
-skillsync --verbose backup list                # Verbose output
+# Verbose mode - see what's happening
+skillsync --verbose sync cursor claude-code
+
+# Debug mode - detailed troubleshooting
+skillsync --debug sync cursor claude-code
+
+# Debug with specific operations
+skillsync --debug backup list
+skillsync --debug discover --platform cursor
+
+# Disable colors for log parsing
+skillsync --no-color --debug sync cursor claude-code > sync.log 2>&1
 ```
 
 ---

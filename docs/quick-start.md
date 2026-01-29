@@ -672,18 +672,47 @@ skillsync backup list
 
 ### Debug Mode
 
-Enable verbose logging to troubleshoot issues:
+Enable verbose or debug logging to troubleshoot issues:
+
+#### Verbose Mode (`--verbose`)
+
+Shows detailed operation progress:
+- Configuration loading and paths used
+- Major operation milestones
+- Skill counts and statistics
+- Platform-specific operations
 
 ```bash
-# Info-level logging
+# Info-level logging for general understanding
+skillsync --verbose sync cursor claude-code
 skillsync --verbose discover
+skillsync --verbose backup list
+```
 
-# Debug-level logging (includes source locations)
+#### Debug Mode (`--debug`)
+
+Provides extensive detail for troubleshooting:
+- **Operation timing**: Duration of sync, backup, and export operations
+- **Source locations**: File and line numbers for each log entry
+- **Stack traces**: Full call stacks when errors occur
+- **Internal state**: Discovery progress, parsing details, cache operations
+
+```bash
+# Debug-level logging for troubleshooting
 skillsync --debug sync cursor claude-code
 
-# Disable colored output
-skillsync --no-color discover
+# Debug with specific operations
+skillsync --debug discover --platform cursor
+skillsync --debug backup list
+
+# Save debug output to file for analysis
+skillsync --no-color --debug sync cursor claude-code > sync-debug.log 2>&1
 ```
+
+**When to use:**
+- `--verbose`: Normal troubleshooting, understanding what's happening
+- `--debug`: Deep troubleshooting, investigating errors, performance issues
+- `--no-color`: When saving logs to files or piping to other tools
 
 ### Getting Help
 
