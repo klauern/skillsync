@@ -457,6 +457,22 @@ func TestGetPlatformPath(t *testing.T) {
 	}
 }
 
+func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_CODEX_PATH", "")
+
+	got, err := GetPlatformPath(model.Codex)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".codex", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
+	}
+}
+
 func TestValidationError_Error(t *testing.T) {
 	t.Run("with underlying error", func(t *testing.T) {
 		err := &Error{

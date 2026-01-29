@@ -496,12 +496,8 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		if envPath := os.Getenv("SKILLSYNC_CODEX_PATH"); envPath != "" {
 			return envPath, nil
 		}
-		// Codex is project-specific, use current directory
-		cwd, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("cannot get current directory: %w", err)
-		}
-		return util.CodexConfigPath(cwd), nil
+		// Default to user-level Codex skills directory
+		return util.CodexSkillsPath(), nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}
