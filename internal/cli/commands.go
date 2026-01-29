@@ -29,6 +29,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
+	"github.com/klauern/skillsync/internal/security"
 	"github.com/klauern/skillsync/internal/similarity"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/ui"
@@ -1104,6 +1105,33 @@ func validateSourceSkills(cfg *syncConfig) error {
 			fmt.Printf("  %d. %s\n", i+1, formatValidationError(e, cfg.sourceSkills))
 		}
 		return errors.New("skill validation failed - fix the issues above and try again")
+	}
+
+	// Validate security: scan for sensitive data patterns
+	fmt.Println("Scanning for sensitive data...")
+	securityIssues := 0
+	for _, skill := range cfg.sourceSkills {
+		result := security.ValidateSkillContent(skill.Content, skill.Name)
+
+		// Show warnings for detected patterns
+		for _, warning := range result.Warnings {
+			fmt.Printf("  ⚠ Warning: %s (in %s)\n", warning, skill.Name)
+			securityIssues++
+		}
+
+		// Show errors for high-severity patterns
+		for _, err := range result.Errors {
+			fmt.Printf("  ✗ Error: %s\n", err)
+			securityIssues++
+		}
+	}
+
+	if securityIssues > 0 {
+		fmt.Printf("\nFound %d potential sensitive data issue(s).\n", securityIssues)
+		fmt.Println("Review the warnings above before syncing these skills.")
+		fmt.Println("Consider removing sensitive data or using environment variables instead.")
+	} else {
+		fmt.Println("  No sensitive data patterns detected")
 	}
 
 	if len(cfg.sourceSkills) == 0 {

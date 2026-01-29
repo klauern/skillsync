@@ -803,6 +803,7 @@ export SKILLSYNC_AUTO_BACKUP=false
 - [Command Reference](commands.md) - Complete command documentation
 - [Migration Guide](migration.md) - Detailed migration instructions
 - [Sync Strategies](sync-strategies.md) - Conflict resolution strategies
+- [Security Best Practices](security.md) - Sensitive data detection and security guidelines
 - [Skill Format Research](skill-formats-research.md) - Technical format specifications
 
 ## Getting Help
