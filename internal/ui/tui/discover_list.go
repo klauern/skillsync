@@ -81,19 +81,36 @@ func defaultDiscoverListKeyMap() discoverListKeyMap {
 	}
 }
 
+type discoverListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func defaultDiscoverListColumnWidths() discoverListColumnWidths {
+	return discoverListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    15,
+		desc:     60,
+	}
+}
+
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
-	table     table.Model
-	skills    []model.Skill
-	filtered  []model.Skill
-	keys      discoverListKeyMap
-	result    DiscoverListResult
-	filter    string
-	filtering bool
-	showHelp  bool
-	width     int
-	height    int
-	quitting  bool
+	table        table.Model
+	skills       []model.Skill
+	filtered     []model.Skill
+	keys         discoverListKeyMap
+	result       DiscoverListResult
+	filter       string
+	filtering    bool
+	showHelp     bool
+	width        int
+	height       int
+	quitting     bool
+	columnWidths discoverListColumnWidths
 }
 
 // Styles for the discover list TUI.
@@ -103,21 +120,24 @@ var discoverListStyles = struct {
 	Filter      lipgloss.Style
 	FilterInput lipgloss.Style
 	Status      lipgloss.Style
+	Description lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
 	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 // NewDiscoverListModel creates a new discover list model.
 func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
+	columnWidths := defaultDiscoverListColumnWidths()
 	columns := []table.Column{
-		{Title: "Name", Width: 25},
-		{Title: "Platform", Width: 12},
-		{Title: "Scope", Width: 15},
-		{Title: "Description", Width: 45},
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Sort skills alphabetically by name (case-insensitive)
@@ -125,7 +145,9 @@ func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
 
-	rows := skillsToRows(skills)
+	rows := DiscoverListModel{
+		columnWidths: columnWidths,
+	}.skillsToRows(skills)
 
 	t := table.New(
 		table.WithColumns(columns),
@@ -147,28 +169,27 @@ func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 	t.SetStyles(s)
 
 	return DiscoverListModel{
-		table:    t,
-		skills:   skills,
-		filtered: skills,
-		keys:     defaultDiscoverListKeyMap(),
+		table:        t,
+		skills:       skills,
+		filtered:     skills,
+		keys:         defaultDiscoverListKeyMap(),
+		columnWidths: columnWidths,
 	}
 }
 
-func skillsToRows(skills []model.Skill) []table.Row {
+func (m DiscoverListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultDiscoverListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 45 {
-			desc = desc[:42] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		desc := truncateText(s.Description, widths.desc)
 		rows[i] = table.Row{
 			name,
-			string(s.Platform),
-			s.DisplayScope(),
+			truncateText(string(s.Platform), widths.platform),
+			truncateText(s.DisplayScope(), widths.scope),
 			desc,
 		}
 	}
@@ -191,6 +212,7 @@ func (m DiscoverListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-8, 5) // Reserve space for title, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle filtering mode
@@ -284,7 +306,7 @@ func (m *DiscoverListModel) applyFilter() {
 		}
 		m.filtered = filtered
 	}
-	m.table.SetRows(skillsToRows(m.filtered))
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 func (m DiscoverListModel) getSelectedSkill() model.Skill {
@@ -329,6 +351,14 @@ func (m DiscoverListModel) View() string {
 	}
 	b.WriteString(discoverListStyles.Status.Render(status))
 	b.WriteString("\n")
+
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(discoverListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
 
 	// Help
 	if m.showHelp {
@@ -375,6 +405,28 @@ General:
   ?        Toggle full help
   q        Quit`
 	return discoverListStyles.Help.Render(help)
+}
+
+func (m *DiscoverListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultDiscoverListColumnWidths()
+	if totalWidth > 0 {
+		const separatorWidth = 6
+
+		descWidth := totalWidth - (widths.name + widths.platform + widths.scope + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

@@ -49,6 +49,22 @@ type exportListKeyMap struct {
 	Quit      key.Binding
 }
 
+type exportListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func defaultExportListColumnWidths() exportListColumnWidths {
+	return exportListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    10,
+		desc:     60,
+	}
+}
+
 func defaultExportListKeyMap() exportListKeyMap {
 	return exportListKeyMap{
 		Up: key.NewBinding(
@@ -116,6 +132,7 @@ type ExportListModel struct {
 	format          export.Format
 	includeMetadata bool
 	pretty          bool
+	columnWidths    exportListColumnWidths
 }
 
 // Styles for the export list TUI.
@@ -126,6 +143,7 @@ var exportListStyles = struct {
 	FilterInput lipgloss.Style
 	Confirm     lipgloss.Style
 	Status      lipgloss.Style
+	Description lipgloss.Style
 	Selected    lipgloss.Style
 	Checkbox    lipgloss.Style
 	Format      lipgloss.Style
@@ -138,6 +156,7 @@ var exportListStyles = struct {
 	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	Format:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true),
@@ -152,12 +171,13 @@ func skillKey(s model.Skill) string {
 
 // NewExportListModel creates a new export list model.
 func NewExportListModel(skills []model.Skill) ExportListModel {
+	columnWidths := defaultExportListColumnWidths()
 	columns := []table.Column{
-		{Title: " ", Width: 3},            // Checkbox column
-		{Title: "Name", Width: 25},        // Skill name
-		{Title: "Platform", Width: 12},    // Platform
-		{Title: "Scope", Width: 10},       // Scope
-		{Title: "Description", Width: 40}, // Description
+		{Title: " ", Width: 3}, // Checkbox column
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Sort skills alphabetically by name (case-insensitive)
@@ -179,6 +199,7 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		format:          export.FormatJSON,
 		includeMetadata: true,
 		pretty:          true,
+		columnWidths:    columnWidths,
 	}
 
 	rows := m.skillsToRows(skills)
@@ -207,6 +228,10 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 }
 
 func (m ExportListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultExportListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -214,22 +239,10 @@ func (m ExportListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		platform := truncateText(string(s.Platform), widths.platform)
+		scope := truncateText(s.DisplayScope(), widths.scope)
+		desc := truncateText(s.Description, widths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
@@ -257,6 +270,7 @@ func (m ExportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-12, 5) // Reserve space for title, options, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -475,6 +489,14 @@ func (m ExportListModel) View() string {
 	b.WriteString(exportListStyles.Status.Render(status))
 	b.WriteString("\n")
 
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(exportListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+
 	// Help
 	if m.showHelp {
 		help := m.renderFullHelp()
@@ -530,6 +552,30 @@ General:
   ?        Toggle full help
   q        Quit without exporting`
 	return exportListStyles.Help.Render(help)
+}
+
+func (m *ExportListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultExportListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 8
+
+		descWidth := totalWidth - (checkboxWidth + widths.name + widths.platform + widths.scope + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

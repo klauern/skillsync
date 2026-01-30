@@ -43,6 +43,22 @@ type deleteListKeyMap struct {
 	Quit      key.Binding
 }
 
+type deleteListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func defaultDeleteListColumnWidths() deleteListColumnWidths {
+	return deleteListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    10,
+		desc:     60,
+	}
+}
+
 func defaultDeleteListKeyMap() deleteListKeyMap {
 	return deleteListKeyMap{
 		Up: key.NewBinding(
@@ -86,19 +102,20 @@ func defaultDeleteListKeyMap() deleteListKeyMap {
 
 // DeleteListModel is the BubbleTea model for interactive skill deletion.
 type DeleteListModel struct {
-	table       table.Model
-	skills      []model.Skill
-	filtered    []model.Skill
-	selected    map[string]bool // map of skill key to selected state
-	keys        deleteListKeyMap
-	result      DeleteListResult
-	filter      string
-	filtering   bool
-	showHelp    bool
-	confirmMode bool
-	width       int
-	height      int
-	quitting    bool
+	table        table.Model
+	skills       []model.Skill
+	filtered     []model.Skill
+	selected     map[string]bool // map of skill key to selected state
+	keys         deleteListKeyMap
+	result       DeleteListResult
+	filter       string
+	filtering    bool
+	showHelp     bool
+	confirmMode  bool
+	width        int
+	height       int
+	quitting     bool
+	columnWidths deleteListColumnWidths
 }
 
 // Styles for the delete list TUI.
@@ -110,6 +127,7 @@ var deleteListStyles = struct {
 	Confirm     lipgloss.Style
 	Status      lipgloss.Style
 	Warning     lipgloss.Style
+	Description lipgloss.Style
 	Checkbox    lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")).Padding(0, 1),
@@ -119,6 +137,7 @@ var deleteListStyles = struct {
 	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true).Padding(1, 2),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	Warning:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 }
 
@@ -143,22 +162,24 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		return strings.ToLower(deletableSkills[i].Name) < strings.ToLower(deletableSkills[j].Name)
 	})
 
+	columnWidths := defaultDeleteListColumnWidths()
 	columns := []table.Column{
-		{Title: " ", Width: 3},            // Checkbox column
-		{Title: "Name", Width: 25},        // Skill name
-		{Title: "Platform", Width: 12},    // Platform
-		{Title: "Scope", Width: 10},       // Scope
-		{Title: "Description", Width: 40}, // Description
+		{Title: " ", Width: 3}, // Checkbox column
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Initialize with no skills selected (deletion is opt-in)
 	selected := make(map[string]bool)
 
 	m := DeleteListModel{
-		skills:   deletableSkills,
-		filtered: deletableSkills,
-		selected: selected,
-		keys:     defaultDeleteListKeyMap(),
+		skills:       deletableSkills,
+		filtered:     deletableSkills,
+		selected:     selected,
+		keys:         defaultDeleteListKeyMap(),
+		columnWidths: columnWidths,
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -187,6 +208,10 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 }
 
 func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultDeleteListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -194,22 +219,10 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		platform := truncateText(string(s.Platform), widths.platform)
+		scope := truncateText(s.DisplayScope(), widths.scope)
+		desc := truncateText(s.Description, widths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
@@ -237,6 +250,7 @@ func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-10, 5) // Reserve space for title, warning, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -426,6 +440,14 @@ func (m DeleteListModel) View() string {
 	b.WriteString(deleteListStyles.Status.Render(status))
 	b.WriteString("\n")
 
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(deleteListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+
 	// Help
 	if m.showHelp {
 		help := m.renderFullHelp()
@@ -475,6 +497,30 @@ General:
   ?        Toggle full help
   q        Quit without deleting`
 	return deleteListStyles.Help.Render(help)
+}
+
+func (m *DeleteListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultDeleteListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 8
+
+		descWidth := totalWidth - (checkboxWidth + widths.name + widths.platform + widths.scope + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

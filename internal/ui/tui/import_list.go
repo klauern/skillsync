@@ -64,6 +64,20 @@ type importListKeyMap struct {
 	Quit      key.Binding
 }
 
+type importListColumnWidths struct {
+	name  int
+	desc  int
+	scope int
+}
+
+func defaultImportListColumnWidths() importListColumnWidths {
+	return importListColumnWidths{
+		name:  25,
+		desc:  60,
+		scope: 10,
+	}
+}
+
 func defaultImportListKeyMap() importListKeyMap {
 	return importListKeyMap{
 		Up: key.NewBinding(
@@ -141,17 +155,18 @@ type ImportListModel struct {
 	scopeCursor    int
 
 	// UI state
-	keys       importListKeyMap
-	result     ImportListResult
-	phase      importPhase
-	sourcePath string
-	filter     string
-	filtering  bool
-	showHelp   bool
-	width      int
-	height     int
-	quitting   bool
-	err        error
+	keys         importListKeyMap
+	result       ImportListResult
+	phase        importPhase
+	sourcePath   string
+	filter       string
+	filtering    bool
+	showHelp     bool
+	width        int
+	height       int
+	quitting     bool
+	err          error
+	columnWidths importListColumnWidths
 }
 
 // Styles for the import list TUI.
@@ -169,6 +184,7 @@ var importListStyles = struct {
 	Error       lipgloss.Style
 	Phase       lipgloss.Style
 	Path        lipgloss.Style
+	Description lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -183,6 +199,7 @@ var importListStyles = struct {
 	Error:       lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
 	Phase:       lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true),
 	Path:        lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Italic(true),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 // importSkillKey creates a unique key for a skill.
@@ -224,6 +241,7 @@ func NewImportListModel() ImportListModel {
 		targetPlatform: model.ClaudeCode, // Default to Claude Code
 		targetScope:    model.ScopeRepo,  // Default to repo scope
 		selected:       make(map[string]bool),
+		columnWidths:   defaultImportListColumnWidths(),
 	}
 }
 
@@ -245,6 +263,7 @@ func (m ImportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.table.Columns() != nil {
 			newHeight := max(msg.Height-12, 5)
 			m.table.SetHeight(newHeight)
+			m.applyColumnWidths(msg.Width)
 		}
 
 	case tea.KeyMsg:
@@ -512,11 +531,16 @@ func (m *ImportListModel) loadSkillsFromPath(path string) error {
 }
 
 func (m *ImportListModel) initSkillTable() {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultImportListColumnWidths()
+		m.columnWidths = widths
+	}
 	columns := []table.Column{
 		{Title: " ", Width: 3},
-		{Title: "Name", Width: 25},
-		{Title: "Description", Width: 40},
-		{Title: "Scope", Width: 10},
+		{Title: "Name", Width: widths.name},
+		{Title: "Description", Width: widths.desc},
+		{Title: "Scope", Width: widths.scope},
 	}
 
 	rows := m.skillsToRows(m.filtered)
@@ -544,6 +568,10 @@ func (m *ImportListModel) initSkillTable() {
 }
 
 func (m ImportListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultImportListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -551,18 +579,9 @@ func (m ImportListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		desc := truncateText(s.Description, widths.desc)
+		scope := truncateText(s.DisplayScope(), widths.scope)
 
 		rows[i] = table.Row{checkbox, name, desc, scope}
 	}
@@ -583,6 +602,29 @@ func (m *ImportListModel) applyFilter() {
 		}
 		m.filtered = filtered
 	}
+	m.table.SetRows(m.skillsToRows(m.filtered))
+}
+
+func (m *ImportListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultImportListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 6
+
+		descWidth := totalWidth - (checkboxWidth + widths.name + widths.scope + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Description", Width: widths.desc},
+		{Title: "Scope", Width: widths.scope},
+	})
 	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
@@ -685,6 +727,14 @@ func (m ImportListModel) viewSkillSelection() string {
 	selectedCount := len(m.getSelectedSkills())
 	status := fmt.Sprintf("%d skill(s) selected of %d total", selectedCount, len(m.filtered))
 	b.WriteString(importListStyles.Status.Render(status))
+
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString("\n")
+		b.WriteString(importListStyles.Description.Render(formatted))
+	}
 
 	return b.String()
 }

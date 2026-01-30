@@ -51,6 +51,28 @@ type dedupeListKeyMap struct {
 	Quit      key.Binding
 }
 
+type dedupeListColumnWidths struct {
+	name         int
+	platform     int
+	scope        int
+	similar      int
+	nameScore    int
+	contentScore int
+	desc         int
+}
+
+func defaultDedupeListColumnWidths() dedupeListColumnWidths {
+	return dedupeListColumnWidths{
+		name:         22,
+		platform:     12,
+		scope:        8,
+		similar:      22,
+		nameScore:    6,
+		contentScore: 8,
+		desc:         40,
+	}
+}
+
 func defaultDedupeListKeyMap() dedupeListKeyMap {
 	return dedupeListKeyMap{
 		Up: key.NewBinding(
@@ -94,20 +116,21 @@ func defaultDedupeListKeyMap() dedupeListKeyMap {
 
 // DedupeListModel is the BubbleTea model for interactive duplicate skill management.
 type DedupeListModel struct {
-	table       table.Model
-	duplicates  []*similarity.ComparisonResult
-	flatSkills  []model.Skill // flattened list of skills from duplicate pairs
-	filtered    []model.Skill
-	selected    map[string]bool // map of skill key to selected state
-	keys        dedupeListKeyMap
-	result      DedupeListResult
-	filter      string
-	filtering   bool
-	showHelp    bool
-	confirmMode bool
-	width       int
-	height      int
-	quitting    bool
+	table        table.Model
+	duplicates   []*similarity.ComparisonResult
+	flatSkills   []model.Skill // flattened list of skills from duplicate pairs
+	filtered     []model.Skill
+	selected     map[string]bool // map of skill key to selected state
+	keys         dedupeListKeyMap
+	result       DedupeListResult
+	filter       string
+	filtering    bool
+	showHelp     bool
+	confirmMode  bool
+	width        int
+	height       int
+	quitting     bool
+	columnWidths dedupeListColumnWidths
 }
 
 // Styles for the dedupe list TUI.
@@ -119,6 +142,7 @@ var dedupeListStyles = struct {
 	Confirm     lipgloss.Style
 	Status      lipgloss.Style
 	Warning     lipgloss.Style
+	Description lipgloss.Style
 	Checkbox    lipgloss.Style
 	Duplicate   lipgloss.Style
 	Score       lipgloss.Style
@@ -130,6 +154,7 @@ var dedupeListStyles = struct {
 	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true).Padding(1, 2),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	Warning:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	Duplicate:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
 	Score:       lipgloss.NewStyle().Foreground(lipgloss.Color("4")),
@@ -187,26 +212,28 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 		return bestContentScores[dedupeSkillKey(deletableSkills[i])] > bestContentScores[dedupeSkillKey(deletableSkills[j])]
 	})
 
+	columnWidths := defaultDedupeListColumnWidths()
 	columns := []table.Column{
-		{Title: " ", Width: 3},            // Checkbox column
-		{Title: "Name", Width: 22},        // Skill name
-		{Title: "Platform", Width: 12},    // Platform
-		{Title: "Scope", Width: 8},        // Scope
-		{Title: "Similar To", Width: 22},  // Similar skill name
-		{Title: "Name%", Width: 6},        // Name similarity
-		{Title: "Content%", Width: 8},     // Content similarity
-		{Title: "Description", Width: 25}, // Description
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Similar To", Width: columnWidths.similar},
+		{Title: "Name%", Width: columnWidths.nameScore},
+		{Title: "Content%", Width: columnWidths.contentScore},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Initialize with no skills selected
 	selected := make(map[string]bool)
 
 	m := DedupeListModel{
-		duplicates: duplicates,
-		flatSkills: deletableSkills,
-		filtered:   deletableSkills,
-		selected:   selected,
-		keys:       defaultDedupeListKeyMap(),
+		duplicates:   duplicates,
+		flatSkills:   deletableSkills,
+		filtered:     deletableSkills,
+		selected:     selected,
+		keys:         defaultDedupeListKeyMap(),
+		columnWidths: columnWidths,
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -267,6 +294,10 @@ func (m DedupeListModel) findSimilarSkill(skill model.Skill) (model.Skill, float
 }
 
 func (m DedupeListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultDedupeListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -274,33 +305,18 @@ func (m DedupeListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 22 {
-			name = name[:19] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 8 {
-			scope = scope[:5] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		platform := truncateText(string(s.Platform), widths.platform)
+		scope := truncateText(s.DisplayScope(), widths.scope)
 
 		// Find similar skill info
 		similarSkill, nameScore, contentScore := m.findSimilarSkill(s)
-		similarName := similarSkill.Name
-		if len(similarName) > 22 {
-			similarName = similarName[:19] + "..."
-		}
+		similarName := truncateText(similarSkill.Name, widths.similar)
 
 		nameScoreStr := fmt.Sprintf("%.0f%%", nameScore*100)
 		contentScoreStr := fmt.Sprintf("%.0f%%", contentScore*100)
 
-		desc := s.Description
-		if len(desc) > 25 {
-			desc = desc[:22] + "..."
-		}
+		desc := truncateText(s.Description, widths.desc)
 
 		rows[i] = table.Row{
 			checkbox,
@@ -332,6 +348,7 @@ func (m DedupeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-12, 5) // Reserve space for title, warning, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -526,6 +543,14 @@ func (m DedupeListModel) View() string {
 	b.WriteString(dedupeListStyles.Status.Render(status))
 	b.WriteString("\n")
 
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(dedupeListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+
 	// Help
 	if m.showHelp {
 		help := m.renderFullHelp()
@@ -577,6 +602,33 @@ General:
 
 Tip: Keep the version you want, delete the duplicates!`
 	return dedupeListStyles.Help.Render(help)
+}
+
+func (m *DedupeListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultDedupeListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 14
+
+		descWidth := totalWidth - (checkboxWidth + widths.name + widths.platform + widths.scope + widths.similar + widths.nameScore + widths.contentScore + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Similar To", Width: widths.similar},
+		{Title: "Name%", Width: widths.nameScore},
+		{Title: "Content%", Width: widths.contentScore},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

@@ -47,6 +47,20 @@ type syncListKeyMap struct {
 	Quit      key.Binding
 }
 
+type syncListColumnWidths struct {
+	name  int
+	scope int
+	desc  int
+}
+
+func defaultSyncListColumnWidths() syncListColumnWidths {
+	return syncListColumnWidths{
+		name:  25,
+		scope: 12,
+		desc:  60,
+	}
+}
+
 func defaultSyncListKeyMap() syncListKeyMap {
 	return syncListKeyMap{
 		Up: key.NewBinding(
@@ -109,6 +123,7 @@ type SyncListModel struct {
 	quitting       bool
 	sourcePlatform model.Platform
 	targetPlatform model.Platform
+	columnWidths   syncListColumnWidths
 }
 
 // Styles for the sync list TUI.
@@ -119,6 +134,7 @@ var syncListStyles = struct {
 	FilterInput lipgloss.Style
 	Confirm     lipgloss.Style
 	Status      lipgloss.Style
+	Description lipgloss.Style
 	Selected    lipgloss.Style
 	Checkbox    lipgloss.Style
 }{
@@ -128,17 +144,19 @@ var syncListStyles = struct {
 	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 }
 
 // NewSyncListModel creates a new sync list model.
 func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncListModel {
+	columnWidths := defaultSyncListColumnWidths()
 	columns := []table.Column{
 		{Title: " ", Width: 3}, // Checkbox column
-		{Title: "Name", Width: 25},
-		{Title: "Scope", Width: 12},
-		{Title: "Description", Width: 50},
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Sort skills alphabetically by name (case-insensitive)
@@ -159,6 +177,7 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncL
 		keys:           defaultSyncListKeyMap(),
 		sourcePlatform: source,
 		targetPlatform: target,
+		columnWidths:   columnWidths,
 	}
 
 	rows := m.skillsToRows(skills)
@@ -187,6 +206,10 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncL
 }
 
 func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultSyncListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -194,14 +217,8 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 50 {
-			desc = desc[:47] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		desc := truncateText(s.Description, widths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
@@ -228,6 +245,7 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-10, 5) // Reserve space for title, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -423,6 +441,14 @@ func (m SyncListModel) View() string {
 	b.WriteString(syncListStyles.Status.Render(status))
 	b.WriteString("\n")
 
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(syncListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+
 	// Help
 	if m.showHelp {
 		help := m.renderFullHelp()
@@ -474,6 +500,37 @@ General:
   ?        Toggle full help
   q        Quit without syncing`
 	return syncListStyles.Help.Render(help)
+}
+
+func (m *SyncListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultSyncListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 6
+		nameWidth := widths.name
+		scopeWidth := widths.scope
+
+		descWidth := totalWidth - (checkboxWidth + nameWidth + scopeWidth + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+			remaining := totalWidth - (checkboxWidth + scopeWidth + separatorWidth + descWidth)
+			if remaining > 0 {
+				nameWidth = max(15, remaining)
+			}
+		}
+
+		widths.name = nameWidth
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

@@ -45,6 +45,22 @@ type scopeListKeyMap struct {
 	Quit      key.Binding
 }
 
+type scopeListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func defaultScopeListColumnWidths() scopeListColumnWidths {
+	return scopeListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    40,
+		desc:     50,
+	}
+}
+
 func defaultScopeListKeyMap() scopeListKeyMap {
 	return scopeListKeyMap{
 		Up: key.NewBinding(
@@ -101,6 +117,7 @@ type ScopeListModel struct {
 	width        int
 	height       int
 	quitting     bool
+	columnWidths scopeListColumnWidths
 }
 
 // Styles for the scope list TUI.
@@ -113,6 +130,7 @@ var scopeListStyles = struct {
 	ScopeTab    lipgloss.Style
 	ScopeActive lipgloss.Style
 	Info        lipgloss.Style
+	Description lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -122,15 +140,17 @@ var scopeListStyles = struct {
 	ScopeTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	ScopeActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
 	Info:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 // NewScopeListModel creates a new scope list model.
 func NewScopeListModel(skills []model.Skill) ScopeListModel {
+	columnWidths := defaultScopeListColumnWidths()
 	columns := []table.Column{
-		{Title: "Name", Width: 25},
-		{Title: "Platform", Width: 12},
-		{Title: "Scope", Width: 40},
-		{Title: "Description", Width: 35},
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Collect unique scopes from skills
@@ -158,6 +178,7 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 		keys:         defaultScopeListKeyMap(),
 		scopeOptions: scopeOptions,
 		scopeIndex:   -1, // -1 means "all"
+		columnWidths: columnWidths,
 	}
 
 	rows := m.skillsToRows(skills)
@@ -186,24 +207,16 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 }
 
 func (m ScopeListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultScopeListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 40 {
-			scope = scope[:37] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 35 {
-			desc = desc[:32] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		platform := truncateText(string(s.Platform), widths.platform)
+		scope := truncateText(s.DisplayScope(), widths.scope)
+		desc := truncateText(s.Description, widths.desc)
 		rows[i] = table.Row{
 			name,
 			platform,
@@ -230,6 +243,7 @@ func (m ScopeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-12, 5) // Reserve space for title, scope tabs, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle filtering mode
@@ -394,6 +408,14 @@ func (m ScopeListModel) View() string {
 	b.WriteString(scopeListStyles.Status.Render(status))
 	b.WriteString("\n")
 
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(scopeListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+
 	// Help
 	if m.showHelp {
 		help := m.renderFullHelp()
@@ -486,6 +508,27 @@ General:
   ?        Toggle full help
   q        Quit`
 	return scopeListStyles.Help.Render(help)
+}
+
+func (m *ScopeListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultScopeListColumnWidths()
+	if totalWidth > 0 {
+		const separatorWidth = 6
+		descWidth := totalWidth - (widths.name + widths.platform + widths.scope + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

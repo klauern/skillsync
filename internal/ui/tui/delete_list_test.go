@@ -881,9 +881,9 @@ func TestDeleteListModel_LongNameTruncation(t *testing.T) {
 	if len(row[1]) > 25 {
 		t.Errorf("expected name to be max 25 chars, got %d: %s", len(row[1]), row[1])
 	}
-	// Description should be truncated to 40 chars with ellipsis
-	if len(row[4]) > 40 {
-		t.Errorf("expected description to be max 40 chars, got %d: %s", len(row[4]), row[4])
+	// Description should be truncated to 60 chars with ellipsis
+	if len(row[4]) > 60 {
+		t.Errorf("expected description to be max 60 chars, got %d: %s", len(row[4]), row[4])
 	}
 }
 

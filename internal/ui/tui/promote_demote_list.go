@@ -48,6 +48,24 @@ type promoteDemoteListKeyMap struct {
 	Quit       key.Binding
 }
 
+type promoteDemoteListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	target   int
+	desc     int
+}
+
+func defaultPromoteDemoteListColumnWidths() promoteDemoteListColumnWidths {
+	return promoteDemoteListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    10,
+		target:   12,
+		desc:     50,
+	}
+}
+
 func defaultPromoteDemoteListKeyMap() promoteDemoteListKeyMap {
 	return promoteDemoteListKeyMap{
 		Up: key.NewBinding(
@@ -114,6 +132,7 @@ type PromoteDemoteListModel struct {
 	height        int
 	quitting      bool
 	removeSource  bool // move instead of copy
+	columnWidths  promoteDemoteListColumnWidths
 }
 
 // Styles for the promote/demote list TUI.
@@ -125,6 +144,7 @@ var promoteDemoteListStyles = struct {
 	Confirm     lipgloss.Style
 	Status      lipgloss.Style
 	Info        lipgloss.Style
+	Description lipgloss.Style
 	Checkbox    lipgloss.Style
 	Promote     lipgloss.Style
 	Demote      lipgloss.Style
@@ -137,6 +157,7 @@ var promoteDemoteListStyles = struct {
 	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	Info:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	Promote:     lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Demote:      lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
@@ -164,23 +185,25 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 		return strings.ToLower(movableSkills[i].Name) < strings.ToLower(movableSkills[j].Name)
 	})
 
+	columnWidths := defaultPromoteDemoteListColumnWidths()
 	columns := []table.Column{
-		{Title: " ", Width: 3},            // Checkbox column
-		{Title: "Name", Width: 25},        // Skill name
-		{Title: "Platform", Width: 12},    // Platform
-		{Title: "Scope", Width: 10},       // Current scope
-		{Title: "Can Move To", Width: 12}, // Target scope
-		{Title: "Description", Width: 30}, // Description
+		{Title: " ", Width: 3}, // Checkbox column
+		{Title: "Name", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Scope", Width: columnWidths.scope},
+		{Title: "Can Move To", Width: columnWidths.target},
+		{Title: "Description", Width: columnWidths.desc},
 	}
 
 	// Initialize with no skills selected
 	selected := make(map[string]bool)
 
 	m := PromoteDemoteListModel{
-		skills:   movableSkills,
-		filtered: movableSkills,
-		selected: selected,
-		keys:     defaultPromoteDemoteListKeyMap(),
+		skills:       movableSkills,
+		filtered:     movableSkills,
+		selected:     selected,
+		keys:         defaultPromoteDemoteListKeyMap(),
+		columnWidths: columnWidths,
 	}
 
 	rows := m.skillsToRows(movableSkills)
@@ -209,6 +232,10 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 }
 
 func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultPromoteDemoteListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -220,18 +247,9 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
+		name := truncateText(s.Name, widths.name)
+		platform := truncateText(string(s.Platform), widths.platform)
+		scope := truncateText(s.DisplayScope(), widths.scope)
 
 		// Determine target scope based on current scope
 		var targetScope string
@@ -244,10 +262,7 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			targetScope = "-"
 		}
 
-		desc := s.Description
-		if len(desc) > 30 {
-			desc = desc[:27] + "..."
-		}
+		desc := truncateText(s.Description, widths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
@@ -276,6 +291,7 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-12, 5) // Reserve space for title, info, help, status
 		m.table.SetHeight(newHeight)
+		m.applyColumnWidths(msg.Width)
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -534,6 +550,14 @@ func (m PromoteDemoteListModel) View() string {
 	b.WriteString(promoteDemoteListStyles.Status.Render(status))
 	b.WriteString("\n")
 
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(promoteDemoteListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+
 	// Help
 	if m.showHelp {
 		help := m.renderFullHelp()
@@ -587,6 +611,31 @@ General:
   ?        Toggle full help
   q        Quit without changes`
 	return promoteDemoteListStyles.Help.Render(help)
+}
+
+func (m *PromoteDemoteListModel) applyColumnWidths(totalWidth int) {
+	widths := defaultPromoteDemoteListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 10
+
+		descWidth := totalWidth - (checkboxWidth + widths.name + widths.platform + widths.scope + widths.target + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+
+	m.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Can Move To", Width: widths.target},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

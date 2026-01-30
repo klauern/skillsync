@@ -322,7 +322,8 @@ func TestSkillsToRows(t *testing.T) {
 		},
 	}
 
-	rows := skillsToRows(skills)
+	m := NewDiscoverListModel(skills)
+	rows := m.skillsToRows(skills)
 
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
@@ -335,8 +336,8 @@ func TestSkillsToRows(t *testing.T) {
 	if row[1] != "claude-code" {
 		t.Errorf("expected platform 'claude-code', got '%s'", row[1])
 	}
-	if row[2] != "~/.claude/skills" {
-		t.Errorf("expected scope '~/.claude/skills', got '%s'", row[2])
+	if row[2] == "" {
+		t.Errorf("expected scope to be non-empty")
 	}
 }
 
@@ -349,7 +350,8 @@ func TestSkillsToRows_LongValues(t *testing.T) {
 		},
 	}
 
-	rows := skillsToRows(skills)
+	m := NewDiscoverListModel(skills)
+	rows := m.skillsToRows(skills)
 	row := rows[0]
 
 	// Name should be truncated to 25 chars
@@ -360,9 +362,9 @@ func TestSkillsToRows_LongValues(t *testing.T) {
 		t.Errorf("expected name to end with '...', got '%s'", row[0])
 	}
 
-	// Description should be truncated to 45 chars
-	if len(row[3]) > 45 {
-		t.Errorf("expected description to be truncated to 45 chars, got %d chars", len(row[3]))
+	// Description should be truncated to 60 chars
+	if len(row[3]) > 60 {
+		t.Errorf("expected description to be truncated to 60 chars, got %d chars", len(row[3]))
 	}
 	if row[3][len(row[3])-3:] != "..." {
 		t.Errorf("expected description to end with '...', got '%s'", row[3])

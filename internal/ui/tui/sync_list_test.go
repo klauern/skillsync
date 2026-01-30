@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -481,6 +482,29 @@ func TestSyncListModel_WindowResize(t *testing.T) {
 
 	if sm.height != 40 {
 		t.Errorf("expected height 40, got %d", sm.height)
+	}
+}
+
+func TestSyncListModel_ViewShowsSelectedDescription(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "This is a long description that should be visible in the detail view.",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	sm := newModel.(SyncListModel)
+
+	view := sm.View()
+	if !strings.Contains(view, "Description:") {
+		t.Error("expected description label in view")
+	}
+	if !strings.Contains(view, skills[0].Description) {
+		t.Error("expected full description text in view")
 	}
 }
 
