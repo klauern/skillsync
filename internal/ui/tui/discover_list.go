@@ -103,6 +103,22 @@ func defaultDiscoverListKeyMap() discoverListKeyMap {
 	}
 }
 
+type discoverListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func defaultDiscoverListColumnWidths() discoverListColumnWidths {
+	return discoverListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    15,
+		desc:     60,
+	}
+}
+
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
 	table           table.Model
@@ -137,6 +153,7 @@ var discoverListStyles = struct {
 	DetailTitle    lipgloss.Style
 	PlatformTab    lipgloss.Style
 	PlatformActive lipgloss.Style
+	Description    lipgloss.Style
 }{
 	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -147,6 +164,7 @@ var discoverListStyles = struct {
 	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
 	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
+	Description:    lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 type discoverListPhase int
@@ -168,12 +186,7 @@ const (
 	discoverListDetailHeight  = discoverListDetailLines + 1 + 2 // title + content + border
 )
 
-type discoverListColumnWidths struct {
-	name     int
-	platform int
-	scope    int
-	desc     int
-}
+
 
 // NewDiscoverListModel creates a new discover list model.
 func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
@@ -597,6 +610,14 @@ func (m DiscoverListModel) View() string {
 	}
 	b.WriteString(discoverListStyles.Status.Render(status))
 	b.WriteString("\n")
+
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(discoverListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
 
 	// Help
 	if m.showHelp {
