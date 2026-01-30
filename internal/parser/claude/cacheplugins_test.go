@@ -146,6 +146,51 @@ This is the skill content.
 	}
 }
 
+func TestCachePluginsParser_ParseSkillFile_InvalidNameFallsBackToDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a mock plugin directory structure
+	pluginDir := filepath.Join(tmpDir, "marketplace", "test-plugin", "1.0.0")
+	skillDir := filepath.Join(pluginDir, "valid-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	// Create a SKILL.md file with an invalid name in frontmatter
+	skillContent := `---
+name: Invalid Name
+description: A test skill
+---
+Content`
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	// #nosec G306 - test file
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	parser := NewCachePluginsParser(tmpDir)
+	entry := &PluginIndexEntry{
+		PluginKey:   "test-plugin@marketplace",
+		PluginName:  "test-plugin",
+		Marketplace: "marketplace",
+		Version:     "1.0.0",
+		InstallPath: pluginDir,
+	}
+
+	skill, err := parser.parseSkillFile(skillPath, entry)
+	if err != nil {
+		t.Fatalf("failed to parse skill file: %v", err)
+	}
+
+	if skill.Name != "valid-skill" {
+		t.Errorf("expected fallback name 'valid-skill', got %q", skill.Name)
+	}
+	if skill.Description != "A test skill" {
+		t.Errorf("expected description 'A test skill', got %q", skill.Description)
+	}
+}
+
 func TestCachePluginsParser_ParseSkillFile_NoFrontmatter(t *testing.T) {
 	tmpDir := t.TempDir()
 

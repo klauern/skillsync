@@ -198,9 +198,18 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 		name = filepath.Base(filepath.Dir(filePath))
 	}
 
-	// Validate skill name
+	// Validate skill name, falling back to directory name for non-conforming plugin skills.
 	if err := parser.ValidateSkillName(name); err != nil {
-		return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
+		fallback := filepath.Base(filepath.Dir(filePath))
+		if fallback != name {
+			if fallbackErr := parser.ValidateSkillName(fallback); fallbackErr == nil {
+				name = fallback
+			} else {
+				return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
+			}
+		} else {
+			return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
+		}
 	}
 
 	// Add plugin metadata
