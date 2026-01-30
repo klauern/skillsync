@@ -216,6 +216,7 @@ Use interactive mode for full control:
 
 ```bash
 skillsync sync --interactive cursor claude-code
+skillsync sync --interactive --delete cursor claude-code
 ```
 
 This launches a TUI where you can:
@@ -223,6 +224,7 @@ This launches a TUI where you can:
 - Preview diffs for each skill
 - Choose resolution strategy per-skill
 - Confirm before applying changes
+- In delete mode, select which matching target skills to remove
 
 ## Understanding Sync Strategies
 

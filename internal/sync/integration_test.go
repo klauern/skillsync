@@ -442,10 +442,12 @@ Content that stays the same.
 func TestIntegration_ResultSummary_Golden(t *testing.T) {
 	// Test that Result.Summary() output matches golden file
 	result := &Result{
-		Source:   model.ClaudeCode,
-		Target:   model.Cursor,
-		Strategy: StrategyOverwrite,
-		DryRun:   false,
+		Source:         model.ClaudeCode,
+		Target:         model.Cursor,
+		Strategy:       StrategyOverwrite,
+		DryRun:         false,
+		SelectedCount:  3,
+		TotalAvailable: 3,
 		Skills: []SkillResult{
 			{Skill: model.Skill{Name: "created-skill"}, Action: ActionCreated},
 			{Skill: model.Skill{Name: "updated-skill"}, Action: ActionUpdated},
@@ -459,10 +461,12 @@ func TestIntegration_ResultSummary_Golden(t *testing.T) {
 
 func TestIntegration_ResultSummary_DryRun_Golden(t *testing.T) {
 	result := &Result{
-		Source:   model.ClaudeCode,
-		Target:   model.Cursor,
-		Strategy: StrategyThreeWay,
-		DryRun:   true,
+		Source:         model.ClaudeCode,
+		Target:         model.Cursor,
+		Strategy:       StrategyThreeWay,
+		DryRun:         true,
+		SelectedCount:  2,
+		TotalAvailable: 2,
 		Skills: []SkillResult{
 			{Skill: model.Skill{Name: "skill-1"}, Action: ActionCreated},
 			{Skill: model.Skill{Name: "skill-2"}, Action: ActionCreated},
@@ -480,10 +484,12 @@ func TestIntegration_ResultSummary_WithConflicts_Golden(t *testing.T) {
 	}
 
 	result := &Result{
-		Source:   model.Cursor,
-		Target:   model.Codex,
-		Strategy: StrategyThreeWay,
-		DryRun:   false,
+		Source:         model.Cursor,
+		Target:         model.Codex,
+		Strategy:       StrategyThreeWay,
+		DryRun:         false,
+		SelectedCount:  2,
+		TotalAvailable: 2,
 		Skills: []SkillResult{
 			{Skill: model.Skill{Name: "clean-skill"}, Action: ActionCreated},
 			{Skill: model.Skill{Name: "conflict-skill"}, Action: ActionConflict, Conflict: conflict},
@@ -496,10 +502,12 @@ func TestIntegration_ResultSummary_WithConflicts_Golden(t *testing.T) {
 
 func TestIntegration_ResultSummary_WithFailures_Golden(t *testing.T) {
 	result := &Result{
-		Source:   model.ClaudeCode,
-		Target:   model.Codex,
-		Strategy: StrategyOverwrite,
-		DryRun:   false,
+		Source:         model.ClaudeCode,
+		Target:         model.Codex,
+		Strategy:       StrategyOverwrite,
+		DryRun:         false,
+		SelectedCount:  2,
+		TotalAvailable: 2,
 		Skills: []SkillResult{
 			{Skill: model.Skill{Name: "success-skill"}, Action: ActionCreated},
 			{Skill: model.Skill{Name: "failed-skill"}, Action: ActionFailed, Error: os.ErrPermission},

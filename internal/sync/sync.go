@@ -109,6 +109,8 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		)
 		return result, fmt.Errorf("failed to parse source skills: %w", err)
 	}
+	result.SelectedCount = len(sourceSkills)
+	result.TotalAvailable = len(sourceSkills)
 
 	logging.Debug("parsed source skills",
 		logging.Platform(string(source)),
@@ -531,6 +533,8 @@ func (s *Synchronizer) SyncWithSkills(
 		DryRun:   opts.DryRun,
 		Skills:   make([]SkillResult, 0),
 	}
+	result.SelectedCount = len(skills)
+	result.TotalAvailable = len(skills)
 
 	// Set default strategy
 	if result.Strategy == "" {
@@ -638,6 +642,8 @@ func (s *Synchronizer) DeleteWithSkills(
 		DryRun:   opts.DryRun,
 		Skills:   make([]SkillResult, 0),
 	}
+	result.SelectedCount = len(sourceSkills)
+	result.TotalAvailable = len(sourceSkills)
 
 	// Get target path based on scope
 	targetPath := opts.TargetPath
