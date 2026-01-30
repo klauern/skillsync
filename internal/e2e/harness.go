@@ -62,10 +62,10 @@ func NewHarness(t *testing.T) *Harness {
 	// - New vars (SKILLSYNC_*_SKILLS_PATHS) are used by config.applyEnvironment() and tiered parser
 	h.SetEnv("SKILLSYNC_CLAUDE_CODE_PATH", homeDir+"/.claude/commands")
 	h.SetEnv("SKILLSYNC_CURSOR_PATH", homeDir+"/.cursor/rules")
-	h.SetEnv("SKILLSYNC_CODEX_PATH", homeDir+"/.codex")
+	h.SetEnv("SKILLSYNC_CODEX_PATH", homeDir+"/.codex/skills")
 	h.SetEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", homeDir+"/.claude/commands")
 	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
-	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
+	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex/skills")
 
 	return h
 }
