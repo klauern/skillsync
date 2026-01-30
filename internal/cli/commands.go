@@ -37,6 +37,12 @@ import (
 	"github.com/klauern/skillsync/internal/validation"
 )
 
+var (
+	runSyncList   = tui.RunSyncList
+	runSyncDiff   = tui.RunSyncDiff
+	runDeleteList = tui.RunDeleteList
+)
+
 func configCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "config",
@@ -603,6 +609,116 @@ func discoverSkillsInteractive(skills []model.Skill) error {
 	return nil
 }
 
+// syncSkillsInteractive runs the interactive TUI for sync skill selection
+func syncSkillsInteractive(cfg *syncConfig) error {
+	if len(cfg.sourceSkills) == 0 {
+		fmt.Println("No skills found to sync.")
+		return nil
+	}
+
+	// Parse existing target skills for diff preview
+	targetSkills, err := parsePlatformSkills(cfg.targetSpec.Platform)
+	if err != nil {
+		// Not fatal - target may not have any skills yet
+		targetSkills = []model.Skill{}
+	}
+
+	// Create a map of target skills by name for quick lookup
+	targetSkillMap := make(map[string]model.Skill)
+	for _, s := range targetSkills {
+		targetSkillMap[s.Name] = s
+	}
+
+	// Main TUI loop - allows navigating between list and diff preview
+	for {
+		result, err := runSyncList(cfg.sourceSkills, cfg.sourceSpec.Platform, cfg.targetSpec.Platform, nil)
+		if err != nil {
+			return fmt.Errorf("TUI error: %w", err)
+		}
+
+		switch result.Action {
+		case tui.SyncActionNone:
+			// User quit without action
+			fmt.Println("Sync cancelled.")
+			return nil
+
+		case tui.SyncActionPreview:
+			// Show diff preview for selected skill
+			var targetSkill *model.Skill
+			if ts, exists := targetSkillMap[result.PreviewSkill.Name]; exists {
+				targetSkill = &ts
+			}
+
+			diffResult, err := runSyncDiff(result.PreviewSkill, targetSkill, cfg.sourceSpec.Platform, cfg.targetSpec.Platform)
+			if err != nil {
+				return fmt.Errorf("diff preview error: %w", err)
+			}
+
+			switch diffResult.Action {
+			case tui.DiffActionBack:
+				// Continue the loop to go back to the list
+				continue
+			case tui.DiffActionSync:
+				// Sync just this one skill
+				if err := executeSyncForSkills(cfg, []model.Skill{diffResult.Skill}, len(cfg.sourceSkills)); err != nil {
+					return err
+				}
+				return nil
+			case tui.DiffActionNone:
+				// User quit
+				fmt.Println("Sync cancelled.")
+				return nil
+			}
+
+		case tui.SyncActionSync:
+			// Sync selected skills
+			if len(result.SelectedSkills) == 0 {
+				fmt.Println("No skills selected.")
+				return nil
+			}
+
+			if err := executeSyncForSkills(cfg, result.SelectedSkills, len(cfg.sourceSkills)); err != nil {
+				return err
+			}
+			return nil
+		}
+	}
+}
+
+// executeSyncForSkills performs the actual sync operation for the given skills
+func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable int) error {
+	if err := runSyncBackup(cfg); err != nil {
+		return err
+	}
+
+	opts := sync.Options{
+		DryRun:      cfg.dryRun,
+		Strategy:    cfg.strategy,
+		TargetScope: cfg.targetSpec.TargetScope(),
+	}
+
+	syncer := sync.New()
+	result, err := syncer.SyncWithSkills(skills, cfg.targetSpec.Platform, opts)
+	if err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+	ensureSyncSource(result, cfg.sourceSpec.Platform)
+	if totalAvailable <= 0 {
+		totalAvailable = len(skills)
+	}
+	result.SelectedCount = len(skills)
+	result.TotalAvailable = totalAvailable
+
+	displaySyncResults(result)
+
+	if !result.Success() {
+		return errors.New("sync completed with errors")
+	}
+
+	return nil
+}
+
+
 // outputSkills formats and prints skills in the requested format
 func outputSkills(skills []model.Skill, format string) error {
 	switch format {
@@ -901,6 +1017,13 @@ func syncCommand() *cli.Command {
      three-way   - Intelligent merge with conflict detection
      interactive - Prompt for each conflict
 
+   Delete Mode:
+     Use --delete to remove skills from target that exist in source.
+     This is the inverse of sync: instead of copying TO target, it removes
+     skills FROM target that match the source skill names.
+     Use --interactive --delete to select which matching skills to remove.
+
+
    Examples:
      skillsync sync cursor claudecode             # All cursor skills to claudecode user scope
      skillsync sync cursor:repo claudecode:user   # Repo skills to user scope
@@ -908,6 +1031,8 @@ func syncCommand() *cli.Command {
      skillsync tui                                # Interactive dashboard mode
      skillsync sync --dry-run cursor codex        # Preview changes
      skillsync sync --strategy=skip cursor codex
+     skillsync sync --interactive cursor codex    # Interactive TUI mode
+     skillsync sync --interactive --delete cursor codex  # Select which skills to delete
      skillsync sync --include-plugins claudecode cursor  # Include plugin skills
      skillsync sync claudecode:plugin cursor      # Sync only plugin skills
      skillsync sync --include-prompts claudecode codex   # Include prompts/commands
@@ -916,9 +1041,35 @@ func syncCommand() *cli.Command {
 
    See also:
      skillsync delete <source> <target>           # Remove skills from target`,
-		Flags: syncFlags(),
+		Flags: append(syncFlags(), &cli.BoolFlag{
+			Name:    "interactive",
+			Aliases: []string{"i"},
+			Usage:   "Interactive TUI mode with skill selection and diff preview (or delete selection with --delete)",
+		}),
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			return runSyncCommand(cmd, false)
+			if !cmd.Bool("interactive") {
+				return runSyncCommand(cmd, false)
+			}
+
+			deleteMode := cmd.Bool("delete")
+			cfg, err := parseSyncConfig(cmd, cmd.Name, deleteMode)
+			if err != nil {
+				return err
+			}
+
+			if cfg.sourceSpec.HasScopes() {
+				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes, cfg.includePlugins)
+			} else {
+				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, nil, cfg.includePlugins)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to parse source skills: %w", err)
+			}
+
+			if deleteMode {
+				return syncDeleteInteractive(cfg)
+			}
+			return syncSkillsInteractive(cfg)
 		},
 	}
 }
@@ -1148,7 +1299,7 @@ func runSyncOrphanDeletion(cfg *syncConfig) error {
 		includePlugins: cfg.includePlugins,
 		sourceSkills:   orphans,
 	}
-	if err := executeDeleteForSkills(deleteCfg, orphans, false); err != nil {
+	if err := executeDeleteWithConfirmation(deleteCfg, orphans, false); err != nil {
 		return fmt.Errorf("orphan deletion failed: %w", err)
 	}
 	return nil
@@ -1395,6 +1546,15 @@ func backupExistingTargetSkills(
 	return createBackupsForSkills(targetPlatform, toBackup, description, tags)
 }
 
+func ensureSyncSource(result *sync.Result, sourcePlatform model.Platform) {
+	if result == nil {
+		return
+	}
+	if result.Source == "" {
+		result.Source = sourcePlatform
+	}
+}
+
 // displaySyncResults shows the results of a sync operation
 func displaySyncResults(result *sync.Result) {
 	fmt.Println()
@@ -1424,9 +1584,73 @@ func displaySyncResults(result *sync.Result) {
 	}
 }
 
+// syncDeleteInteractive runs the interactive TUI for delete mode with selection.
+func syncDeleteInteractive(cfg *syncConfig) error {
+	if len(cfg.sourceSkills) == 0 {
+		fmt.Println("No skills found to delete.")
+		return nil
+	}
+
+	// Parse target skills with scope filtering to build delete candidates.
+	targetScope := cfg.targetSpec.TargetScope()
+	targetSkills, err := parsePlatformSkillsWithScope(cfg.targetSpec.Platform, []model.SkillScope{targetScope}, false)
+	if err != nil {
+		return fmt.Errorf("failed to parse target skills: %w", err)
+	}
+
+	sourceByName := make(map[string]model.Skill)
+	for _, skill := range cfg.sourceSkills {
+		sourceByName[skill.Name] = skill
+	}
+
+	var candidates []model.Skill
+	for _, skill := range targetSkills {
+		if _, exists := sourceByName[skill.Name]; exists {
+			candidates = append(candidates, skill)
+		}
+	}
+
+	if len(candidates) == 0 {
+		fmt.Println("No matching target skills found to delete.")
+		return nil
+	}
+
+	result, err := runDeleteList(candidates)
+	if err != nil {
+		return fmt.Errorf("delete selection error: %w", err)
+	}
+
+	switch result.Action {
+	case tui.DeleteActionNone:
+		fmt.Println("Delete cancelled.")
+		return nil
+	case tui.DeleteActionDelete:
+		if len(result.SelectedSkills) == 0 {
+			fmt.Println("No skills selected for deletion.")
+			return nil
+		}
+
+		selectedSources := make([]model.Skill, 0, len(result.SelectedSkills))
+		for _, skill := range result.SelectedSkills {
+			if sourceSkill, exists := sourceByName[skill.Name]; exists {
+				selectedSources = append(selectedSources, sourceSkill)
+			}
+		}
+
+		if len(selectedSources) == 0 {
+			fmt.Println("No matching source skills selected for deletion.")
+			return nil
+		}
+
+		return executeDeleteForSkills(cfg, selectedSources, len(candidates))
+	}
+
+	return nil
+}
+
 // syncDeleteMode handles the delete sync mode: removing skills from target that exist in source.
 func syncDeleteMode(cfg *syncConfig) error {
-	return executeDeleteForSkills(cfg, cfg.sourceSkills, false)
+	return executeDeleteWithConfirmation(cfg, cfg.sourceSkills, false)
 }
 
 func filterDeleteCandidates(sourceSkills, targetSkills []model.Skill) []model.Skill {
@@ -1493,7 +1717,7 @@ func selectSourceSkillsForDelete(sourceSkills, selectedTargets []model.Skill) []
 	return selected
 }
 
-func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, confirmed bool) error {
+func executeDeleteWithConfirmation(cfg *syncConfig, skills []model.Skill, confirmed bool) error {
 	if len(skills) == 0 {
 		fmt.Println("No skills selected.")
 		return nil
@@ -1528,6 +1752,15 @@ func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, confirmed boo
 		}
 	}
 
+	return executeDeleteForSkills(cfg, skills, len(skills))
+}
+
+func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable int) error {
+	if len(skills) == 0 {
+		fmt.Println("No skills selected for deletion.")
+		return nil
+	}
+
 	// Create backup before deletion (unless skipped or dry-run)
 	if !cfg.dryRun && !cfg.skipBackup {
 		prepareBackup(cfg.targetSpec.Platform)
@@ -1558,6 +1791,12 @@ func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, confirmed boo
 	if err != nil {
 		return fmt.Errorf("delete sync failed: %w", err)
 	}
+	ensureSyncSource(result, cfg.sourceSpec.Platform)
+	if totalAvailable <= 0 {
+		totalAvailable = len(skills)
+	}
+	result.SelectedCount = len(skills)
+	result.TotalAvailable = totalAvailable
 
 	displaySyncResults(result)
 
@@ -3406,7 +3645,7 @@ func runDeleteTUI() error {
 		return nil
 	}
 
-	result, err := tui.RunDeleteList(allSkills)
+	result, err := runDeleteList(allSkills)
 	if err != nil {
 		return fmt.Errorf("delete TUI error: %w", err)
 	}

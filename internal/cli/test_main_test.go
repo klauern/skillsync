@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -19,6 +20,14 @@ func TestMain(m *testing.M) {
 		_ = os.RemoveAll(tempHome)
 		os.Exit(1)
 	}
+
+	claudePath := filepath.Join(tempHome, ".claude", "skills")
+	cursorPath := filepath.Join(tempHome, ".cursor", "skills")
+	codexPath := filepath.Join(tempHome, ".codex", "skills")
+
+	_ = os.MkdirAll(claudePath, 0o750)
+	_ = os.MkdirAll(cursorPath, 0o750)
+	_ = os.MkdirAll(codexPath, 0o750)
 
 	code := m.Run()
 
