@@ -226,6 +226,38 @@ This launches a TUI where you can:
 - Confirm before applying changes
 - In delete mode, select which matching target skills to remove
 
+#### Partial Sync Selection Flow (CLI)
+
+Interactive sync always uses the source/target arguments you provide. The selection list
+only includes skills that match the source spec scopes (for example `cursor:repo,user`).
+Delete mode builds its list from target skills that share names with the source set and
+respects the target scope (repo or user).
+
+**Sync selection prompt (TUI):**
+- All skills are selected by default.
+- Confirmation message: `Sync N skill(s) to <target>? (y/n)`
+
+**Delete selection prompt (TUI):**
+- No skills are selected by default.
+- Confirmation message: `DELETE N skill(s)? This cannot be undone! (y/n)`
+
+#### Confirmation and Dry-Run Behavior
+
+**Non-interactive (`skillsync sync`):**
+- Shows a summary, then prompts `Proceed with sync?`
+- `--yes` skips the prompt.
+- `--dry-run` skips the prompt and prints a dry-run summary.
+
+**Non-interactive delete (`skillsync sync --delete`):**
+- Prompts `Delete N skill(s) from <target>?` with a dangerous default.
+- `--yes` skips the prompt.
+- `--dry-run` skips the prompt and prints a dry-run summary.
+
+**Interactive (`--interactive`):**
+- The TUI confirmation step is always required.
+- `--yes` does not bypass the TUI confirmation.
+- `--dry-run` still uses the TUI flow and prints a dry-run summary.
+
 ## Understanding Sync Strategies
 
 SkillSync offers six conflict resolution strategies:
