@@ -5,7 +5,7 @@
 Sync AI coding skills (Claude Code, Cursor, Codex) across platforms and projects.
 
 **Tech Stack**: Go 1.25.4, urfave/cli v3
-**Architecture**: CLI tool with cmd/ for entry point, internal/ for packages
+**Architecture**: CLI entry in `cmd/skillsync`, core packages in `internal/` (see `docs/architecture.md`)
 
 ## Why It Exists
 
@@ -15,43 +15,35 @@ preventing duplication and ensuring consistency.
 ## How to Work With It
 
 ### Running Locally
-```bash
-make run              # Build and run
-./bin/skillsync       # Direct binary execution
-```
+- `make run` - build and run (see `Makefile`)
+- `./bin/skillsync` - direct binary execution (after `make build`)
 
 ### Testing
-```bash
-make test             # Run tests with coverage
-make test-coverage    # View coverage report in browser
-```
+- `make test` - run tests with coverage
+- `make test-coverage` - view coverage report in browser
+- Convention: use stdlib `testing`; do not add testify
 
 ### Building
-```bash
-make build            # Build to bin/skillsync
-make install          # Install to GOPATH/bin
-```
+- `make build` - build to `bin/skillsync`
+- `make install` - install to `$GOPATH/bin`
 
 ### Quality Gates
-```bash
-make audit            # Run all checks (tidy, fmt, vet, lint, test)
-make fmt              # Format with gofumpt + goimports
-make lint             # Run golangci-lint (see .golangci.yml:1)
-```
+- `make audit` - run all checks (tidy, fmt, vet, lint, test)
+- `make fmt` - format with gofumpt + goimports
+- `make lint` - run golangci-lint (see `.golangci.yml`)
 
 ### Go Conventions
-- Format: gofumpt + goimports (Makefile:36)
-- Lint: golangci-lint with custom rules (.golangci.yml:1)
-- Package structure: cmd/ for binaries, internal/ for private packages
-- Error handling: Always check errors (errcheck enabled in .golangci.yml:6)
+- Package structure: `cmd/` for binaries, `internal/` for private packages
+- Error handling: always check errors (errcheck enabled)
+- Interfaces: define in consuming package
 
 ### Issue Tracking (bd)
 Track work in beads issues:
-```bash
-bd ready              # Find available work
-bd show <id>          # View details
-bd update <id> --status in_progress
-bd close <id>         # Complete work
-```
+- `bd ready` → `bd show <id>` → `bd update <id> --status in_progress` → `bd close <id>`
 
-**Session completion**: Always run `bd sync` and `git push` before ending.
+**Session completion**: `bd sync --flush-only` (local export)
+
+### Deep Dives
+- Architecture: `docs/architecture.md`
+- Testing & harness: `docs/testing.md`
+- Parser development: `docs/parser.md`

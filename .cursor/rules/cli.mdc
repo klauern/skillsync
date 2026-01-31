@@ -4,31 +4,16 @@ globs: ["internal/cli/*.go"]
 # CLI Development
 
 ## urfave/cli v3 Patterns
-Commands defined in [commands.go](mdc:internal/cli/commands.go).
+- Commands defined in [internal/cli/commands.go](mdc:internal/cli/commands.go)
+- Command `Description` includes extended usage and examples
+- Action functions delegate to helpers in `internal/cli` or domain packages
 
-**Command structure**:
-```go
-func fooCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "foo",
-        Usage: "One-line description",
-        Description: `Extended description with examples.
-   
-   Examples:
-     skillsync foo --flag value`,
-        Flags: []cli.Flag{...},
-        Action: func(ctx context.Context, cmd *cli.Command) error {
-            return doFoo(cmd.String("flag"))
-        },
-    }
-}
-```
-
-**Flag patterns**:
-- Use `Aliases: []string{"f"}` for short forms
+## Flag Patterns
+- Use `Aliases` for short forms
 - Add `Usage` for every flag
-- Use `Value:` for defaults
+- Use `Value` for defaults
+- Prefer typed getters in actions (`cmd.String`, `cmd.Bool`, etc.)
 
 ## Output
 - Use [ui/color.go](mdc:internal/ui/color.go) for colored output
-- Structured output: JSON/YAML via `--format` flag
+- Structured output: JSON/YAML via `--format` flag (see [internal/cli/commands.go](mdc:internal/cli/commands.go))

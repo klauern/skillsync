@@ -44,7 +44,7 @@ grep -q '\[tool\.mypy\]' pyproject.toml || test -f mypy.ini
 
 ### Go
 ```bash
-# gofumpt (preferred per CLAUDE.md)
+# gofumpt (preferred per AGENTS.md)
 grep -r 'gofumpt' .github/workflows/ || echo "Default: gofumpt"
 
 # golangci-lint
@@ -95,7 +95,7 @@ fd -tf --max-depth 4 'package.json|pyproject.toml|go.mod|Cargo.toml'
 | Go | gofumpt* | golangci-lint | - |
 | Rust | rustfmt | clippy | - |
 
-*User preference: use `gofumpt` over `gofmt` per CLAUDE.md
+*User preference: use `gofumpt` over `gofmt` per AGENTS.md
 
 ## Model Strategy
 

@@ -6,21 +6,12 @@ alwaysApply: true
 Sync AI coding skills (Claude Code, Cursor, Codex) across platforms.
 
 **Stack**: Go 1.25.4, urfave/cli v3
-
-## Architecture
-```mermaid
-graph LR
-    CLI[cli/] --> Model[model/]
-    CLI --> Parser[parser/]
-    CLI --> Sync[sync/]
-    Parser --> Model
-    Sync --> Model
-```
+**Architecture**: CLI entry in `cmd/skillsync`, core packages in `internal/` (see [docs/architecture.md](mdc:docs/architecture.md))
 
 ## Commands
 - Build: `make build` | Test: `make test` | Audit: `make audit`
 - Run: `./bin/skillsync --help`
 
 ## Issue Tracking
-`bd ready` → `bd show <id>` → `bd close <id>`
-Session end: `bd sync && git push`
+- Flow: `bd ready` → `bd show <id>` → `bd update <id> --status in_progress` → `bd close <id>`
+- Session completion: `bd sync --flush-only` (local export)

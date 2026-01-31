@@ -11,6 +11,7 @@ description: Testing patterns, e2e harness, and golden files
 - Colocated: `foo_test.go` in same package
 - Table-driven for multiple cases
 - Race detector enabled by default
+- Use stdlib `testing`; do not add testify
 
 ## E2E Testing
 Harness: [e2e/harness.go](mdc:internal/e2e/harness.go)
