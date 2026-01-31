@@ -97,6 +97,14 @@ func TestConfigureColors(t *testing.T) {
 			DisableColors()
 		}
 	}()
+	originalNoColor, hadNoColor := os.LookupEnv("NO_COLOR")
+	t.Cleanup(func() {
+		if hadNoColor {
+			_ = os.Setenv("NO_COLOR", originalNoColor)
+		} else {
+			_ = os.Unsetenv("NO_COLOR")
+		}
+	})
 
 	tests := []struct {
 		name          string
@@ -118,7 +126,13 @@ func TestConfigureColors(t *testing.T) {
 			EnableColors()
 
 			if tt.envNoColor {
-				t.Setenv("NO_COLOR", "1")
+				if err := os.Setenv("NO_COLOR", "1"); err != nil {
+					t.Fatalf("failed to set NO_COLOR: %v", err)
+				}
+			} else {
+				if err := os.Unsetenv("NO_COLOR"); err != nil {
+					t.Fatalf("failed to unset NO_COLOR: %v", err)
+				}
 			}
 
 			ConfigureColors(tt.setting)
