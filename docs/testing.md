@@ -2,7 +2,13 @@
 
 ## Overview
 
-[Describe the testing strategy and coverage expectations.]
+Testing focuses on deterministic, table-driven unit tests plus e2e coverage
+through the harness. Keep fixtures minimal, prefer stable outputs for golden
+files, and rely on stdlib `testing` for assertions.
+
+## Running
+- `make test` - All tests with coverage
+- `make test-coverage` - View coverage report in browser
 
 ## Unit Tests
 - Location: `*_test.go` alongside code under `internal/`

@@ -3,18 +3,6 @@ description: Implementing new platform parsers
 ---
 # Parser Development
 
-## Adding a New Platform
-
-1. Add platform constant to [model/platform.go](mdc:internal/model/platform.go)
-2. Create parser in `internal/parser/<platform>/`
-3. Implement `Parser` interface from [internal/parser/parser.go](mdc:internal/parser/parser.go)
-4. Register in [parser/tiered/factories.go](mdc:internal/parser/tiered/factories.go)
-
-## Example: Claude Parser
-See [parser/claude/claude.go](mdc:internal/parser/claude/claude.go)
-
-## Test Data
-Add fixtures to `testdata/skills/<platform>/`
-- Basic skill
-- Skill with assets
-- Edge cases (no frontmatter, etc.)
+Primary guidance lives in [docs/parser.md](mdc:docs/parser.md). Keep that
+document updated when adding new platforms, wiring parsers, or changing
+fixture expectations.

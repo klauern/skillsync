@@ -3,27 +3,6 @@ description: Testing patterns, e2e harness, and golden files
 ---
 # Testing
 
-## Running
-- `make test` - All tests with coverage
-- `make test-coverage` - View in browser
-
-## Unit Tests
-- Colocated: `foo_test.go` in same package
-- Table-driven for multiple cases
-- Race detector enabled by default
-- Use stdlib `testing`; do not add testify
-
-## E2E Testing
-Harness: [e2e/harness.go](mdc:internal/e2e/harness.go)
-- Creates isolated SKILLSYNC_HOME
-- Captures stdout/stderr
-- Use `NewHarness(t)` then `Run("subcommand", "args")`
-
-## Golden Files
-Location: `testdata/`
-- Export formats: `testdata/export/*.golden`
-- Sync results: `testdata/sync/*.golden`
-Update: Run tests with `-update` flag
-
-## Helpers
-- [util/testhelpers.go](mdc:internal/util/testhelpers.go)
+Primary guidance lives in [docs/testing.md](mdc:docs/testing.md). Keep that
+document updated when test patterns, harness usage, or golden file workflow
+changes.

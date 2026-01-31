@@ -3,22 +3,5 @@ description: Package architecture, dependencies, and key interfaces
 ---
 # Architecture
 
-## Package Dependencies
-- CLI entry: `cmd/skillsync` → `internal/cli`
-- Core packages: `internal/parser`, `internal/sync`, `internal/export`, `internal/backup`
-- Shared model types: `internal/model`
-- Tiered parsers: `internal/parser/tiered` with platform parsers under `internal/parser/`
-
-## Core Interfaces
-- Parser interface: [internal/parser/parser.go](mdc:internal/parser/parser.go)
-- Platform enum: [internal/model/platform.go](mdc:internal/model/platform.go)
-- Sync strategies: [internal/sync/strategy.go](mdc:internal/sync/strategy.go)
-
-## Data Flow
-1. CLI command invoked
-2. Parser discovers skills from platform config
-3. Sync applies strategy to merge skills
-4. Export writes to target format
-
-## Deep Dive
-- Architecture diagram and details: [docs/architecture.md](mdc:docs/architecture.md)
+Source of truth: [docs/architecture.md](mdc:docs/architecture.md).
+Update that doc when package dependencies, interfaces, or data flow changes.

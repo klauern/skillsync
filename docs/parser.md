@@ -2,7 +2,10 @@
 
 ## Overview
 
-[Explain how platform parsers discover and normalize skills.]
+Platform parsers convert platform-specific skill layouts into normalized
+`model.Skill` values used by sync and export. Each parser implements the
+`Parser` interface (`Parse`, `Platform`, `DefaultPath`) and is registered in
+the tiered parser factories so discovery can pick the right implementation.
 
 ## Adding a New Platform
 - Add the platform constant in `internal/model/platform.go`
