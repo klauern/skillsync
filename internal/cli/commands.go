@@ -960,9 +960,9 @@ func syncCommand() *cli.Command {
 				return fmt.Errorf("failed to parse source skills: %w", err)
 			}
 
-			// Interactive TUI mode (not supported with delete mode)
+			// Interactive TUI mode
 			if interactive && cfg.deleteMode {
-				return errors.New("interactive mode is not supported with --delete flag")
+				return syncDeleteInteractive(cfg)
 			}
 
 			if interactive {
@@ -1235,24 +1235,116 @@ func displaySyncResults(result *sync.Result) {
 
 // syncDeleteMode handles the delete sync mode: removing skills from target that exist in source.
 func syncDeleteMode(cfg *syncConfig) error {
+	return executeDeleteForSkills(cfg, cfg.sourceSkills, false)
+}
+
+func syncDeleteInteractive(cfg *syncConfig) error {
+	targetSkills, err := parsePlatformSkillsWithScope(
+		cfg.targetSpec.Platform,
+		[]model.SkillScope{cfg.targetSpec.TargetScope()},
+		false,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to parse target skills: %w", err)
+	}
+
+	deleteCandidates := filterDeleteCandidates(cfg.sourceSkills, targetSkills)
+	if len(deleteCandidates) == 0 {
+		fmt.Println("No matching skills found to delete.")
+		return nil
+	}
+
+	result, err := tui.RunDeleteList(deleteCandidates)
+	if err != nil {
+		return fmt.Errorf("delete TUI error: %w", err)
+	}
+
+	switch result.Action {
+	case tui.DeleteActionNone:
+		fmt.Println("Delete cancelled.")
+		return nil
+	case tui.DeleteActionDelete:
+		if len(result.SelectedSkills) == 0 {
+			fmt.Println("No skills selected.")
+			return nil
+		}
+		selectedSourceSkills := selectSourceSkillsForDelete(cfg.sourceSkills, result.SelectedSkills)
+		if len(selectedSourceSkills) == 0 {
+			fmt.Println("No matching source skills found for deletion.")
+			return nil
+		}
+		return executeDeleteForSkills(cfg, selectedSourceSkills, true)
+	}
+
+	return nil
+}
+
+func filterDeleteCandidates(sourceSkills, targetSkills []model.Skill) []model.Skill {
+	if len(sourceSkills) == 0 || len(targetSkills) == 0 {
+		return nil
+	}
+
+	sourceNames := make(map[string]bool)
+	for _, skill := range sourceSkills {
+		sourceNames[skill.Name] = true
+	}
+
+	candidates := make([]model.Skill, 0, len(targetSkills))
+	for _, skill := range targetSkills {
+		if sourceNames[skill.Name] {
+			candidates = append(candidates, skill)
+		}
+	}
+
+	return candidates
+}
+
+func selectSourceSkillsForDelete(sourceSkills, selectedTargets []model.Skill) []model.Skill {
+	if len(sourceSkills) == 0 || len(selectedTargets) == 0 {
+		return nil
+	}
+
+	sourceByName := make(map[string]model.Skill)
+	for _, skill := range sourceSkills {
+		if _, exists := sourceByName[skill.Name]; !exists {
+			sourceByName[skill.Name] = skill
+		}
+	}
+
+	selected := make([]model.Skill, 0, len(selectedTargets))
+	for _, skill := range selectedTargets {
+		if sourceSkill, ok := sourceByName[skill.Name]; ok {
+			selected = append(selected, sourceSkill)
+		}
+	}
+
+	return selected
+}
+
+func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, confirmed bool) error {
+	if len(skills) == 0 {
+		fmt.Println("No skills selected.")
+		return nil
+	}
+
 	// Build list of skill names to delete
-	skillNames := make([]string, len(cfg.sourceSkills))
-	for i, skill := range cfg.sourceSkills {
+	skillNames := make([]string, len(skills))
+	for i, skill := range skills {
 		skillNames[i] = skill.Name
 	}
 
 	// Show what will be deleted
 	fmt.Printf("Delete mode: Will remove %d skill(s) from %s that exist in %s\n",
-		len(cfg.sourceSkills), cfg.targetSpec.Platform, cfg.sourceSpec.Platform)
+		len(skills), cfg.targetSpec.Platform, cfg.sourceSpec.Platform)
 	fmt.Println("\nSkills to delete:")
 	for _, name := range skillNames {
 		fmt.Printf("  - %s\n", name)
 	}
 
-	// Request confirmation (unless --yes or --dry-run)
-	if !cfg.dryRun && !cfg.yesFlag {
+	// Request confirmation (unless already confirmed, --yes, or --dry-run)
+	if !confirmed && !cfg.dryRun && !cfg.yesFlag {
 		confirmed, err := confirmAction(
-			fmt.Sprintf("Delete %d skill(s) from %s?", len(cfg.sourceSkills), cfg.targetSpec.Platform),
+			fmt.Sprintf("Delete %d skill(s) from %s?", len(skills), cfg.targetSpec.Platform),
 			riskLevelDangerous,
 		)
 		if err != nil {
@@ -1277,7 +1369,7 @@ func syncDeleteMode(cfg *syncConfig) error {
 	}
 
 	syncer := sync.New()
-	result, err := syncer.DeleteWithSkills(cfg.sourceSkills, cfg.targetSpec.Platform, opts)
+	result, err := syncer.DeleteWithSkills(skills, cfg.targetSpec.Platform, opts)
 	if err != nil {
 		return fmt.Errorf("delete sync failed: %w", err)
 	}

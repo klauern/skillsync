@@ -8,8 +8,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/klauern/skillsync/internal/model"
 )
@@ -36,11 +38,13 @@ type deleteListKeyMap struct {
 	Down      key.Binding
 	Toggle    key.Binding
 	ToggleAll key.Binding
+	View      key.Binding
 	Confirm   key.Binding
 	Filter    key.Binding
 	ClearFlt  key.Binding
 	Help      key.Binding
 	Quit      key.Binding
+	Back      key.Binding
 }
 
 func defaultDeleteListKeyMap() deleteListKeyMap {
@@ -60,6 +64,10 @@ func defaultDeleteListKeyMap() deleteListKeyMap {
 		ToggleAll: key.NewBinding(
 			key.WithKeys("a"),
 			key.WithHelp("a", "toggle all"),
+		),
+		View: key.NewBinding(
+			key.WithKeys("enter", "v"),
+			key.WithHelp("enter/v", "view details"),
 		),
 		Confirm: key.NewBinding(
 			key.WithKeys("d"),
@@ -81,24 +89,40 @@ func defaultDeleteListKeyMap() deleteListKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
+		Back: key.NewBinding(
+			key.WithKeys("b", "esc"),
+			key.WithHelp("b/esc", "back"),
+		),
 	}
 }
 
+type deleteListPhase int
+
+const (
+	deleteListPhaseList deleteListPhase = iota
+	deleteListPhaseDetail
+)
+
 // DeleteListModel is the BubbleTea model for interactive skill deletion.
 type DeleteListModel struct {
-	table       table.Model
-	skills      []model.Skill
-	filtered    []model.Skill
-	selected    map[string]bool // map of skill key to selected state
-	keys        deleteListKeyMap
-	result      DeleteListResult
-	filter      string
-	filtering   bool
-	showHelp    bool
-	confirmMode bool
-	width       int
-	height      int
-	quitting    bool
+	table        table.Model
+	skills       []model.Skill
+	filtered     []model.Skill
+	selected     map[string]bool // map of skill key to selected state
+	keys         deleteListKeyMap
+	result       DeleteListResult
+	filter       string
+	filtering    bool
+	showHelp     bool
+	confirmMode  bool
+	width        int
+	height       int
+	quitting     bool
+	columnWidths deleteListColumnWidths
+	phase        deleteListPhase
+	viewport     viewport.Model
+	ready        bool
+	detailSkill  model.Skill
 }
 
 // Styles for the delete list TUI.
@@ -111,6 +135,8 @@ var deleteListStyles = struct {
 	Status      lipgloss.Style
 	Warning     lipgloss.Style
 	Checkbox    lipgloss.Style
+	DetailBox   lipgloss.Style
+	DetailTitle lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")).Padding(0, 1),
 	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -120,6 +146,74 @@ var deleteListStyles = struct {
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	Warning:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	DetailBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
+	DetailTitle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")),
+}
+
+const (
+	deleteListCheckboxWidth = 3
+	deleteListNameWidth     = 20
+	deleteListPlatformWidth = 12
+	deleteListScopeWidth    = 10
+	deleteListDescWidth     = 40
+	deleteListColumnPadding = 2
+	deleteListColumnCount   = 5
+	deleteListDetailLines   = 3
+	deleteListDetailGap     = 1
+	deleteListDetailHeight  = deleteListDetailLines + 1 + 2 // title + content + border
+)
+
+type deleteListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func deleteListColumns(totalWidth int, skills []model.Skill) ([]table.Column, deleteListColumnWidths) {
+	widths := deleteListColumnWidths{
+		name:     deleteListNameWidth,
+		platform: deleteListPlatformWidth,
+		scope:    deleteListScopeWidth,
+		desc:     deleteListDescWidth,
+	}
+
+	if totalWidth > 0 {
+		baseTotal := deleteListCheckboxWidth + widths.name + widths.platform + widths.scope + widths.desc +
+			(deleteListColumnPadding * deleteListColumnCount)
+		extra := totalWidth - baseTotal
+		if extra > 0 {
+			maxScopeWidth := widths.scope
+			for _, skill := range skills {
+				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
+				if scopeWidth > maxScopeWidth {
+					maxScopeWidth = scopeWidth
+				}
+			}
+
+			scopeNeeded := maxScopeWidth - widths.scope
+			if scopeNeeded > 0 {
+				scopeExtra := min(scopeNeeded, extra)
+				widths.scope += scopeExtra
+				extra -= scopeExtra
+			}
+
+			nameExtra := extra / 3
+			descExtra := extra - nameExtra
+			widths.name += nameExtra
+			widths.desc += descExtra
+		}
+	}
+
+	columns := []table.Column{
+		{Title: " ", Width: deleteListCheckboxWidth}, // Checkbox column
+		{Title: "Name", Width: widths.name},          // Skill name
+		{Title: "Platform", Width: widths.platform},  // Platform
+		{Title: "Scope", Width: widths.scope},        // Scope
+		{Title: "Description", Width: widths.desc},   // Description
+	}
+
+	return columns, widths
 }
 
 // deleteSkillKey creates a unique key for a skill (platform + scope + name combination).
@@ -143,22 +237,18 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		return strings.ToLower(deletableSkills[i].Name) < strings.ToLower(deletableSkills[j].Name)
 	})
 
-	columns := []table.Column{
-		{Title: " ", Width: 3},            // Checkbox column
-		{Title: "Name", Width: 25},        // Skill name
-		{Title: "Platform", Width: 12},    // Platform
-		{Title: "Scope", Width: 10},       // Scope
-		{Title: "Description", Width: 40}, // Description
-	}
+	columns, columnWidths := deleteListColumns(0, deletableSkills)
 
 	// Initialize with no skills selected (deletion is opt-in)
 	selected := make(map[string]bool)
 
 	m := DeleteListModel{
-		skills:   deletableSkills,
-		filtered: deletableSkills,
-		selected: selected,
-		keys:     defaultDeleteListKeyMap(),
+		skills:       deletableSkills,
+		filtered:     deletableSkills,
+		selected:     selected,
+		keys:         defaultDeleteListKeyMap(),
+		columnWidths: columnWidths,
+		phase:        deleteListPhaseList,
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -178,7 +268,7 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		Bold(true)
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
+		Background(lipgloss.Color("52")).
 		Bold(false)
 	t.SetStyles(s)
 
@@ -191,25 +281,13 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 	for i, s := range skills {
 		checkbox := "[ ]"
 		if m.selected[deleteSkillKey(s)] {
-			checkbox = "[✓]"
+			checkbox = "[x]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
+		name := truncateDeleteListValue(s.Name, m.columnWidths.name)
+		platform := truncateDeleteListValue(string(s.Platform), m.columnWidths.platform)
+		scope := truncateDeleteListValue(s.DisplayScope(), m.columnWidths.scope)
+		desc := truncateDeleteListValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
@@ -221,6 +299,52 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 	return rows
 }
 
+func (m *DeleteListModel) updateColumns(totalWidth int) {
+	columns, widths := deleteListColumns(totalWidth, m.skills)
+	m.columnWidths = widths
+	m.table.SetColumns(columns)
+}
+
+func truncateDeleteListValue(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if len(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return value[:width]
+	}
+	return value[:width-3] + "..."
+}
+
+func (m DeleteListModel) detailPanelWidth() int {
+	if m.width > 0 {
+		return m.width
+	}
+	return deleteListCheckboxWidth + m.columnWidths.name + m.columnWidths.platform + m.columnWidths.scope + m.columnWidths.desc +
+		(deleteListColumnPadding * deleteListColumnCount)
+}
+
+func (m DeleteListModel) renderDetailPanel() string {
+	width := m.detailPanelWidth()
+	contentWidth := max(width-4, 10)
+
+	skill := m.getSelectedSkill()
+	description := strings.TrimSpace(skill.Description)
+	if description == "" {
+		description = "No description available."
+	}
+
+	lines := wrapText(description, contentWidth, deleteListDetailLines)
+	lines = padLines(lines, deleteListDetailLines)
+
+	header := deleteListStyles.DetailTitle.Render("Description (selected)")
+	content := append([]string{header}, lines...)
+
+	return deleteListStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
+}
+
 // Init implements tea.Model.
 func (m DeleteListModel) Init() tea.Cmd {
 	return nil
@@ -228,6 +352,15 @@ func (m DeleteListModel) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.phase {
+	case deleteListPhaseDetail:
+		return m.updateDetail(msg)
+	default:
+		return m.updateList(msg)
+	}
+}
+
+func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -235,8 +368,10 @@ func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		// Adjust table height based on window
-		newHeight := max(msg.Height-10, 5) // Reserve space for title, warning, help, status
+		newHeight := max(msg.Height-10-deleteListDetailHeight-deleteListDetailGap, 5) // Reserve space for title, warning, help, status, detail
 		m.table.SetHeight(newHeight)
+		m.updateColumns(msg.Width)
+		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -325,6 +460,16 @@ func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.table.SetRows(m.skillsToRows(m.filtered))
 			return m, nil
 
+		case key.Matches(msg, m.keys.View):
+			if len(m.filtered) > 0 {
+				m.detailSkill = m.getSelectedSkill()
+				m.phase = deleteListPhaseDetail
+				m.ready = false
+				m.ensureDetailViewport()
+				return m, nil
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Confirm):
 			selectedSkills := m.getSelectedSkills()
 			if len(selectedSkills) > 0 {
@@ -335,6 +480,35 @@ func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	m.table, cmd = m.table.Update(msg)
+	return m, cmd
+}
+
+func (m DeleteListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.ensureDetailViewport()
+
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keys.Quit):
+			m.quitting = true
+			return m, tea.Quit
+
+		case key.Matches(msg, m.keys.Help):
+			m.showHelp = !m.showHelp
+			return m, nil
+
+		case key.Matches(msg, m.keys.Back):
+			m.phase = deleteListPhaseList
+			return m, nil
+		}
+	}
+
+	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
 }
 
@@ -381,6 +555,10 @@ func (m DeleteListModel) View() string {
 		return ""
 	}
 
+	if m.phase == deleteListPhaseDetail {
+		return m.viewDetail()
+	}
+
 	var b strings.Builder
 
 	// Title with warning color
@@ -389,7 +567,7 @@ func (m DeleteListModel) View() string {
 	b.WriteString("\n")
 
 	// Warning message
-	warning := deleteListStyles.Warning.Render("Only repo and user scope skills can be deleted")
+	warning := deleteListStyles.Warning.Render("Selection marks skills for deletion. Only repo and user scope skills can be deleted.")
 	b.WriteString(warning)
 	b.WriteString("\n\n")
 
@@ -417,11 +595,15 @@ func (m DeleteListModel) View() string {
 	b.WriteString(m.table.View())
 	b.WriteString("\n")
 
+	// Detail panel
+	b.WriteString(m.renderDetailPanel())
+	b.WriteString("\n")
+
 	// Status bar
 	selectedCount := len(m.getSelectedSkills())
-	status := fmt.Sprintf("%d skill(s) selected for deletion of %d", selectedCount, len(m.filtered))
+	status := fmt.Sprintf("%d skill(s) marked for deletion of %d", selectedCount, len(m.filtered))
 	if m.filter != "" {
-		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
+		status = fmt.Sprintf("%d marked for deletion, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
 	}
 	b.WriteString(deleteListStyles.Status.Render(status))
 	b.WriteString("\n")
@@ -439,11 +621,109 @@ func (m DeleteListModel) View() string {
 	return b.String()
 }
 
+func (m DeleteListModel) viewDetail() string {
+	m.ensureDetailViewport()
+	if !m.ready {
+		return "Loading..."
+	}
+
+	var b strings.Builder
+
+	title := deleteListStyles.Title.Render(fmt.Sprintf("🗑️  Delete Skill Details: %s", m.detailSkill.Name))
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(m.viewport.View())
+	b.WriteString("\n")
+
+	scrollPercent := int(m.viewport.ScrollPercent() * 100)
+	status := fmt.Sprintf("Scroll: %d%% • Press b or Esc to go back", scrollPercent)
+	b.WriteString(deleteListStyles.Status.Render(status))
+	b.WriteString("\n")
+
+	if m.showHelp {
+		b.WriteString("\n")
+		b.WriteString(m.renderDetailHelp())
+	} else {
+		keys := []string{
+			"↑/↓ scroll",
+			"b back",
+			"? help",
+			"q quit",
+		}
+		b.WriteString(deleteListStyles.Help.Render(strings.Join(keys, " • ")))
+	}
+
+	return b.String()
+}
+
+func (m *DeleteListModel) ensureDetailViewport() {
+	if m.width <= 0 || m.height <= 0 {
+		return
+	}
+
+	headerHeight := 4
+	footerHeight := 4
+	viewportHeight := max(m.height-headerHeight-footerHeight, 5)
+
+	if !m.ready {
+		m.viewport = viewport.New(m.width-2, viewportHeight)
+		m.viewport.SetContent(m.buildDetailContent(m.viewport.Width))
+		m.ready = true
+		return
+	}
+
+	m.viewport.Width = m.width - 2
+	m.viewport.Height = viewportHeight
+	m.viewport.SetContent(m.buildDetailContent(m.viewport.Width))
+}
+
+func (m DeleteListModel) buildDetailContent(width int) string {
+	var b strings.Builder
+
+	skill := m.detailSkill
+	if skill.Name == "" {
+		return "No skill selected."
+	}
+
+	wrappedWidth := max(width, 10)
+	indent := "  "
+
+	b.WriteString(deleteListStyles.DetailTitle.Render("Skill"))
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("%sName: %s\n", indent, skill.Name))
+	b.WriteString(fmt.Sprintf("%sPlatform: %s\n", indent, skill.Platform))
+	b.WriteString(fmt.Sprintf("%sScope: %s\n", indent, skill.DisplayScope()))
+	if skill.Path != "" {
+		b.WriteString(fmt.Sprintf("%sPath: %s\n", indent, skill.Path))
+	}
+
+	marked := "no"
+	if m.selected[deleteSkillKey(skill)] {
+		marked = "yes"
+	}
+	b.WriteString(fmt.Sprintf("%sMarked for deletion: %s\n", indent, marked))
+
+	b.WriteString("\n")
+	b.WriteString(deleteListStyles.DetailTitle.Render("Description"))
+	b.WriteString("\n")
+
+	description := strings.TrimSpace(skill.Description)
+	if description == "" {
+		description = "No description available."
+	}
+	b.WriteString(lipgloss.NewStyle().Width(wrappedWidth).Render(description))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
 func (m DeleteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
-		"space toggle",
+		"space mark/unmark delete",
 		"a toggle all",
+		"enter details",
 		"d delete",
 		"/ filter",
 		"? help",
@@ -464,6 +744,7 @@ Selection:
   a          Toggle all skills
 
 Actions:
+  Enter/v  View skill details
   d        Confirm and delete selected skills
 
 Filter:
@@ -474,6 +755,22 @@ Filter:
 General:
   ?        Toggle full help
   q        Quit without deleting`
+	return deleteListStyles.Help.Render(help)
+}
+
+func (m DeleteListModel) renderDetailHelp() string {
+	help := `Navigation:
+  ↑/k      Scroll up
+  ↓/j      Scroll down
+  PgUp     Page up
+  PgDown   Page down
+
+Actions:
+  b/Esc    Go back to list
+
+General:
+  ?        Toggle full help
+  q        Quit`
 	return deleteListStyles.Help.Render(help)
 }
 

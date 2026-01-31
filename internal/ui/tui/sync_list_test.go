@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -481,6 +482,58 @@ func TestSyncListModel_WindowResize(t *testing.T) {
 
 	if sm.height != 40 {
 		t.Errorf("expected height 40, got %d", sm.height)
+	}
+}
+
+func TestSyncListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description that should fit",
+			Platform:    model.ClaudeCode,
+		},
+	}
+
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+
+	// Simulate a wide window resize
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	sm := newModel.(SyncListModel)
+
+	cols := sm.table.Columns()
+	if len(cols) != 4 {
+		t.Fatalf("expected 4 columns, got %d", len(cols))
+	}
+	if cols[1].Width < 20 {
+		t.Errorf("expected name column width >= 20, got %d", cols[1].Width)
+	}
+	if cols[2].Width <= 12 {
+		t.Errorf("expected scope column to expand, got %d", cols[2].Width)
+	}
+	if cols[3].Width <= 50 {
+		t.Errorf("expected description column to expand, got %d", cols[3].Width)
+	}
+}
+
+func TestSyncListModel_ViewIncludesDetailPanel(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description that should appear in the panel",
+			Platform:    model.ClaudeCode,
+		},
+	}
+
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	sm := newModel.(SyncListModel)
+
+	view := sm.View()
+	if !strings.Contains(view, "Description (selected)") {
+		t.Error("expected detail panel header in view")
+	}
+	if !strings.Contains(view, "A test skill description") {
+		t.Error("expected detail panel to include description")
 	}
 }
 

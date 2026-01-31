@@ -109,6 +109,7 @@ type SyncListModel struct {
 	quitting       bool
 	sourcePlatform model.Platform
 	targetPlatform model.Platform
+	columnWidths   syncListColumnWidths
 }
 
 // Styles for the sync list TUI.
@@ -121,6 +122,8 @@ var syncListStyles = struct {
 	Status      lipgloss.Style
 	Selected    lipgloss.Style
 	Checkbox    lipgloss.Style
+	DetailBox   lipgloss.Style
+	DetailTitle lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -130,16 +133,60 @@ var syncListStyles = struct {
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	DetailBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
+	DetailTitle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
+}
+
+const (
+	syncListCheckboxWidth = 3
+	syncListNameWidth     = 20
+	syncListScopeWidth    = 12
+	syncListDescWidth     = 50
+	syncListColumnPadding = 2
+	syncListColumnCount   = 4
+	syncListDetailLines   = 3
+	syncListDetailGap     = 1
+	syncListDetailHeight  = syncListDetailLines + 1 + 2 // title + content + border
+)
+
+type syncListColumnWidths struct {
+	name  int
+	scope int
+	desc  int
+}
+
+func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
+	widths := syncListColumnWidths{
+		name:  syncListNameWidth,
+		scope: syncListScopeWidth,
+		desc:  syncListDescWidth,
+	}
+
+	if totalWidth > 0 {
+		baseTotal := syncListCheckboxWidth + widths.name + widths.scope + widths.desc +
+			(syncListColumnPadding * syncListColumnCount)
+		extra := totalWidth - baseTotal
+		if extra > 0 {
+			scopeExtra := extra / 3
+			descExtra := extra - scopeExtra
+			widths.scope += scopeExtra
+			widths.desc += descExtra
+		}
+	}
+
+	columns := []table.Column{
+		{Title: " ", Width: syncListCheckboxWidth}, // Checkbox column
+		{Title: "Name", Width: widths.name},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Description", Width: widths.desc},
+	}
+
+	return columns, widths
 }
 
 // NewSyncListModel creates a new sync list model.
 func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncListModel {
-	columns := []table.Column{
-		{Title: " ", Width: 3}, // Checkbox column
-		{Title: "Name", Width: 25},
-		{Title: "Scope", Width: 12},
-		{Title: "Description", Width: 50},
-	}
+	columns, columnWidths := syncListColumns(0)
 
 	// Sort skills alphabetically by name (case-insensitive)
 	sort.Slice(skills, func(i, j int) bool {
@@ -159,6 +206,7 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncL
 		keys:           defaultSyncListKeyMap(),
 		sourcePlatform: source,
 		targetPlatform: target,
+		columnWidths:   columnWidths,
 	}
 
 	rows := m.skillsToRows(skills)
@@ -194,22 +242,63 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 50 {
-			desc = desc[:47] + "..."
-		}
+		name := truncateSyncListValue(s.Name, m.columnWidths.name)
+		scope := truncateSyncListValue(s.DisplayScope(), m.columnWidths.scope)
+		desc := truncateSyncListValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
-			s.DisplayScope(),
+			scope,
 			desc,
 		}
 	}
 	return rows
+}
+
+func (m *SyncListModel) updateColumns(totalWidth int) {
+	columns, widths := syncListColumns(totalWidth)
+	m.columnWidths = widths
+	m.table.SetColumns(columns)
+}
+
+func truncateSyncListValue(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if len(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return value[:width]
+	}
+	return value[:width-3] + "..."
+}
+
+func (m SyncListModel) detailPanelWidth() int {
+	if m.width > 0 {
+		return m.width
+	}
+	return syncListCheckboxWidth + m.columnWidths.name + m.columnWidths.scope + m.columnWidths.desc +
+		(syncListColumnPadding * syncListColumnCount)
+}
+
+func (m SyncListModel) renderDetailPanel() string {
+	width := m.detailPanelWidth()
+	contentWidth := max(width-4, 10)
+
+	skill := m.getSelectedSkill()
+	description := strings.TrimSpace(skill.Description)
+	if description == "" {
+		description = "No description available."
+	}
+
+	lines := wrapText(description, contentWidth, syncListDetailLines)
+	lines = padLines(lines, syncListDetailLines)
+
+	header := syncListStyles.DetailTitle.Render("Description (selected)")
+	content := append([]string{header}, lines...)
+
+	return syncListStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
 }
 
 // Init implements tea.Model.
@@ -226,8 +315,10 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		// Adjust table height based on window
-		newHeight := max(msg.Height-10, 5) // Reserve space for title, help, status
+		newHeight := max(msg.Height-10-syncListDetailHeight-syncListDetailGap, 5) // Reserve space for title, help, status, detail
 		m.table.SetHeight(newHeight)
+		m.updateColumns(msg.Width)
+		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -412,6 +503,10 @@ func (m SyncListModel) View() string {
 
 	// Table
 	b.WriteString(m.table.View())
+	b.WriteString("\n")
+
+	// Detail panel
+	b.WriteString(m.renderDetailPanel())
 	b.WriteString("\n")
 
 	// Status bar

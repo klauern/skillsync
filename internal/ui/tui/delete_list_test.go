@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/klauern/skillsync/internal/model"
 )
@@ -526,6 +528,159 @@ func TestDeleteListModel_WindowResize(t *testing.T) {
 	}
 }
 
+func TestDeleteListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description that should fit",
+			Platform:    model.Cursor,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+
+	// Simulate a wide window resize
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	dm := newModel.(DeleteListModel)
+
+	cols := dm.table.Columns()
+	if len(cols) != 5 {
+		t.Fatalf("expected 5 columns, got %d", len(cols))
+	}
+	if cols[1].Width <= 20 {
+		t.Errorf("expected name column to expand, got %d", cols[1].Width)
+	}
+	if cols[3].Width <= 10 {
+		t.Errorf("expected scope column to expand, got %d", cols[3].Width)
+	}
+	if cols[4].Width <= 40 {
+		t.Errorf("expected description column to expand, got %d", cols[4].Width)
+	}
+}
+
+func TestDeleteListModel_WindowResize_ExpandsScopeColumn(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:     "test-skill",
+			Platform: model.Cursor,
+			Scope:    model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+
+	// Simulate a wide window resize
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	dm := newModel.(DeleteListModel)
+
+	cols := dm.table.Columns()
+	if len(cols) != 5 {
+		t.Fatalf("expected 5 columns, got %d", len(cols))
+	}
+
+	expectedScopeWidth := runewidth.StringWidth(skills[0].DisplayScope())
+	if cols[3].Width < expectedScopeWidth {
+		t.Errorf("expected scope column width >= %d, got %d", expectedScopeWidth, cols[3].Width)
+	}
+}
+
+func TestDeleteListModel_ViewIncludesDetailPanel(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description that should appear in the panel",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	dm := newModel.(DeleteListModel)
+
+	view := dm.View()
+	if !strings.Contains(view, "Description (selected)") {
+		t.Error("expected detail panel header in view")
+	}
+	if !strings.Contains(view, "A test skill description") {
+		t.Error("expected detail panel to include description")
+	}
+}
+
+func TestDeleteListModel_EnterDetails(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	dm := newModel.(DeleteListModel)
+
+	if dm.phase != deleteListPhaseDetail {
+		t.Errorf("expected phase %v, got %v", deleteListPhaseDetail, dm.phase)
+	}
+}
+
+func TestDeleteListModel_DetailBack(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	dm := newModel.(DeleteListModel)
+
+	newModel, _ = dm.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	dm = newModel.(DeleteListModel)
+
+	newModel, _ = dm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	dm = newModel.(DeleteListModel)
+
+	if dm.phase != deleteListPhaseList {
+		t.Errorf("expected phase %v, got %v", deleteListPhaseList, dm.phase)
+	}
+}
+
+func TestDeleteListModel_ViewDetailUsesExistingSize(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	dm := newModel.(DeleteListModel)
+
+	newModel, _ = dm.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	dm = newModel.(DeleteListModel)
+
+	view := dm.View()
+	if strings.Contains(view, "Loading...") {
+		t.Error("expected detail view to be ready after enter with known size")
+	}
+	if !strings.Contains(view, "Delete Skill Details") {
+		t.Error("expected detail view title after enter")
+	}
+}
+
 func TestRunDeleteList_EmptySkills(t *testing.T) {
 	result, err := RunDeleteList([]model.Skill{})
 	if err != nil {
@@ -586,8 +741,8 @@ func TestDeleteListModel_SkillsToRows_WithCheckbox(t *testing.T) {
 
 	row := rows[0]
 	// First column should be checkbox
-	if row[0] != "[✓]" {
-		t.Errorf("expected checkbox '[✓]', got '%s'", row[0])
+	if row[0] != "[x]" {
+		t.Errorf("expected checkbox '[x]', got '%s'", row[0])
 	}
 	if row[1] != "test-skill" {
 		t.Errorf("expected name 'test-skill', got '%s'", row[1])
