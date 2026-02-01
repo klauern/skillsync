@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/klauern/skillsync/internal/model"
 )
@@ -157,7 +158,7 @@ type syncListColumnWidths struct {
 	desc  int
 }
 
-func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
+func syncListColumns(totalWidth int, skills []model.Skill) ([]table.Column, syncListColumnWidths) {
 	widths := syncListColumnWidths{
 		name:  syncListNameWidth,
 		scope: syncListScopeWidth,
@@ -169,9 +170,24 @@ func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
 			(syncListColumnPadding * syncListColumnCount)
 		extra := totalWidth - baseTotal
 		if extra > 0 {
-			scopeExtra := extra / 3
-			descExtra := extra - scopeExtra
-			widths.scope += scopeExtra
+			maxScopeWidth := widths.scope
+			for _, skill := range skills {
+				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
+				if scopeWidth > maxScopeWidth {
+					maxScopeWidth = scopeWidth
+				}
+			}
+
+			scopeNeeded := maxScopeWidth - widths.scope
+			if scopeNeeded > 0 {
+				scopeExtra := min(scopeNeeded, extra)
+				widths.scope += scopeExtra
+				extra -= scopeExtra
+			}
+
+			nameExtra := extra / 3
+			descExtra := extra - nameExtra
+			widths.name += nameExtra
 			widths.desc += descExtra
 		}
 	}
@@ -188,12 +204,12 @@ func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
 
 // NewSyncListModel creates a new sync list model.
 func NewSyncListModel(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) SyncListModel {
-	columns, columnWidths := syncListColumns(0)
-
 	// Sort skills alphabetically by name (case-insensitive)
 	sort.Slice(skills, func(i, j int) bool {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
+
+	columns, columnWidths := syncListColumns(0, skills)
 
 	// Initialize selections - use initialSelections if provided, otherwise default all to true
 	selected := make(map[string]bool)
@@ -262,7 +278,7 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 }
 
 func (m *SyncListModel) updateColumns(totalWidth int) {
-	columns, widths := syncListColumns(totalWidth)
+	columns, widths := syncListColumns(totalWidth, m.skills)
 	m.columnWidths = widths
 	m.table.SetColumns(columns)
 }

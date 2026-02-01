@@ -486,11 +486,14 @@ func TestSyncListModel_WindowResize(t *testing.T) {
 }
 
 func TestSyncListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
+	// Use user scope so DisplayScope() returns "~/.claude/skills" (15 chars > base 12)
+	// which triggers scope column expansion
 	skills := []model.Skill{
 		{
 			Name:        "test-skill",
 			Description: "A test skill description that should fit",
 			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
 		},
 	}
 
