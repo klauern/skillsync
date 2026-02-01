@@ -30,7 +30,7 @@ func TestNewSyncListModel(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	if len(m.skills) != 2 {
 		t.Errorf("expected 2 skills, got %d", len(m.skills))
@@ -70,7 +70,7 @@ func TestSyncListModel_Filter(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 	m.filter = "cursor"
 	m.applyFilter()
 
@@ -97,7 +97,7 @@ func TestSyncListModel_FilterByScope(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 	m.filter = "repo"
 	m.applyFilter()
 
@@ -114,7 +114,7 @@ func TestSyncListModel_Toggle(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Skill should be selected initially
 	if !m.selected["test-skill"] {
@@ -154,7 +154,7 @@ func TestSyncListModel_ToggleAll(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// All should be selected initially
 	selectedCount := 0
@@ -208,7 +208,7 @@ func TestSyncListModel_GetSelectedSkills(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Deselect one skill
 	m.selected["skill-one"] = false
@@ -231,7 +231,7 @@ func TestSyncListModel_Init(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 	cmd := m.Init()
 
 	if cmd != nil {
@@ -247,7 +247,7 @@ func TestSyncListModel_QuitKey(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Simulate pressing 'q'
 	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -271,7 +271,7 @@ func TestSyncListModel_HelpToggle(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	if m.showHelp {
 		t.Error("expected showHelp to be false initially")
@@ -303,7 +303,7 @@ func TestSyncListModel_PreviewAction(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Simulate pressing 'p' for preview
 	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
@@ -336,7 +336,7 @@ func TestSyncListModel_ConfirmSync(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Simulate pressing 'y' to confirm
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
@@ -377,7 +377,7 @@ func TestSyncListModel_CancelConfirm(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Enter confirm mode
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
@@ -401,7 +401,7 @@ func TestSyncListModel_CancelConfirm(t *testing.T) {
 }
 
 func TestSyncListResult_DefaultAction(t *testing.T) {
-	m := NewSyncListModel([]model.Skill{}, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel([]model.Skill{}, model.ClaudeCode, model.Cursor, nil)
 	result := m.Result()
 
 	if result.Action != SyncActionNone {
@@ -410,7 +410,7 @@ func TestSyncListResult_DefaultAction(t *testing.T) {
 }
 
 func TestSyncListModel_EmptySkills(t *testing.T) {
-	m := NewSyncListModel([]model.Skill{}, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel([]model.Skill{}, model.ClaudeCode, model.Cursor, nil)
 
 	if len(m.skills) != 0 {
 		t.Errorf("expected 0 skills, got %d", len(m.skills))
@@ -431,7 +431,7 @@ func TestSyncListModel_FilterMode(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	if m.filtering {
 		t.Error("expected filtering to be false initially")
@@ -470,7 +470,7 @@ func TestSyncListModel_WindowResize(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Simulate window resize
 	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -494,7 +494,7 @@ func TestSyncListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Simulate a wide window resize
 	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
@@ -524,7 +524,7 @@ func TestSyncListModel_ViewIncludesDetailPanel(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	sm := newModel.(SyncListModel)
 
@@ -538,7 +538,7 @@ func TestSyncListModel_ViewIncludesDetailPanel(t *testing.T) {
 }
 
 func TestRunSyncList_EmptySkills(t *testing.T) {
-	result, err := RunSyncList([]model.Skill{}, model.ClaudeCode, model.Cursor)
+	result, err := RunSyncList([]model.Skill{}, model.ClaudeCode, model.Cursor, nil)
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -558,7 +558,7 @@ func TestSyncListModel_SkillsToRows_WithCheckbox(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 	rows := m.skillsToRows(skills)
 
 	if len(rows) != 1 {
@@ -583,7 +583,7 @@ func TestSyncListModel_SkillsToRows_Unchecked(t *testing.T) {
 		},
 	}
 
-	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor)
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 	m.selected["test-skill"] = false
 
 	rows := m.skillsToRows(skills)

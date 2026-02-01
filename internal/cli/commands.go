@@ -558,8 +558,11 @@ func syncSkillsInteractive(cfg *syncConfig) error {
 	}
 
 	// Main TUI loop - allows navigating between list and diff preview
+	// Track selections across navigation
+	var currentSelections map[string]bool
+
 	for {
-		result, err := tui.RunSyncList(cfg.sourceSkills, cfg.sourceSpec.Platform, cfg.targetSpec.Platform)
+		result, err := tui.RunSyncList(cfg.sourceSkills, cfg.sourceSpec.Platform, cfg.targetSpec.Platform, currentSelections)
 		if err != nil {
 			return fmt.Errorf("TUI error: %w", err)
 		}
@@ -584,7 +587,8 @@ func syncSkillsInteractive(cfg *syncConfig) error {
 
 			switch diffResult.Action {
 			case tui.DiffActionBack:
-				// Continue the loop to go back to the list
+				// Save current selections before going back
+				currentSelections = result.Selections
 				continue
 			case tui.DiffActionSync:
 				// Sync just this one skill
@@ -2964,7 +2968,7 @@ func runSyncTUI() error {
 	}
 
 	// Step 3: Run the sync list TUI to select skills
-	syncResult, err := tui.RunSyncList(sourceSkills, sourcePlatform, targetPlatform)
+	syncResult, err := tui.RunSyncList(sourceSkills, sourcePlatform, targetPlatform, nil)
 	if err != nil {
 		return fmt.Errorf("sync list error: %w", err)
 	}

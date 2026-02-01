@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -31,6 +32,7 @@ type SyncListResult struct {
 	Action         SyncAction
 	SelectedSkills []model.Skill
 	PreviewSkill   model.Skill
+	Selections     map[string]bool // all current selections for state preservation
 }
 
 // syncListKeyMap defines the key bindings for the sync list.
@@ -185,7 +187,7 @@ func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
 }
 
 // NewSyncListModel creates a new sync list model.
-func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncListModel {
+func NewSyncListModel(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) SyncListModel {
 	columns, columnWidths := syncListColumns(0)
 
 	// Sort skills alphabetically by name (case-insensitive)
@@ -193,10 +195,14 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform) SyncL
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
 
-	// Initialize all skills as selected by default
+	// Initialize selections - use initialSelections if provided, otherwise default all to true
 	selected := make(map[string]bool)
 	for _, s := range skills {
-		selected[s.Name] = true
+		if initialSelections != nil {
+			selected[s.Name] = initialSelections[s.Name]
+		} else {
+			selected[s.Name] = true
+		}
 	}
 
 	m := SyncListModel{
@@ -576,20 +582,29 @@ func (m SyncListModel) Result() SyncListResult {
 	return m.result
 }
 
+// GetSelections returns a copy of the current selections map.
+func (m SyncListModel) GetSelections() map[string]bool {
+	result := make(map[string]bool, len(m.selected))
+	maps.Copy(result, m.selected)
+	return result
+}
+
 // RunSyncList runs the interactive sync list and returns the result.
-func RunSyncList(skills []model.Skill, source, target model.Platform) (SyncListResult, error) {
+func RunSyncList(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) (SyncListResult, error) {
 	if len(skills) == 0 {
 		return SyncListResult{}, nil
 	}
 
-	mdl := NewSyncListModel(skills, source, target)
+	mdl := NewSyncListModel(skills, source, target, initialSelections)
 	finalModel, err := tea.NewProgram(mdl, tea.WithAltScreen()).Run()
 	if err != nil {
 		return SyncListResult{}, err
 	}
 
 	if m, ok := finalModel.(SyncListModel); ok {
-		return m.Result(), nil
+		result := m.Result()
+		result.Selections = m.GetSelections()
+		return result, nil
 	}
 
 	return SyncListResult{}, nil
