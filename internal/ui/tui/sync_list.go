@@ -185,7 +185,10 @@ func syncListColumns(totalWidth int, skills []model.Skill) ([]table.Column, sync
 				extra -= scopeExtra
 			}
 
-			widths.desc += extra
+			nameExtra := extra / 3
+			descExtra := extra - nameExtra
+			widths.name += nameExtra
+			widths.desc += descExtra
 		}
 	}
 
@@ -201,12 +204,12 @@ func syncListColumns(totalWidth int, skills []model.Skill) ([]table.Column, sync
 
 // NewSyncListModel creates a new sync list model.
 func NewSyncListModel(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) SyncListModel {
-	columns, columnWidths := syncListColumns(0, skills)
-
 	// Sort skills alphabetically by name (case-insensitive)
 	sort.Slice(skills, func(i, j int) bool {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
+
+	columns, columnWidths := syncListColumns(0, skills)
 
 	// Initialize selections - use initialSelections if provided, otherwise default all to true
 	selected := make(map[string]bool)
