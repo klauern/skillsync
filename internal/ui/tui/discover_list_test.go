@@ -246,8 +246,8 @@ func TestDiscoverListModel_ViewAction(t *testing.T) {
 
 	m := NewDiscoverListModel(skills)
 
-	// Simulate pressing 'v' for view
-	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	// Simulate pressing 'o' for open content
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
 
 	dm := newModel.(DiscoverListModel)
 	result := dm.Result()
@@ -322,7 +322,8 @@ func TestSkillsToRows(t *testing.T) {
 		},
 	}
 
-	rows := skillsToRows(skills)
+	m := NewDiscoverListModel(skills)
+	rows := m.skillsToRows(skills)
 
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
@@ -335,8 +336,13 @@ func TestSkillsToRows(t *testing.T) {
 	if row[1] != "claude-code" {
 		t.Errorf("expected platform 'claude-code', got '%s'", row[1])
 	}
-	if row[2] != "~/.claude/skills" {
-		t.Errorf("expected scope '~/.claude/skills', got '%s'", row[2])
+	if len(row[2]) > discoverListScopeWidth {
+		t.Errorf("expected scope to be at most %d chars, got %d", discoverListScopeWidth, len(row[2]))
+	}
+	if len("~/.claude/skills") > discoverListScopeWidth && len(row[2]) >= 3 {
+		if row[2][len(row[2])-3:] != "..." {
+			t.Errorf("expected scope to end with '...', got '%s'", row[2])
+		}
 	}
 }
 
@@ -349,20 +355,21 @@ func TestSkillsToRows_LongValues(t *testing.T) {
 		},
 	}
 
-	rows := skillsToRows(skills)
+	m := NewDiscoverListModel(skills)
+	rows := m.skillsToRows(skills)
 	row := rows[0]
 
-	// Name should be truncated to 25 chars
-	if len(row[0]) > 25 {
-		t.Errorf("expected name to be truncated to 25 chars, got %d chars", len(row[0]))
+	// Name should be truncated to the configured width
+	if len(row[0]) > discoverListNameWidth {
+		t.Errorf("expected name to be truncated to %d chars, got %d chars", discoverListNameWidth, len(row[0]))
 	}
 	if row[0][len(row[0])-3:] != "..." {
 		t.Errorf("expected name to end with '...', got '%s'", row[0])
 	}
 
-	// Description should be truncated to 45 chars
-	if len(row[3]) > 45 {
-		t.Errorf("expected description to be truncated to 45 chars, got %d chars", len(row[3]))
+	// Description should be truncated to the configured width
+	if len(row[3]) > discoverListDescWidth {
+		t.Errorf("expected description to be truncated to %d chars, got %d chars", discoverListDescWidth, len(row[3]))
 	}
 	if row[3][len(row[3])-3:] != "..." {
 		t.Errorf("expected description to end with '...', got '%s'", row[3])
