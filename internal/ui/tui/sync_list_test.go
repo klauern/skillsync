@@ -491,6 +491,7 @@ func TestSyncListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
 			Name:        "test-skill",
 			Description: "A test skill description that should fit",
 			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
 		},
 	}
 

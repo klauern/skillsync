@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -373,6 +374,25 @@ func TestSkillsToRows_LongValues(t *testing.T) {
 	}
 	if row[3][len(row[3])-3:] != "..." {
 		t.Errorf("expected description to end with '...', got '%s'", row[3])
+	}
+}
+
+func TestDiscoverListModel_DetailDescriptionWraps(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "alpha beta gamma",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDiscoverListModel(skills)
+	m.detailSkill = skills[0]
+
+	content := m.buildDetailContent(10)
+	if !strings.Contains(content, "alpha beta\ngamma") {
+		t.Errorf("expected wrapped description, got %q", content)
 	}
 }
 

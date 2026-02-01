@@ -369,8 +369,19 @@ func (m CompareListModel) getSelectedComparison() *similarity.ComparisonResult {
 	return nil
 }
 
+func (m CompareListModel) diffContentWidth() int {
+	if m.viewport.Width > 0 {
+		return m.viewport.Width
+	}
+	if m.width > 0 {
+		return m.width
+	}
+	return 80
+}
+
 func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) string {
 	var b strings.Builder
+	contentWidth := m.diffContentWidth()
 
 	// Skill 1 info
 	b.WriteString(compareListStyles.SectionHdr.Render("Skill 1"))
@@ -379,7 +390,8 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 	b.WriteString(fmt.Sprintf("  Platform:    %s\n", c.Skill1.Platform))
 	b.WriteString(fmt.Sprintf("  Scope:       %s\n", c.Skill1.DisplayScope()))
 	if c.Skill1.Description != "" {
-		b.WriteString(fmt.Sprintf("  Description: %s\n", c.Skill1.Description))
+		b.WriteString(wrapLabeledText("  Description: ", c.Skill1.Description, contentWidth))
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 
@@ -390,7 +402,8 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 	b.WriteString(fmt.Sprintf("  Platform:    %s\n", c.Skill2.Platform))
 	b.WriteString(fmt.Sprintf("  Scope:       %s\n", c.Skill2.DisplayScope()))
 	if c.Skill2.Description != "" {
-		b.WriteString(fmt.Sprintf("  Description: %s\n", c.Skill2.Description))
+		b.WriteString(wrapLabeledText("  Description: ", c.Skill2.Description, contentWidth))
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 

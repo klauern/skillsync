@@ -182,8 +182,19 @@ func (m SyncDiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m SyncDiffModel) diffContentWidth() int {
+	if m.viewport.Width > 0 {
+		return m.viewport.Width
+	}
+	if m.width > 0 {
+		return m.width
+	}
+	return 80
+}
+
 func (m SyncDiffModel) buildDiffContent() string {
 	var b strings.Builder
+	contentWidth := m.diffContentWidth()
 
 	// Skill metadata
 	b.WriteString(syncDiffStyles.SectionHdr.Render("Skill Information"))
@@ -192,7 +203,8 @@ func (m SyncDiffModel) buildDiffContent() string {
 	b.WriteString(fmt.Sprintf("  Platform:    %s\n", m.skill.Platform))
 	b.WriteString(fmt.Sprintf("  Scope:       %s\n", m.skill.DisplayScope()))
 	if m.skill.Description != "" {
-		b.WriteString(fmt.Sprintf("  Description: %s\n", m.skill.Description))
+		b.WriteString(wrapLabeledText("  Description: ", m.skill.Description, contentWidth))
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 

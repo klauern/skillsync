@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/klauern/skillsync/internal/model"
 )
@@ -157,7 +158,7 @@ type syncListColumnWidths struct {
 	desc  int
 }
 
-func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
+func syncListColumns(totalWidth int, skills []model.Skill) ([]table.Column, syncListColumnWidths) {
 	widths := syncListColumnWidths{
 		name:  syncListNameWidth,
 		scope: syncListScopeWidth,
@@ -169,10 +170,22 @@ func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
 			(syncListColumnPadding * syncListColumnCount)
 		extra := totalWidth - baseTotal
 		if extra > 0 {
-			scopeExtra := extra / 3
-			descExtra := extra - scopeExtra
-			widths.scope += scopeExtra
-			widths.desc += descExtra
+			maxScopeWidth := widths.scope
+			for _, skill := range skills {
+				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
+				if scopeWidth > maxScopeWidth {
+					maxScopeWidth = scopeWidth
+				}
+			}
+
+			scopeNeeded := maxScopeWidth - widths.scope
+			if scopeNeeded > 0 {
+				scopeExtra := min(scopeNeeded, extra)
+				widths.scope += scopeExtra
+				extra -= scopeExtra
+			}
+
+			widths.desc += extra
 		}
 	}
 
@@ -188,7 +201,7 @@ func syncListColumns(totalWidth int) ([]table.Column, syncListColumnWidths) {
 
 // NewSyncListModel creates a new sync list model.
 func NewSyncListModel(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) SyncListModel {
-	columns, columnWidths := syncListColumns(0)
+	columns, columnWidths := syncListColumns(0, skills)
 
 	// Sort skills alphabetically by name (case-insensitive)
 	sort.Slice(skills, func(i, j int) bool {
@@ -262,7 +275,7 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 }
 
 func (m *SyncListModel) updateColumns(totalWidth int) {
-	columns, widths := syncListColumns(totalWidth)
+	columns, widths := syncListColumns(totalWidth, m.skills)
 	m.columnWidths = widths
 	m.table.SetColumns(columns)
 }

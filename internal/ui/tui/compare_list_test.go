@@ -60,6 +60,32 @@ func TestCompareListModel_ComparisonsToRows_TruncatesAndFormats(t *testing.T) {
 	}
 }
 
+func TestCompareListModel_BuildDiffContent_WrapsDescription(t *testing.T) {
+	comparison := &similarity.ComparisonResult{
+		Skill1: model.Skill{
+			Name:        "skill-one",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+			Description: "alpha beta gamma",
+		},
+		Skill2: model.Skill{
+			Name:     "skill-two",
+			Platform: model.Cursor,
+			Scope:    model.ScopeRepo,
+		},
+	}
+
+	model := NewCompareListModel([]*similarity.ComparisonResult{comparison})
+	model.viewport.Width = 30
+
+	content := model.buildDiffContent(comparison)
+	label := "  Description: "
+	expected := label + "alpha beta\n" + strings.Repeat(" ", len(label)) + "gamma"
+	if !strings.Contains(content, expected) {
+		t.Errorf("expected wrapped description, got %q", content)
+	}
+}
+
 func TestCompareListModel_ApplyFilter_ByPlatform(t *testing.T) {
 	comp1 := &similarity.ComparisonResult{
 		Skill1: model.Skill{Name: "alpha", Platform: model.ClaudeCode},

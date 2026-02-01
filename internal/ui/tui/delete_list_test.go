@@ -607,6 +607,25 @@ func TestDeleteListModel_ViewIncludesDetailPanel(t *testing.T) {
 	}
 }
 
+func TestDeleteListModel_DetailDescriptionWraps(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "alpha beta gamma",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewDeleteListModel(skills)
+	m.detailSkill = skills[0]
+
+	content := m.buildDetailContent(10)
+	if !strings.Contains(content, "alpha beta\ngamma") {
+		t.Errorf("expected wrapped description, got %q", content)
+	}
+}
+
 func TestDeleteListModel_EnterDetails(t *testing.T) {
 	skills := []model.Skill{
 		{

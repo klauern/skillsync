@@ -28,6 +28,26 @@ func TestSyncDiffModel_BuildDiffContent_NewSkill(t *testing.T) {
 	}
 }
 
+func TestSyncDiffModel_BuildDiffContent_WrapsDescription(t *testing.T) {
+	skill := model.Skill{
+		Name:        "wrap-skill",
+		Platform:    model.ClaudeCode,
+		Scope:       model.ScopeUser,
+		Description: "alpha beta gamma",
+		Content:     "line1",
+	}
+
+	model := NewSyncDiffModel(skill, nil, model.ClaudeCode, model.Cursor)
+	model.viewport.Width = 30
+
+	content := model.buildDiffContent()
+	label := "  Description: "
+	expected := label + "alpha beta\n" + strings.Repeat(" ", len(label)) + "gamma"
+	if !strings.Contains(content, expected) {
+		t.Errorf("expected wrapped description, got %q", content)
+	}
+}
+
 func TestSyncDiffModel_BuildDiffContent_Identical(t *testing.T) {
 	skill := model.Skill{
 		Name:     "existing-skill",
