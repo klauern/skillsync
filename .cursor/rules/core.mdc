@@ -9,7 +9,7 @@ Sync AI coding skills (Claude Code, Cursor, Codex) across platforms.
 **Architecture**: CLI entry in `cmd/skillsync`, core packages in `internal/` (see [docs/architecture.md](mdc:docs/architecture.md))
 
 ## Commands
-- Build: `make build` | Test: `make test` | Audit: `make audit`
+- Build: `just build` | Test: `just test` | Audit: `just audit`
 - Run: `./bin/skillsync --help`
 
 ## Issue Tracking

@@ -560,13 +560,12 @@ func TestDeleteListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
 }
 
 func TestDeleteListModel_WindowResize_ExpandsScopeColumn(t *testing.T) {
-	skills := []model.Skill{
-		{
-			Name:     "test-skill",
-			Platform: model.Cursor,
-			Scope:    model.ScopeUser,
-		},
+	skill := model.Skill{
+		Name:     "test-skill",
+		Platform: model.Cursor,
+		Scope:    model.ScopeUser,
 	}
+	skills := []model.Skill{skill}
 
 	m := NewDeleteListModel(skills)
 
@@ -579,7 +578,7 @@ func TestDeleteListModel_WindowResize_ExpandsScopeColumn(t *testing.T) {
 		t.Fatalf("expected 5 columns, got %d", len(cols))
 	}
 
-	expectedScopeWidth := runewidth.StringWidth(skills[0].DisplayScope())
+	expectedScopeWidth := runewidth.StringWidth(skill.DisplayScope())
 	if cols[3].Width < expectedScopeWidth {
 		t.Errorf("expected scope column width >= %d, got %d", expectedScopeWidth, cols[3].Width)
 	}

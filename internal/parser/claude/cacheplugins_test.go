@@ -8,6 +8,27 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 )
 
+func TestCachePluginsParser_AllEntries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	pluginsDir := filepath.Join(home, ".claude", "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o750); err != nil {
+		t.Fatalf("failed to create plugins dir: %v", err)
+	}
+
+	manifest := `{"version":1,"plugins":{"p@m":[{"scope":"user","installPath":"/tmp/p","version":"1.0.0","installedAt":"2024-01-01T00:00:00Z","lastUpdated":"2024-01-01T00:00:00Z"}]}}`
+	if err := os.WriteFile(filepath.Join(pluginsDir, "installed_plugins.json"), []byte(manifest), 0o600); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	parser := NewCachePluginsParser("")
+	entries := parser.AllEntries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+}
+
 func TestCachePluginsParser_ParseEmptyCache(t *testing.T) {
 	// Create a temporary directory as cache path
 	tmpDir := t.TempDir()

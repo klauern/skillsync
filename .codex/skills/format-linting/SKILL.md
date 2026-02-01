@@ -198,13 +198,17 @@ npm install -D prettier eslint
 
 ## Integration with Task Runners
 
-If the project uses Task, Makefile, or similar:
+If the project uses Task, Justfile, Makefile, or similar:
 ```bash
 # Check for task runner first
 if command -v task >/dev/null 2>&1 && test -f Taskfile.yml; then
   echo "Using task runner..."
   task format
   task lint
+elif command -v just >/dev/null 2>&1 && test -f Justfile; then
+  echo "Using Justfile..."
+  just fmt
+  just lint
 elif test -f Makefile; then
   echo "Using Makefile..."
   make format

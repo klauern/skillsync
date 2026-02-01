@@ -198,6 +198,16 @@ func TestBackupListResult_DefaultAction(t *testing.T) {
 	}
 }
 
+func TestRunBackupList_EmptyBackups(t *testing.T) {
+	result, err := RunBackupList(nil)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Action != ActionNone {
+		t.Fatalf("expected ActionNone, got %v", result.Action)
+	}
+}
+
 func TestFormatSize(t *testing.T) {
 	tests := []struct {
 		bytes    int64

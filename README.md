@@ -6,20 +6,21 @@ single CLI.
 ## Requirements
 
 - Go 1.25.4
+- `just` (https://just.systems) for task running
 
 ## Build and Run
 
 ```bash
-make build
+just build
 ./bin/skillsync --help
 ```
 
 ```bash
-make run
+just run
 ```
 
 ```bash
-make install
+just install
 skillsync --help
 ```
 
@@ -81,8 +82,8 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 ## Development
 
 ```bash
-make fmt
-make lint
-make test
-make audit
+just fmt
+just lint
+just test
+just audit
 ```

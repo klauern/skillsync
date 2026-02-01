@@ -20,6 +20,7 @@ SkillSync is a command-line tool that helps you manage and synchronize AI coding
 
 - Go 1.25.4 or later
 - Git (for cloning the repository)
+- `just` (https://just.systems) for task running
 - One or more supported AI coding platforms:
   - Claude Code
   - Cursor
@@ -33,10 +34,10 @@ git clone https://github.com/yourusername/skillsync
 cd skillsync
 
 # Build the binary
-make build
+just build
 
 # Install to GOPATH/bin (optional)
-make install
+just install
 
 # Or run directly
 ./bin/skillsync --version

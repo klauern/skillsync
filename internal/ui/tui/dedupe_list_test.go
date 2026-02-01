@@ -101,3 +101,13 @@ func TestDedupeListModel_ApplyFilter(t *testing.T) {
 		t.Errorf("expected cursor skill after filter, got %q", dedupeModel.filtered[0].Platform)
 	}
 }
+
+func TestRunDedupeList_EmptyDuplicates(t *testing.T) {
+	result, err := RunDedupeList(nil)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Action != DedupeActionNone {
+		t.Fatalf("expected DedupeActionNone, got %v", result.Action)
+	}
+}

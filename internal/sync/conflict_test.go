@@ -1,10 +1,29 @@
 package sync
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/klauern/skillsync/internal/model"
 )
+
+func TestDiffSummaryCountsHunksAndLines(t *testing.T) {
+	c := &Conflict{
+		Hunks: []DiffHunk{
+			{
+				Lines: []DiffLine{
+					{Type: DiffLineAdded, Content: "added"},
+					{Type: DiffLineRemoved, Content: "removed"},
+				},
+			},
+		},
+	}
+
+	got := c.DiffSummary()
+	if !strings.Contains(got, "1 hunk") || !strings.Contains(got, "+1/-1") {
+		t.Fatalf("unexpected summary: %s", got)
+	}
+}
 
 func TestConflictDetector_DetectConflict(t *testing.T) {
 	cd := NewConflictDetector()

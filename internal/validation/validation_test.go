@@ -586,6 +586,7 @@ func TestValidateWritePermission_WithEnvOverrides(t *testing.T) {
 		if err := os.MkdirAll(readOnlyDir, 0o755); err != nil {
 			t.Fatalf("failed to create read-only dir: %v", err)
 		}
+		// #nosec G302 - test directory permissions are acceptable
 		if err := os.Chmod(readOnlyDir, 0o500); err != nil {
 			t.Fatalf("failed to set read-only permissions: %v", err)
 		}

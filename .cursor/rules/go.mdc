@@ -4,9 +4,9 @@ globs: ["*.go"]
 # Go Conventions
 
 ## Tooling
-- Format: `make fmt` (gofumpt + goimports)
-- Lint: `make lint` (see [.golangci.yml](mdc:.golangci.yml))
-- Audit: `make audit` (all checks)
+- Format: `just fmt` (gofumpt + goimports)
+- Lint: `just lint` (see [.golangci.yml](mdc:.golangci.yml))
+- Audit: `just audit` (all checks)
 
 ## Code Patterns
 - Errors: Always check (errcheck enabled)

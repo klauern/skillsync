@@ -80,6 +80,16 @@ func TestParseFormat(t *testing.T) {
 	}
 }
 
+func TestFormatStringAndParseFormat(t *testing.T) {
+	if FormatJSON.String() != "json" {
+		t.Fatalf("expected json, got %q", FormatJSON.String())
+	}
+
+	if _, err := ParseFormat("invalid"); err == nil {
+		t.Fatalf("expected error for invalid format")
+	}
+}
+
 func TestAllFormats(t *testing.T) {
 	formats := AllFormats()
 	if len(formats) != 3 {

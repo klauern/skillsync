@@ -7,8 +7,8 @@ through the harness. Keep fixtures minimal, prefer stable outputs for golden
 files, and rely on stdlib `testing` for assertions.
 
 ## Running
-- `make test` - All tests with coverage
-- `make test-coverage` - View coverage report in browser
+- `just test` - All tests with coverage
+- `just test-coverage` - View coverage report in browser
 
 ## Unit Tests
 - Location: `*_test.go` alongside code under `internal/`
