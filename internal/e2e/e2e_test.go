@@ -1457,8 +1457,24 @@ func TestSyncCreatesBackupByDefault(t *testing.T) {
 	// Check if backup was mentioned in output (backup list should show something)
 	backupResult := h.Run("backup", "list")
 	e2e.AssertSuccess(t, backupResult)
-	// If backup was created, output won't say "No backups found"
-	// Note: This is a soft check as backup behavior may vary
+	e2e.AssertOutputNotContains(t, backupResult, "No backups found")
+}
+
+// TestBackupCreateCommand verifies manual backup creation works.
+func TestBackupCreateCommand(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	cursorFixture := h.CursorFixture()
+	cursorFixture.WriteSkill("manual-backup.md", "manual-backup", "Manual backup", "# Manual Backup\n\nContent.")
+
+	result := h.Run("backup", "create", "--platform", "cursor")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, "Created")
+
+	backupResult := h.Run("backup", "list", "--platform", "cursor")
+	e2e.AssertSuccess(t, backupResult)
+	e2e.AssertOutputNotContains(t, backupResult, "No backups found")
 }
 
 // TestSyncSkipBackupFlag verifies --skip-backup prevents backup creation.

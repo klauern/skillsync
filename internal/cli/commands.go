@@ -616,8 +616,21 @@ func syncSkillsInteractive(cfg *syncConfig) error {
 // executeSyncForSkills performs the actual sync operation for the given skills
 func executeSyncForSkills(cfg *syncConfig, skills []model.Skill) error {
 	// Create backup before sync
-	if !cfg.skipBackup {
+	if !cfg.skipBackup && !cfg.dryRun {
 		prepareBackup(cfg.targetSpec.Platform)
+		created, err := backupExistingTargetSkills(
+			cfg.targetSpec.Platform,
+			cfg.targetSpec.TargetScope(),
+			skills,
+			"pre-sync backup",
+			[]string{"sync"},
+		)
+		if err != nil {
+			return err
+		}
+		if created > 0 {
+			fmt.Printf("✓ Created %d backup(s)\n", created)
+		}
 	}
 
 	// Create sync options and execute
@@ -996,6 +1009,19 @@ func syncCommand() *cli.Command {
 			// Create backup before sync (unless skipped or dry-run)
 			if !cfg.dryRun && !cfg.skipBackup {
 				prepareBackup(cfg.targetSpec.Platform)
+				created, err := backupExistingTargetSkills(
+					cfg.targetSpec.Platform,
+					cfg.targetSpec.TargetScope(),
+					cfg.sourceSkills,
+					"pre-sync backup",
+					[]string{"sync"},
+				)
+				if err != nil {
+					return err
+				}
+				if created > 0 {
+					fmt.Printf("✓ Created %d backup(s)\n", created)
+				}
 			}
 
 			// Create sync options and execute
@@ -1188,7 +1214,7 @@ func showSyncSummaryAndConfirm(cfg *syncConfig) (bool, error) {
 
 // prepareBackup runs backup cleanup before sync
 func prepareBackup(targetPlatform model.Platform) {
-	fmt.Println("\nCreating backup before sync...")
+	fmt.Println("\nPreparing backups...")
 
 	// Run automatic cleanup to maintain retention policy
 	cleanupOpts := backup.DefaultCleanupOptions()
@@ -1201,7 +1227,77 @@ func prepareBackup(targetPlatform model.Platform) {
 		fmt.Printf("Cleaned up %d old backup(s)\n", len(deleted))
 	}
 
-	fmt.Println("Backup infrastructure ready")
+	fmt.Println("Backup cleanup complete")
+}
+
+func createBackupsForSkills(platform model.Platform, skills []model.Skill, description string, tags []string) (int, error) {
+	created := 0
+	for _, skill := range skills {
+		if skill.Path == "" {
+			continue
+		}
+
+		metadata := map[string]string{
+			"skill": skill.Name,
+		}
+		if skill.Scope != "" {
+			metadata["scope"] = string(skill.Scope)
+		}
+
+		opts := backup.Options{
+			Platform:    string(platform),
+			Description: description,
+			Metadata:    metadata,
+			Tags:        tags,
+		}
+
+		if _, err := backup.CreateBackup(skill.Path, opts); err != nil {
+			return created, fmt.Errorf("failed to back up %q: %w", skill.Path, err)
+		}
+		created++
+	}
+
+	return created, nil
+}
+
+func backupExistingTargetSkills(
+	targetPlatform model.Platform,
+	targetScope model.SkillScope,
+	sourceSkills []model.Skill,
+	description string,
+	tags []string,
+) (int, error) {
+	if len(sourceSkills) == 0 {
+		return 0, nil
+	}
+
+	targetSkills, err := parsePlatformSkillsWithScope(targetPlatform, []model.SkillScope{targetScope}, false)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse target skills for backup: %w", err)
+	}
+
+	targetByName := make(map[string]model.Skill)
+	for _, skill := range targetSkills {
+		if skill.Name != "" {
+			targetByName[skill.Name] = skill
+		}
+	}
+	if len(targetByName) == 0 {
+		return 0, nil
+	}
+
+	toBackup := make([]model.Skill, 0, len(sourceSkills))
+	for _, skill := range sourceSkills {
+		if targetSkill, ok := targetByName[skill.Name]; ok {
+			toBackup = append(toBackup, targetSkill)
+		}
+	}
+
+	if len(toBackup) == 0 {
+		return 0, nil
+	}
+
+	return createBackupsForSkills(targetPlatform, toBackup, description, tags)
 }
 
 // displaySyncResults shows the results of a sync operation
@@ -1359,6 +1455,19 @@ func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, confirmed boo
 	// Create backup before deletion (unless skipped or dry-run)
 	if !cfg.dryRun && !cfg.skipBackup {
 		prepareBackup(cfg.targetSpec.Platform)
+		created, err := backupExistingTargetSkills(
+			cfg.targetSpec.Platform,
+			cfg.targetSpec.TargetScope(),
+			skills,
+			"pre-delete backup",
+			[]string{"delete"},
+		)
+		if err != nil {
+			return err
+		}
+		if created > 0 {
+			fmt.Printf("✓ Created %d backup(s)\n", created)
+		}
 	}
 
 	// Create options and execute delete
@@ -1400,6 +1509,27 @@ func applyResolvedConflicts(result *sync.Result, resolved map[string]string) err
 		}
 	}
 	return nil
+}
+
+func parseScopeFilter(scopeStr string) ([]model.SkillScope, error) {
+	if scopeStr == "" || scopeStr == "all" {
+		return nil, nil
+	}
+
+	var scopeFilter []model.SkillScope
+	for _, s := range strings.Split(scopeStr, ",") {
+		scope, err := model.ParseScope(strings.TrimSpace(s))
+		if err != nil {
+			return nil, fmt.Errorf("invalid scope: %w", err)
+		}
+		scopeFilter = append(scopeFilter, scope)
+	}
+
+	if len(scopeFilter) == 0 {
+		return nil, fmt.Errorf("no valid scopes found in %q", scopeStr)
+	}
+
+	return scopeFilter, nil
 }
 
 // parsePlatformSkills parses skills from the given platform using env-var-respecting paths.
@@ -1928,10 +2058,12 @@ func backupCommand() *cli.Command {
 
    Examples:
      skillsync backup list                    # List all backups
+     skillsync backup create --platform cursor # Create backups for Cursor skills
      skillsync backup list --platform claude-code
      skillsync backup list --format json
      skillsync backup restore <backup-id>     # Restore a backup`,
 		Commands: []*cli.Command{
+			backupCreateCommand(),
 			backupListCommand(),
 			backupRestoreCommand(),
 			backupDeleteCommand(),
@@ -1940,6 +2072,85 @@ func backupCommand() *cli.Command {
 		Action: func(_ context.Context, _ *cli.Command) error {
 			// Default action: list backups
 			return listBackups("", "table", 0)
+		},
+	}
+}
+
+func backupCreateCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "create",
+		Aliases: []string{"new"},
+		Usage:   "Create backups of skill files",
+		UsageText: `skillsync backup create [options]
+   skillsync backup create --platform cursor
+   skillsync backup create --platform claude-code --scope repo
+   skillsync backup create --platform all`,
+		Description: `Create backups for skills across platforms.
+
+   By default, backs up all platforms. Use --platform to limit results.
+   Use --scope to filter which skill scopes are included.`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "platform",
+				Aliases: []string{"p"},
+				Usage:   "Platform to back up (claude-code, cursor, codex, all)",
+			},
+			&cli.StringFlag{
+				Name:    "scope",
+				Aliases: []string{"s"},
+				Usage:   "Filter by scope (repo, user, admin, system, builtin, plugin, all). Comma-separated for multiple.",
+			},
+			&cli.BoolFlag{
+				Name:  "include-plugins",
+				Usage: "Include skills from installed Claude Code plugins",
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			platformStr := strings.TrimSpace(cmd.String("platform"))
+			scopeStr := strings.TrimSpace(cmd.String("scope"))
+			includePlugins := cmd.Bool("include-plugins")
+
+			scopeFilter, err := parseScopeFilter(scopeStr)
+			if err != nil {
+				return err
+			}
+
+			var platforms []model.Platform
+			if platformStr == "" || platformStr == "all" {
+				platforms = model.AllPlatforms()
+			} else {
+				platform, err := model.ParsePlatform(platformStr)
+				if err != nil {
+					return err
+				}
+				platforms = []model.Platform{platform}
+			}
+
+			totalCreated := 0
+			for _, platform := range platforms {
+				skills, err := parsePlatformSkillsWithScope(platform, scopeFilter, includePlugins)
+				if err != nil {
+					return fmt.Errorf("failed to parse %s skills: %w", platform, err)
+				}
+				if len(skills) == 0 {
+					continue
+				}
+
+				prepareBackup(platform)
+				created, err := createBackupsForSkills(platform, skills, "manual backup", []string{"manual"})
+				if err != nil {
+					return err
+				}
+				totalCreated += created
+			}
+
+			if totalCreated == 0 {
+				fmt.Println("No skills found to back up.")
+				return nil
+			}
+
+			fmt.Printf("\n✓ Created %d backup(s)\n", totalCreated)
+			return nil
 		},
 	}
 }
@@ -2779,6 +2990,19 @@ func runSyncTUI() error {
 
 	// Create backup before sync
 	prepareBackup(targetPlatform)
+	created, err := backupExistingTargetSkills(
+		targetPlatform,
+		model.ScopeUser,
+		syncResult.SelectedSkills,
+		"pre-sync backup",
+		[]string{"sync"},
+	)
+	if err != nil {
+		return err
+	}
+	if created > 0 {
+		fmt.Printf("✓ Created %d backup(s)\n", created)
+	}
 
 	// Perform sync
 	syncer := sync.New()
