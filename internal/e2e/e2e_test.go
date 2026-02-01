@@ -829,6 +829,57 @@ func TestSyncDryRunNoChanges(t *testing.T) {
 	e2e.AssertFileNotExists(t, cursorFixture.Path("dry-test.md"))
 }
 
+func TestSyncDeleteModeDeletes(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	src := h.ClaudeCodeFixture()
+	src.WriteSkill("del.md", "del", "", "# del")
+
+	tgt := h.CursorFixture()
+	tgt.WriteSkill("del.md", "del", "", "# del")
+
+	result := h.RunWithStdin("y\n", "sync", "--delete", "--skip-backup", "claudecode", "cursor")
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileNotExists(t, tgt.Path("del.md"))
+}
+
+func TestSyncDeleteModeDryRun(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	src := h.ClaudeCodeFixture()
+	src.WriteSkill("del.md", "del", "", "# del")
+
+	tgt := h.CursorFixture()
+	tgt.WriteSkill("del.md", "del", "", "# del")
+
+	result := h.Run("sync", "--delete", "--dry-run", "--skip-backup", "claudecode", "cursor")
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, tgt.Path("del.md"))
+}
+
+func TestSyncValidatesSourceSkills(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	src := h.ClaudeCodeFixture()
+	src.WriteSkill("valid.md", "valid", "", "# valid")
+	h.CursorFixture()
+
+	result := h.RunWithStdin("y\n", "sync", "claudecode", "cursor")
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, "Validating source skills")
+}
+
+func TestCompareCommandBasic(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	src := h.ClaudeCodeFixture()
+	src.WriteSkill("a.md", "alpha", "", "# A")
+	src.WriteSkill("b.md", "alpha-copy", "", "# A")
+
+	result := h.Run("compare", "--platform", "claude-code", "--format", "summary")
+	e2e.AssertSuccess(t, result)
+}
+
 // ============================================================================
 // Resolution Strategy E2E Tests
 // ============================================================================

@@ -1,4 +1,3 @@
-//nolint:revive // var-naming - package name is consistent with main package
 package util
 
 import (
@@ -8,6 +7,30 @@ import (
 
 	"github.com/klauern/skillsync/internal/model"
 )
+
+func TestSkillsyncConfigPath_UsesEnvOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("SKILLSYNC_HOME", tmp)
+
+	if got := SkillsyncConfigPath(); got != tmp {
+		t.Fatalf("expected %q, got %q", tmp, got)
+	}
+}
+
+func TestClaudePluginPaths_FromHome(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cachePath := ClaudePluginCachePath()
+	installedPath := ClaudeInstalledPluginsPath()
+
+	if cachePath != filepath.Join(tmp, ".claude", "plugins", "cache") {
+		t.Fatalf("unexpected cache path: %q", cachePath)
+	}
+	if installedPath != filepath.Join(tmp, ".claude", "plugins", "installed_plugins.json") {
+		t.Fatalf("unexpected installed path: %q", installedPath)
+	}
+}
 
 func TestHomeDir(t *testing.T) {
 	home := HomeDir()

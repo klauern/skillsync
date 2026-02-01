@@ -164,3 +164,13 @@ func TestFormatConflictContentWithLineNumbers(t *testing.T) {
 		t.Errorf("expected line numbers in formatted output")
 	}
 }
+
+func TestRunConflictList_EmptyConflicts(t *testing.T) {
+	result, err := RunConflictList(nil)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Action != ConflictActionNone {
+		t.Fatalf("expected ConflictActionNone, got %v", result.Action)
+	}
+}

@@ -15,22 +15,22 @@ preventing duplication and ensuring consistency.
 ## How to Work With It
 
 ### Running Locally
-- `make run` - build and run (see `Makefile`)
-- `./bin/skillsync` - direct binary execution (after `make build`)
+- `just run` - build and run (see `Justfile`)
+- `./bin/skillsync` - direct binary execution (after `just build`)
 
 ### Testing
-- `make test` - run tests with coverage
-- `make test-coverage` - view coverage report in browser
+- `just test` - run tests with coverage
+- `just test-coverage` - view coverage report in browser
 - Convention: use stdlib `testing`; do not add testify
 
 ### Building
-- `make build` - build to `bin/skillsync`
-- `make install` - install to `$GOPATH/bin`
+- `just build` - build to `bin/skillsync`
+- `just install` - install to `$GOPATH/bin`
 
 ### Quality Gates
-- `make audit` - run all checks (tidy, fmt, vet, lint, test)
-- `make fmt` - format with gofumpt + goimports
-- `make lint` - run golangci-lint (see `.golangci.yml`)
+- `just audit` - run all checks (tidy, fmt, vet, lint, test)
+- `just fmt` - format with gofumpt + goimports
+- `just lint` - run golangci-lint (see `.golangci.yml`)
 
 ### Go Conventions
 - Package structure: `cmd/` for binaries, `internal/` for private packages

@@ -155,3 +155,13 @@ func TestCompareListModel_BuildDiffContent_IdenticalContent(t *testing.T) {
 		t.Errorf("expected identical content notice")
 	}
 }
+
+func TestRunCompareList_EmptyComparisons(t *testing.T) {
+	result, err := RunCompareList(nil)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result.Action != CompareActionNone {
+		t.Fatalf("expected CompareActionNone, got %v", result.Action)
+	}
+}
