@@ -6,12 +6,14 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/util"
 )
 
 func TestVersionVariables(t *testing.T) {
@@ -119,13 +121,24 @@ func TestConfigureLogging(t *testing.T) {
 }
 
 func TestSyncCommand(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	repoRoot := util.GetRepoRoot(cwd)
+	if repoRoot == "" {
+		t.Fatalf("failed to locate repo root from %q", cwd)
+	}
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", filepath.Join(repoRoot, "testdata", "skills", "claude"))
+	t.Setenv("SKILLSYNC_CURSOR_SKILLS_PATHS", filepath.Join(t.TempDir(), "cursor-skills"))
+
 	tests := map[string]struct {
 		args       []string
 		wantErr    bool
 		wantOutput string
 	}{
 		"valid sync": {
-			args:       []string{"skillsync", "sync", "--skip-validation", "--yes", "claudecode", "cursor"},
+			args:       []string{"skillsync", "sync", "--skip-backup", "--skip-validation", "--yes", "claudecode", "cursor"},
 			wantErr:    false,
 			wantOutput: "Synced claude-code -> cursor",
 		},
