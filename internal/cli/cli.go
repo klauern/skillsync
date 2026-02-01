@@ -47,6 +47,7 @@ func Run(ctx context.Context, args []string) error {
 		},
 		Commands: []*cli.Command{
 			versionCommand(),
+			onboardCommand(),
 			configCommand(),
 			syncCommand(),
 			discoveryCommand(),

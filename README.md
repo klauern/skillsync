@@ -40,6 +40,7 @@ skillsync sync cursor claudecode --dry-run
 - `dedupe` identify duplicates by name/content similarity
 - `export` export skills to JSON/YAML/Markdown
 - `backup` create and manage backups
+- `onboard` LLM-friendly onboarding guide (alias: `llm`)
 - `promote`/`demote` move skills between repo/user scopes
 - `scope` browse skills by scope
 - `tui` interactive dashboard

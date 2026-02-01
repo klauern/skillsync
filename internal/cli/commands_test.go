@@ -383,6 +383,68 @@ func TestDiscoveryCommand(t *testing.T) {
 	}
 }
 
+func TestOnboardCommand(t *testing.T) {
+	tests := map[string]struct {
+		args       []string
+		wantErr    bool
+		wantOutput []string
+	}{
+		"onboard command": {
+			args:    []string{"skillsync", "onboard"},
+			wantErr: false,
+			wantOutput: []string{
+				"SkillSync",
+				"Quick start",
+				"Common workflows",
+			},
+		},
+		"onboard alias llm": {
+			args:    []string{"skillsync", "llm"},
+			wantErr: false,
+			wantOutput: []string{
+				"SkillSync",
+				"Quick start",
+				"Common workflows",
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			ctx := context.Background()
+			err := Run(ctx, tt.args)
+
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close pipe writer: %v", err)
+			}
+			os.Stdout = old
+
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, r); err != nil {
+				t.Fatalf("failed to read captured output: %v", err)
+			}
+			output := buf.String()
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Run() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				for _, want := range tt.wantOutput {
+					if !strings.Contains(output, want) {
+						t.Errorf("Run() output = %q, want substring %q", output, want)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestExportCommand(t *testing.T) {
 	// Set up isolated test environment - both HOME and working directory
 	tempDir := t.TempDir()
