@@ -365,6 +365,16 @@ skillsync sync --interactive --strategy three-way cursor claude-code
 
 SkillSync automatically creates backups before sync operations.
 
+### Create a Backup
+
+```bash
+# Create backups for a platform
+skillsync backup create --platform cursor
+
+# Limit to a specific scope
+skillsync backup create --platform claude-code --scope repo
+```
+
 ### List Backups
 
 ```bash
