@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/klauern/skillsync/internal/sync"
 )
@@ -20,51 +19,10 @@ func TestDefault(t *testing.T) {
 	if cfg.Sync.DefaultStrategy != string(sync.StrategyOverwrite) {
 		t.Errorf("expected default strategy %q, got %q", sync.StrategyOverwrite, cfg.Sync.DefaultStrategy)
 	}
-	if !cfg.Sync.AutoBackup {
-		t.Error("expected AutoBackup to be true by default")
-	}
-	if cfg.Sync.BackupRetentionDays != 30 {
-		t.Errorf("expected BackupRetentionDays to be 30, got %d", cfg.Sync.BackupRetentionDays)
-	}
-
-	// Check cache defaults
-	if !cfg.Cache.Enabled {
-		t.Error("expected Cache.Enabled to be true by default")
-	}
-	if cfg.Cache.TTL != time.Hour {
-		t.Errorf("expected Cache.TTL to be 1h, got %v", cfg.Cache.TTL)
-	}
 
 	// Check output defaults
-	if cfg.Output.Format != "table" {
-		t.Errorf("expected Output.Format to be 'table', got %q", cfg.Output.Format)
-	}
 	if cfg.Output.Color != "auto" {
 		t.Errorf("expected Output.Color to be 'auto', got %q", cfg.Output.Color)
-	}
-
-	// Check backup defaults
-	if !cfg.Backup.Enabled {
-		t.Error("expected Backup.Enabled to be true by default")
-	}
-	if cfg.Backup.MaxBackups != 10 {
-		t.Errorf("expected Backup.MaxBackups to be 10, got %d", cfg.Backup.MaxBackups)
-	}
-
-	// Check plugins defaults
-	if !cfg.Plugins.Enabled {
-		t.Error("expected Plugins.Enabled to be true by default")
-	}
-	if !cfg.Plugins.CachePlugins {
-		t.Error("expected Plugins.CachePlugins to be true by default")
-	}
-
-	// Check platform defaults
-	if !cfg.Platforms.ClaudeCode.BackupEnabled {
-		t.Error("expected ClaudeCode.BackupEnabled to be true by default")
-	}
-	if !cfg.Platforms.Cursor.BackupEnabled {
-		t.Error("expected Cursor.BackupEnabled to be true by default")
 	}
 }
 
@@ -76,9 +34,8 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	// Create a config with custom values
 	cfg := Default()
 	cfg.Sync.DefaultStrategy = string(sync.StrategyThreeWay)
-	cfg.Cache.TTL = 2 * time.Hour
-	cfg.Output.Verbose = true
-	cfg.Backup.MaxBackups = 20
+	cfg.Output.Color = "never"
+	cfg.Similarity.NameThreshold = 0.9
 
 	// Save to the temporary path
 	if err := cfg.SaveToPath(configPath); err != nil {
@@ -95,14 +52,11 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	if loaded.Sync.DefaultStrategy != string(sync.StrategyThreeWay) {
 		t.Errorf("expected strategy %q, got %q", sync.StrategyThreeWay, loaded.Sync.DefaultStrategy)
 	}
-	if loaded.Cache.TTL != 2*time.Hour {
-		t.Errorf("expected TTL 2h, got %v", loaded.Cache.TTL)
+	if loaded.Output.Color != "never" {
+		t.Errorf("expected Output.Color to be 'never', got %q", loaded.Output.Color)
 	}
-	if !loaded.Output.Verbose {
-		t.Error("expected Verbose to be true")
-	}
-	if loaded.Backup.MaxBackups != 20 {
-		t.Errorf("expected MaxBackups 20, got %d", loaded.Backup.MaxBackups)
+	if loaded.Similarity.NameThreshold != 0.9 {
+		t.Errorf("expected NameThreshold 0.9, got %f", loaded.Similarity.NameThreshold)
 	}
 }
 
@@ -120,52 +74,10 @@ func TestEnvironmentOverrides(t *testing.T) {
 			check:    func(c *Config) bool { return c.Sync.DefaultStrategy == "three-way" },
 		},
 		{
-			name:     "sync auto backup",
-			envKey:   "SKILLSYNC_SYNC_AUTO_BACKUP",
-			envValue: "false",
-			check:    func(c *Config) bool { return !c.Sync.AutoBackup },
-		},
-		{
-			name:     "cache enabled",
-			envKey:   "SKILLSYNC_CACHE_ENABLED",
-			envValue: "false",
-			check:    func(c *Config) bool { return !c.Cache.Enabled },
-		},
-		{
-			name:     "cache ttl",
-			envKey:   "SKILLSYNC_CACHE_TTL",
-			envValue: "30m",
-			check:    func(c *Config) bool { return c.Cache.TTL == 30*time.Minute },
-		},
-		{
-			name:     "output format",
-			envKey:   "SKILLSYNC_OUTPUT_FORMAT",
-			envValue: "json",
-			check:    func(c *Config) bool { return c.Output.Format == "json" },
-		},
-		{
-			name:     "output verbose",
-			envKey:   "SKILLSYNC_OUTPUT_VERBOSE",
-			envValue: "true",
-			check:    func(c *Config) bool { return c.Output.Verbose },
-		},
-		{
 			name:     "output color",
 			envKey:   "SKILLSYNC_OUTPUT_COLOR",
 			envValue: "never",
 			check:    func(c *Config) bool { return c.Output.Color == "never" },
-		},
-		{
-			name:     "backup enabled",
-			envKey:   "SKILLSYNC_BACKUP_ENABLED",
-			envValue: "no",
-			check:    func(c *Config) bool { return !c.Backup.Enabled },
-		},
-		{
-			name:     "plugins enabled",
-			envKey:   "SKILLSYNC_PLUGINS_ENABLED",
-			envValue: "0",
-			check:    func(c *Config) bool { return !c.Plugins.Enabled },
 		},
 		{
 			name:     "claude code path",
@@ -187,39 +99,6 @@ func TestEnvironmentOverrides(t *testing.T) {
 			// Check if the value was applied
 			if !tt.check(cfg) {
 				t.Errorf("environment override for %s did not apply correctly", tt.envKey)
-			}
-		})
-	}
-}
-
-func TestParseBool(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"true", true},
-		{"True", true},
-		{"TRUE", true},
-		{"1", true},
-		{"yes", true},
-		{"Yes", true},
-		{"YES", true},
-		{"on", true},
-		{"ON", true},
-		{"false", false},
-		{"False", false},
-		{"0", false},
-		{"no", false},
-		{"off", false},
-		{"", false},
-		{"invalid", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := parseBool(tt.input)
-			if result != tt.expected {
-				t.Errorf("parseBool(%q) = %v, expected %v", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -297,7 +176,6 @@ func TestPartialConfigMerge(t *testing.T) {
 	partialConfig := `
 sync:
   default_strategy: "skip"
-  auto_backup: false
 `
 	// #nosec G306 - test file permissions are acceptable
 	if err := os.WriteFile(configPath, []byte(partialConfig), 0o644); err != nil {
@@ -313,17 +191,6 @@ sync:
 	// Partial overrides should apply
 	if cfg.Sync.DefaultStrategy != "skip" {
 		t.Errorf("expected strategy 'skip', got %q", cfg.Sync.DefaultStrategy)
-	}
-	if cfg.Sync.AutoBackup {
-		t.Error("expected AutoBackup to be false from partial config")
-	}
-
-	// Defaults should still be present for non-specified values
-	if !cfg.Cache.Enabled {
-		t.Error("expected Cache.Enabled to retain default value true")
-	}
-	if cfg.Backup.MaxBackups != 10 {
-		t.Errorf("expected Backup.MaxBackups to retain default value 10, got %d", cfg.Backup.MaxBackups)
 	}
 }
 

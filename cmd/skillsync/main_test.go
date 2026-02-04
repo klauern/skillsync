@@ -162,6 +162,7 @@ func TestAllCommandsRegistered(t *testing.T) {
 		"version",
 		"config",
 		"sync",
+		"delete",
 		"discover",
 		"compare",
 		"dedupe",

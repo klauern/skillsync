@@ -2,7 +2,6 @@ package tui
 
 import (
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -71,18 +70,20 @@ func TestConfigListModel_FilterByKey(t *testing.T) {
 	cfg := config.Default()
 	m := NewConfigListModel(cfg)
 
-	m.filter = "enabled"
+	m.filter = "threshold"
 	m.applyFilter()
 
-	// Should have multiple "Enabled" items (Cache, Plugins, Backup)
-	if len(m.filtered) < 3 {
-		t.Errorf("expected at least 3 items with 'enabled' filter, got %d", len(m.filtered))
+	// Should have both similarity thresholds
+	if len(m.filtered) != 2 {
+		t.Errorf("expected 2 items with 'threshold' filter, got %d", len(m.filtered))
 	}
 
+	keys := map[string]bool{}
 	for _, item := range m.filtered {
-		if item.Key != "Enabled" {
-			t.Errorf("expected Key to be 'Enabled', got %s", item.Key)
-		}
+		keys[item.Key] = true
+	}
+	if !keys["NameThreshold"] || !keys["ContentThreshold"] {
+		t.Errorf("expected NameThreshold and ContentThreshold, got %v", keys)
 	}
 }
 
@@ -100,31 +101,6 @@ func TestConfigListModel_ClearFilter(t *testing.T) {
 
 	if len(m.filtered) != originalCount {
 		t.Errorf("expected %d items after clearing filter, got %d", originalCount, len(m.filtered))
-	}
-}
-
-func TestConfigListModel_ToggleBool(t *testing.T) {
-	cfg := config.Default()
-	cfg.Sync.AutoBackup = true
-	m := NewConfigListModel(cfg)
-
-	// Find AutoBackup item
-	for i, item := range m.filtered {
-		if item.Section == "Sync" && item.Key == "AutoBackup" {
-			m.table.SetCursor(i)
-			break
-		}
-	}
-
-	m.toggleOrCycleCurrentValue()
-
-	// Should toggle the value
-	if m.cfg.Sync.AutoBackup {
-		t.Error("expected AutoBackup to be false after toggle")
-	}
-
-	if !m.modified {
-		t.Error("expected modified to be true after toggle")
 	}
 }
 
@@ -153,29 +129,6 @@ func TestConfigListModel_CycleOptions(t *testing.T) {
 	}
 }
 
-func TestConfigListModel_UpdateIntValue(t *testing.T) {
-	cfg := config.Default()
-	m := NewConfigListModel(cfg)
-
-	m.updateConfigValue("Sync", "BackupRetentionDays", "60")
-
-	if m.cfg.Sync.BackupRetentionDays != 60 {
-		t.Errorf("expected BackupRetentionDays to be 60, got %d", m.cfg.Sync.BackupRetentionDays)
-	}
-}
-
-func TestConfigListModel_UpdateDurationValue(t *testing.T) {
-	cfg := config.Default()
-	m := NewConfigListModel(cfg)
-
-	m.updateConfigValue("Cache", "TTL", "2h")
-
-	expected := 2 * time.Hour
-	if m.cfg.Cache.TTL != expected {
-		t.Errorf("expected Cache.TTL to be %v, got %v", expected, m.cfg.Cache.TTL)
-	}
-}
-
 func TestConfigListModel_UpdateFloatValue(t *testing.T) {
 	cfg := config.Default()
 	m := NewConfigListModel(cfg)
@@ -198,17 +151,6 @@ func TestConfigListModel_UpdateFloatValue_OutOfRange(t *testing.T) {
 	// Should not change
 	if m.cfg.Similarity.NameThreshold != original {
 		t.Errorf("expected NameThreshold to remain %f, got %f", original, m.cfg.Similarity.NameThreshold)
-	}
-}
-
-func TestConfigListModel_UpdateStringValue(t *testing.T) {
-	cfg := config.Default()
-	m := NewConfigListModel(cfg)
-
-	m.updateConfigValue("Output", "Format", "json")
-
-	if m.cfg.Output.Format != "json" {
-		t.Errorf("expected Format to be 'json', got %s", m.cfg.Output.Format)
 	}
 }
 
@@ -394,9 +336,9 @@ func TestConfigListModel_EditMode(t *testing.T) {
 	cfg := config.Default()
 	m := NewConfigListModel(cfg)
 
-	// Navigate to a string field (Cache Location)
+	// Navigate to a numeric field (Similarity NameThreshold)
 	for i, item := range m.filtered {
-		if item.Section == "Cache" && item.Key == "Location" {
+		if item.Section == "Similarity" && item.Key == "NameThreshold" {
 			m.table.SetCursor(i)
 			break
 		}
@@ -411,13 +353,13 @@ func TestConfigListModel_EditMode(t *testing.T) {
 	}
 }
 
-func TestConfigListModel_EditModeNotForBool(t *testing.T) {
+func TestConfigListModel_EditModeNotForOptionsOutput(t *testing.T) {
 	cfg := config.Default()
 	m := NewConfigListModel(cfg)
 
-	// Navigate to a bool field (Cache Enabled)
+	// Navigate to an options field (Output Color)
 	for i, item := range m.filtered {
-		if item.Section == "Cache" && item.Key == "Enabled" {
+		if item.Section == "Output" && item.Key == "Color" {
 			m.table.SetCursor(i)
 			break
 		}
@@ -427,9 +369,9 @@ func TestConfigListModel_EditModeNotForBool(t *testing.T) {
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
 	m = newModel.(ConfigListModel)
 
-	// Should not enter edit mode for bool
+	// Should not enter edit mode for options fields
 	if m.editing {
-		t.Error("expected editing to be false for bool fields")
+		t.Error("expected editing to be false for options fields")
 	}
 }
 
@@ -557,63 +499,6 @@ func TestConfigListResult_DefaultAction(t *testing.T) {
 func TestRunConfigList_NilConfig(_ *testing.T) {
 	// This is more of an integration test, but we can verify it doesn't panic
 	// We can't actually run the full TUI in tests without special handling
-}
-
-func TestParseBool(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"true", true},
-		{"True", true},
-		{"TRUE", true},
-		{"1", true},
-		{"yes", true},
-		{"on", true},
-		{"false", false},
-		{"0", false},
-		{"no", false},
-		{"off", false},
-		{"invalid", false},
-		{"", false},
-	}
-
-	for _, tc := range tests {
-		result := parseBool(tc.input)
-		if result != tc.expected {
-			t.Errorf("parseBool(%q) = %v, expected %v", tc.input, result, tc.expected)
-		}
-	}
-}
-
-func TestParseInt(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected int
-		hasError bool
-	}{
-		{"42", 42, false},
-		{"0", 0, false},
-		{"-1", -1, false},
-		{"invalid", 0, true},
-		{"", 0, true},
-	}
-
-	for _, tc := range tests {
-		result, err := parseInt(tc.input)
-		if tc.hasError {
-			if err == nil {
-				t.Errorf("parseInt(%q) expected error, got none", tc.input)
-			}
-		} else {
-			if err != nil {
-				t.Errorf("parseInt(%q) unexpected error: %v", tc.input, err)
-			}
-			if result != tc.expected {
-				t.Errorf("parseInt(%q) = %d, expected %d", tc.input, result, tc.expected)
-			}
-		}
-	}
 }
 
 func TestParseFloat(t *testing.T) {

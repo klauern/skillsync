@@ -50,6 +50,7 @@ func Run(ctx context.Context, args []string) error {
 			onboardCommand(),
 			configCommand(),
 			syncCommand(),
+			deleteCommand(),
 			discoveryCommand(),
 			compareCommand(),
 			dedupeCommand(),

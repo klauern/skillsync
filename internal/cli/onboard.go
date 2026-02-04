@@ -44,6 +44,7 @@ func onboardGuide() string {
 ## Common workflows
 - Discover: skillsync discover --platform cursor --scope repo,user
 - Sync: skillsync sync --strategy newer cursor claude-code
+- Delete: skillsync delete --dry-run cursor codex
 - Compare: skillsync compare
 - Dedupe: skillsync dedupe list --platform cursor
 - Export: skillsync export --format json --output skills.json

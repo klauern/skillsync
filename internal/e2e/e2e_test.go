@@ -84,7 +84,8 @@ func TestConfigShowYAMLContainsExpectedSections(t *testing.T) {
 	// Check for main config sections
 	e2e.AssertOutputContains(t, result, "platforms:")
 	e2e.AssertOutputContains(t, result, "sync:")
-	e2e.AssertOutputContains(t, result, "backup:")
+	e2e.AssertOutputContains(t, result, "output:")
+	e2e.AssertOutputContains(t, result, "similarity:")
 	e2e.AssertOutputContains(t, result, "# skillsync configuration")
 }
 
@@ -838,7 +839,7 @@ func TestSyncDeleteModeDeletes(t *testing.T) {
 	tgt := h.CursorFixture()
 	tgt.WriteSkill("del.md", "del", "", "# del")
 
-	result := h.RunWithStdin("y\n", "sync", "--delete", "--skip-backup", "claudecode", "cursor")
+	result := h.RunWithStdin("y\n", "delete", "--skip-backup", "claudecode", "cursor")
 	e2e.AssertSuccess(t, result)
 	e2e.AssertFileNotExists(t, tgt.Path("del.md"))
 }
@@ -852,7 +853,7 @@ func TestSyncDeleteModeDryRun(t *testing.T) {
 	tgt := h.CursorFixture()
 	tgt.WriteSkill("del.md", "del", "", "# del")
 
-	result := h.Run("sync", "--delete", "--dry-run", "--skip-backup", "claudecode", "cursor")
+	result := h.Run("delete", "--dry-run", "--skip-backup", "claudecode", "cursor")
 	e2e.AssertSuccess(t, result)
 	e2e.AssertFileExists(t, tgt.Path("del.md"))
 }

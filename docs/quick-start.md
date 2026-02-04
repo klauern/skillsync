@@ -191,6 +191,20 @@ skillsync sync --dry-run cursor claude-code
 
 This shows what would happen without making any changes.
 
+### Delete Skills (Inverse of Sync)
+
+Remove skills from a target that also exist in a source:
+
+```bash
+skillsync delete cursor codex
+```
+
+Preview deletions before applying:
+
+```bash
+skillsync delete --dry-run cursor codex
+```
+
 ### Sync Specific Scopes
 
 Use the platform:scope syntax to control which skills are synced:
@@ -744,32 +758,36 @@ skillsync config path
 ```yaml
 # ~/.skillsync/config.yaml
 
-# Supported platforms (claude-code, cursor, codex)
 platforms:
-  - claude-code
-  - cursor
-  - codex
+  claude_code:
+    skills_paths:
+      - .claude/skills
+      - ~/.claude/skills
+  cursor:
+    skills_paths:
+      - .cursor/skills
+      - ~/.cursor/skills
+  codex:
+    skills_paths:
+      - .codex/skills
+      - ~/.codex/skills
+      - /etc/codex/skills
 
-# Default sync strategy (overwrite, skip, newer, merge, three-way, interactive)
-default_strategy: overwrite
+sync:
+  # Default sync strategy (overwrite, skip, newer, merge, three-way, interactive)
+  default_strategy: overwrite
 
-# Automatically create backups before sync
-auto_backup: true
+output:
+  # Color output mode (auto, always, never)
+  color: auto
 
-# Enable colored output
-color: true
-
-# Default output format (table, json, yaml)
-output_format: table
-
-# Backup retention (days, 0 = keep forever)
-backup_retention_days: 30
-
-# Plugin discovery
-plugins:
-  enabled: true
-  cache_enabled: true
-  cache_duration: 24h
+similarity:
+  # Name similarity threshold (0.0-1.0)
+  name_threshold: 0.7
+  # Content similarity threshold (0.0-1.0)
+  content_threshold: 0.6
+  # Algorithm (levenshtein, jaro-winkler, combined)
+  algorithm: combined
 ```
 
 ### Environment Variables
@@ -778,13 +796,10 @@ Override config with environment variables:
 
 ```bash
 # Disable colored output
-export SKILLSYNC_NO_COLOR=1
+export SKILLSYNC_OUTPUT_COLOR=never
 
 # Set default strategy
-export SKILLSYNC_DEFAULT_STRATEGY=three-way
-
-# Disable auto-backup
-export SKILLSYNC_AUTO_BACKUP=false
+export SKILLSYNC_SYNC_STRATEGY=three-way
 ```
 
 ## Next Steps

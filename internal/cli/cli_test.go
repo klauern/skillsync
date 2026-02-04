@@ -214,6 +214,72 @@ func TestSyncCommand(t *testing.T) {
 	}
 }
 
+func TestDeleteCommand(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	repoRoot := util.GetRepoRoot(cwd)
+	if repoRoot == "" {
+		t.Fatalf("failed to locate repo root from %q", cwd)
+	}
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", filepath.Join(repoRoot, "testdata", "skills", "claude"))
+	t.Setenv("SKILLSYNC_CURSOR_SKILLS_PATHS", filepath.Join(t.TempDir(), "cursor-skills"))
+
+	tests := map[string]struct {
+		args       []string
+		wantErr    bool
+		wantOutput string
+	}{
+		"valid delete with dry-run": {
+			args:       []string{"skillsync", "delete", "--dry-run", "claudecode", "cursor"},
+			wantErr:    false,
+			wantOutput: "Delete mode: Will remove",
+		},
+		"missing target argument": {
+			args:    []string{"skillsync", "delete", "claudecode"},
+			wantErr: true,
+		},
+		"missing both arguments": {
+			args:    []string{"skillsync", "delete"},
+			wantErr: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			ctx := context.Background()
+			err := Run(ctx, tt.args)
+
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close pipe writer: %v", err)
+			}
+			os.Stdout = old
+
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, r); err != nil {
+				t.Fatalf("failed to read captured output: %v", err)
+			}
+			output := buf.String()
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Run() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && tt.wantOutput != "" {
+				if !strings.Contains(output, tt.wantOutput) {
+					t.Errorf("Run() output = %q, want substring %q", output, tt.wantOutput)
+				}
+			}
+		})
+	}
+}
+
 func TestBackupListCommand(t *testing.T) {
 	tests := map[string]struct {
 		args       []string

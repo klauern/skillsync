@@ -195,8 +195,8 @@ func showConfigPaths() error {
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
 
 	fmt.Println("\nData paths:")
-	fmt.Printf("  Backups:         %s\n", cfg.Backup.Location)
-	fmt.Printf("  Cache:           %s\n", cfg.Cache.Location)
+	fmt.Printf("  Backups:         %s\n", util.SkillsyncBackupsPath())
+	fmt.Printf("  Cache:           %s\n", filepath.Join(util.SkillsyncConfigPath(), "cache"))
 	fmt.Printf("  Plugins:         %s\n", util.SkillsyncPluginsPath())
 	fmt.Printf("  Metadata:        %s\n", util.SkillsyncMetadataPath())
 
@@ -870,6 +870,44 @@ func colorSource(skill model.Skill, width int) string {
 	}
 }
 
+func syncFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.BoolFlag{
+			Name:    "interactive",
+			Aliases: []string{"i"},
+			Usage:   "Interactive TUI mode with skill selection and diff preview",
+		},
+		&cli.BoolFlag{
+			Name:    "dry-run",
+			Aliases: []string{"d"},
+			Usage:   "Preview changes without modifying files",
+		},
+		&cli.StringFlag{
+			Name:    "strategy",
+			Aliases: []string{"s"},
+			Value:   "overwrite",
+			Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive",
+		},
+		&cli.BoolFlag{
+			Name:  "skip-backup",
+			Usage: "Skip automatic backup before sync",
+		},
+		&cli.BoolFlag{
+			Name:  "skip-validation",
+			Usage: "Skip validation checks (not recommended)",
+		},
+		&cli.BoolFlag{
+			Name:    "yes",
+			Aliases: []string{"y"},
+			Usage:   "Skip confirmation prompts (use with caution)",
+		},
+		&cli.BoolFlag{
+			Name:  "include-plugins",
+			Usage: "Include skills from Claude Code plugins (excluded by default)",
+		},
+	}
+}
+
 func syncCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "sync",
@@ -901,11 +939,6 @@ func syncCommand() *cli.Command {
      three-way   - Intelligent merge with conflict detection
      interactive - Prompt for each conflict
 
-   Delete Mode:
-     Use --delete to remove skills from target that exist in source.
-     This is the inverse of sync: instead of copying TO target, it removes
-     skills FROM target that match the source skill names.
-
    Examples:
      skillsync sync cursor claudecode             # All cursor skills to claudecode user scope
      skillsync sync cursor:repo claudecode:user   # Repo skills to user scope
@@ -913,172 +946,179 @@ func syncCommand() *cli.Command {
      skillsync sync --dry-run cursor codex        # Preview changes
      skillsync sync --strategy=skip cursor codex
      skillsync sync --interactive cursor codex    # Interactive TUI mode
-     skillsync sync --delete cursor codex         # Remove cursor skills from codex
      skillsync sync --include-plugins claudecode cursor  # Include plugin skills
-     skillsync sync claudecode:plugin cursor      # Sync only plugin skills`,
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "interactive",
-				Aliases: []string{"i"},
-				Usage:   "Interactive TUI mode with skill selection and diff preview",
-			},
-			&cli.BoolFlag{
-				Name:    "dry-run",
-				Aliases: []string{"d"},
-				Usage:   "Preview changes without modifying files",
-			},
-			&cli.StringFlag{
-				Name:    "strategy",
-				Aliases: []string{"s"},
-				Value:   "overwrite",
-				Usage:   "Conflict resolution strategy: overwrite, skip, newer, merge, three-way, interactive",
-			},
-			&cli.BoolFlag{
-				Name:  "skip-backup",
-				Usage: "Skip automatic backup before sync",
-			},
-			&cli.BoolFlag{
-				Name:  "skip-validation",
-				Usage: "Skip validation checks (not recommended)",
-			},
-			&cli.BoolFlag{
-				Name:    "yes",
-				Aliases: []string{"y"},
-				Usage:   "Skip confirmation prompts (use with caution)",
-			},
-			&cli.BoolFlag{
-				Name:  "delete",
-				Usage: "Delete mode: remove skills FROM target that exist in source (inverse of sync)",
-			},
-			&cli.BoolFlag{
-				Name:  "include-plugins",
-				Usage: "Include skills from Claude Code plugins (excluded by default)",
-			},
-		},
+     skillsync sync claudecode:plugin cursor      # Sync only plugin skills
+
+   See also:
+     skillsync delete <source> <target>           # Remove skills from target`,
+		Flags: syncFlags(),
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			cfg, err := parseSyncConfig(cmd)
-			if err != nil {
-				return err
-			}
-
-			interactive := cmd.Bool("interactive")
-
-			// Always parse source skills (use tiered parser for scope filtering)
-			// Plugin scope skills are excluded by default unless --include-plugins is set
-			// or the plugin scope is explicitly in the source spec (e.g., "claudecode:plugin")
-			if cfg.sourceSpec.HasScopes() {
-				// User specified scopes - use tiered parser for scope filtering
-				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes, cfg.includePlugins)
-			} else {
-				// No scopes specified - use tiered parser with plugin exclusion by default
-				cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, nil, cfg.includePlugins)
-			}
-			if err != nil {
-				return fmt.Errorf("failed to parse source skills: %w", err)
-			}
-
-			// Interactive TUI mode
-			if interactive && cfg.deleteMode {
-				return syncDeleteInteractive(cfg)
-			}
-
-			if interactive {
-				return syncSkillsInteractive(cfg)
-			}
-
-			// Delete mode has different flow
-			if cfg.deleteMode {
-				return syncDeleteMode(cfg)
-			}
-
-			// Validate source skills before sync (unless skipped)
-			if !cfg.skipValidation {
-				if err := validateSourceSkills(cfg); err != nil {
-					return err
-				}
-			}
-
-			// Show summary and request confirmation (unless --yes or --dry-run)
-			if !cfg.dryRun && !cfg.yesFlag {
-				confirmed, err := showSyncSummaryAndConfirm(cfg)
-				if err != nil {
-					return fmt.Errorf("confirmation error: %w", err)
-				}
-				if !confirmed {
-					fmt.Println("Sync cancelled by user")
-					return nil
-				}
-			}
-
-			// Create backup before sync (unless skipped or dry-run)
-			if !cfg.dryRun && !cfg.skipBackup {
-				prepareBackup(cfg.targetSpec.Platform)
-				created, err := backupExistingTargetSkills(
-					cfg.targetSpec.Platform,
-					cfg.targetSpec.TargetScope(),
-					cfg.sourceSkills,
-					"pre-sync backup",
-					[]string{"sync"},
-				)
-				if err != nil {
-					return err
-				}
-				if created > 0 {
-					fmt.Printf("✓ Created %d backup(s)\n", created)
-				}
-			}
-
-			// Create sync options and execute
-			opts := sync.Options{
-				DryRun:      cfg.dryRun,
-				Strategy:    cfg.strategy,
-				TargetScope: cfg.targetSpec.TargetScope(),
-			}
-
-			syncer := sync.New()
-			result, err := syncer.SyncWithSkills(cfg.sourceSkills, cfg.targetSpec.Platform, opts)
-			if err != nil {
-				return fmt.Errorf("sync failed: %w", err)
-			}
-
-			// Handle conflicts if interactive strategy is used
-			if result.HasConflicts() && cfg.strategy == sync.StrategyInteractive {
-				resolver := NewConflictResolver()
-
-				// Gather conflicts
-				var conflicts []*sync.Conflict
-				for _, sr := range result.Conflicts() {
-					if sr.Conflict != nil {
-						conflicts = append(conflicts, sr.Conflict)
-					}
-				}
-
-				// Display summary and resolve
-				resolver.DisplayConflictSummary(conflicts)
-				resolved, err := resolver.ResolveConflicts(conflicts)
-				if err != nil {
-					return fmt.Errorf("conflict resolution failed: %w", err)
-				}
-
-				// Apply resolved content
-				if !cfg.dryRun {
-					if err := applyResolvedConflicts(result, resolved); err != nil {
-						return fmt.Errorf("failed to apply resolved conflicts: %w", err)
-					}
-				}
-
-				fmt.Printf("\nResolved %d conflict(s)\n", len(resolved))
-			}
-
-			displaySyncResults(result)
-
-			if !result.Success() {
-				return errors.New("sync completed with errors")
-			}
-
-			return nil
+			return runSyncCommand(cmd, false)
 		},
 	}
+}
+
+func deleteCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "delete",
+		Usage:     "Delete skills from target that exist in source",
+		UsageText: "skillsync delete [options] <source> <target>",
+		Description: `Delete skills from the target platform that also exist in the source.
+
+   Supported platforms: claudecode, cursor, codex
+
+   Platform spec format: platform[:scope[,scope2,...]]
+     - cursor           All scopes from cursor (source), user scope (target)
+     - cursor:repo      Only repo scope
+     - cursor:repo,user Both repo and user scopes (source only)
+
+   Valid source scopes: repo, user, admin, system, builtin, plugin
+   Valid target scopes: repo, user (writable locations only)
+
+   Plugin Skills:
+     Plugin scope skills (from Claude Code installed plugins) are excluded
+     by default. To include them, either:
+     - Use --include-plugins flag
+     - Explicitly specify plugin scope: claudecode:plugin
+
+   Flags:
+     Delete supports the same flags as sync (including --dry-run and --interactive).
+
+   Examples:
+     skillsync delete cursor claudecode           # Remove cursor skills from claudecode
+     skillsync delete cursor:repo claudecode:user # Remove repo skills from user scope
+     skillsync delete --dry-run cursor codex      # Preview changes
+     skillsync delete --interactive cursor codex  # Interactive TUI mode
+     skillsync delete --include-plugins claudecode cursor`,
+		Flags: syncFlags(),
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			return runSyncCommand(cmd, true)
+		},
+	}
+}
+
+func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
+	cfg, err := parseSyncConfig(cmd, cmd.Name, deleteMode)
+	if err != nil {
+		return err
+	}
+
+	interactive := cmd.Bool("interactive")
+
+	// Always parse source skills (use tiered parser for scope filtering)
+	// Plugin scope skills are excluded by default unless --include-plugins is set
+	// or the plugin scope is explicitly in the source spec (e.g., "claudecode:plugin")
+	if cfg.sourceSpec.HasScopes() {
+		// User specified scopes - use tiered parser for scope filtering
+		cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, cfg.sourceSpec.Scopes, cfg.includePlugins)
+	} else {
+		// No scopes specified - use tiered parser with plugin exclusion by default
+		cfg.sourceSkills, err = parsePlatformSkillsWithScope(cfg.sourceSpec.Platform, nil, cfg.includePlugins)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to parse source skills: %w", err)
+	}
+
+	// Interactive TUI mode
+	if interactive && cfg.deleteMode {
+		return syncDeleteInteractive(cfg)
+	}
+
+	if interactive {
+		return syncSkillsInteractive(cfg)
+	}
+
+	// Delete mode has different flow
+	if cfg.deleteMode {
+		return syncDeleteMode(cfg)
+	}
+
+	// Validate source skills before sync (unless skipped)
+	if !cfg.skipValidation {
+		if err := validateSourceSkills(cfg); err != nil {
+			return err
+		}
+	}
+
+	// Show summary and request confirmation (unless --yes or --dry-run)
+	if !cfg.dryRun && !cfg.yesFlag {
+		confirmed, err := showSyncSummaryAndConfirm(cfg)
+		if err != nil {
+			return fmt.Errorf("confirmation error: %w", err)
+		}
+		if !confirmed {
+			fmt.Println("Sync cancelled by user")
+			return nil
+		}
+	}
+
+	// Create backup before sync (unless skipped or dry-run)
+	if !cfg.dryRun && !cfg.skipBackup {
+		prepareBackup(cfg.targetSpec.Platform)
+		created, err := backupExistingTargetSkills(
+			cfg.targetSpec.Platform,
+			cfg.targetSpec.TargetScope(),
+			cfg.sourceSkills,
+			"pre-sync backup",
+			[]string{"sync"},
+		)
+		if err != nil {
+			return err
+		}
+		if created > 0 {
+			fmt.Printf("✓ Created %d backup(s)\n", created)
+		}
+	}
+
+	// Create sync options and execute
+	opts := sync.Options{
+		DryRun:      cfg.dryRun,
+		Strategy:    cfg.strategy,
+		TargetScope: cfg.targetSpec.TargetScope(),
+	}
+
+	syncer := sync.New()
+	result, err := syncer.SyncWithSkills(cfg.sourceSkills, cfg.targetSpec.Platform, opts)
+	if err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	// Handle conflicts if interactive strategy is used
+	if result.HasConflicts() && cfg.strategy == sync.StrategyInteractive {
+		resolver := NewConflictResolver()
+
+		// Gather conflicts
+		var conflicts []*sync.Conflict
+		for _, sr := range result.Conflicts() {
+			if sr.Conflict != nil {
+				conflicts = append(conflicts, sr.Conflict)
+			}
+		}
+
+		// Display summary and resolve
+		resolver.DisplayConflictSummary(conflicts)
+		resolved, err := resolver.ResolveConflicts(conflicts)
+		if err != nil {
+			return fmt.Errorf("conflict resolution failed: %w", err)
+		}
+
+		// Apply resolved content
+		if !cfg.dryRun {
+			if err := applyResolvedConflicts(result, resolved); err != nil {
+				return fmt.Errorf("failed to apply resolved conflicts: %w", err)
+			}
+		}
+
+		fmt.Printf("\nResolved %d conflict(s)\n", len(resolved))
+	}
+
+	displaySyncResults(result)
+
+	if !result.Success() {
+		return errors.New("sync completed with errors")
+	}
+
+	return nil
 }
 
 // syncConfig holds the parsed configuration for a sync command
@@ -1096,10 +1136,10 @@ type syncConfig struct {
 }
 
 // parseSyncConfig parses and validates sync command arguments and flags
-func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
+func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*syncConfig, error) {
 	args := cmd.Args()
 	if args.Len() != 2 {
-		return nil, errors.New("sync requires exactly 2 arguments: <source> <target>")
+		return nil, fmt.Errorf("%s requires exactly 2 arguments: <source> <target>", commandName)
 	}
 
 	// Parse source platform spec (e.g., "cursor", "cursor:repo", "cursor:repo,user")
@@ -1137,7 +1177,7 @@ func parseSyncConfig(cmd *cli.Command) (*syncConfig, error) {
 		skipBackup:     cmd.Bool("skip-backup"),
 		skipValidation: cmd.Bool("skip-validation"),
 		yesFlag:        cmd.Bool("yes"),
-		deleteMode:     cmd.Bool("delete"),
+		deleteMode:     deleteMode,
 		includePlugins: cmd.Bool("include-plugins"),
 		sourceSkills:   make([]model.Skill, 0),
 	}, nil

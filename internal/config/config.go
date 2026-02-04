@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -23,17 +22,8 @@ type Config struct {
 	// Sync configures default synchronization behavior
 	Sync SyncConfig `yaml:"sync"`
 
-	// Cache configures caching behavior
-	Cache CacheConfig `yaml:"cache"`
-
-	// Plugins configures plugin discovery settings
-	Plugins PluginsConfig `yaml:"plugins"`
-
 	// Output configures display preferences
 	Output OutputConfig `yaml:"output"`
-
-	// Backup configures backup behavior
-	Backup BackupConfig `yaml:"backup"`
 
 	// Similarity configures similarity matching thresholds
 	Similarity SimilarityConfig `yaml:"similarity"`
@@ -51,8 +41,6 @@ type PlatformConfig struct {
 	// SkillsPaths is an ordered list of paths to search for skills (project → user → system)
 	// Paths can use ~ for home directory or be relative (resolved from working directory)
 	SkillsPaths []string `yaml:"skills_paths,omitempty"`
-	// BackupEnabled indicates whether to backup this platform's skills
-	BackupEnabled bool `yaml:"backup_enabled"`
 
 	// Deprecated: Use SkillsPaths instead. Kept for backward compatibility during migration.
 	SkillsPath string `yaml:"skills_path,omitempty"`
@@ -62,54 +50,12 @@ type PlatformConfig struct {
 type SyncConfig struct {
 	// DefaultStrategy is the default conflict resolution strategy
 	DefaultStrategy string `yaml:"default_strategy"`
-	// AutoBackup enables automatic backup before sync
-	AutoBackup bool `yaml:"auto_backup"`
-	// BackupRetentionDays is how long to keep backups
-	BackupRetentionDays int `yaml:"backup_retention_days"`
-}
-
-// CacheConfig holds caching settings.
-type CacheConfig struct {
-	// Enabled enables or disables caching
-	Enabled bool `yaml:"enabled"`
-	// TTL is the time-to-live for cache entries
-	TTL time.Duration `yaml:"ttl"`
-	// Location is the cache directory path
-	Location string `yaml:"location"`
-}
-
-// PluginsConfig holds plugin settings.
-type PluginsConfig struct {
-	// Enabled enables plugin discovery
-	Enabled bool `yaml:"enabled"`
-	// RepositoryURL is the default plugin repository
-	RepositoryURL string `yaml:"repository_url,omitempty"`
-	// CachePlugins enables caching of plugin skills
-	CachePlugins bool `yaml:"cache_plugins"`
-	// AutoFetch automatically fetches remote plugins
-	AutoFetch bool `yaml:"auto_fetch"`
 }
 
 // OutputConfig holds display preferences.
 type OutputConfig struct {
-	// Format is the default output format (table, json, yaml)
-	Format string `yaml:"format"`
 	// Color controls color output (auto, always, never)
 	Color string `yaml:"color"`
-	// Verbose enables verbose output
-	Verbose bool `yaml:"verbose"`
-}
-
-// BackupConfig holds backup settings.
-type BackupConfig struct {
-	// Enabled enables automatic backups
-	Enabled bool `yaml:"enabled"`
-	// Location is the backup directory path
-	Location string `yaml:"location"`
-	// MaxBackups is the maximum number of backups to keep
-	MaxBackups int `yaml:"max_backups"`
-	// CleanupOnSync enables cleanup during sync
-	CleanupOnSync bool `yaml:"cleanup_on_sync"`
 }
 
 // SimilarityConfig holds similarity matching settings.
@@ -131,14 +77,12 @@ func Default() *Config {
 					".claude/skills",   // Project (relative)
 					"~/.claude/skills", // User (absolute)
 				},
-				BackupEnabled: true,
 			},
 			Cursor: PlatformConfig{
 				SkillsPaths: []string{
 					".cursor/skills",   // Project (relative)
 					"~/.cursor/skills", // User (absolute)
 				},
-				BackupEnabled: true,
 			},
 			Codex: PlatformConfig{
 				SkillsPaths: []string{
@@ -146,34 +90,13 @@ func Default() *Config {
 					"~/.codex/skills",   // User (absolute)
 					"/etc/codex/skills", // Admin (system-wide)
 				},
-				BackupEnabled: true,
 			},
 		},
 		Sync: SyncConfig{
-			DefaultStrategy:     string(sync.StrategyOverwrite),
-			AutoBackup:          true,
-			BackupRetentionDays: 30,
-		},
-		Cache: CacheConfig{
-			Enabled:  true,
-			TTL:      time.Hour,
-			Location: filepath.Join(util.SkillsyncConfigPath(), "cache"),
-		},
-		Plugins: PluginsConfig{
-			Enabled:      true,
-			CachePlugins: true,
-			AutoFetch:    false,
+			DefaultStrategy: string(sync.StrategyOverwrite),
 		},
 		Output: OutputConfig{
-			Format:  "table",
-			Color:   "auto",
-			Verbose: false,
-		},
-		Backup: BackupConfig{
-			Enabled:       true,
-			Location:      util.SkillsyncBackupsPath(),
-			MaxBackups:    10,
-			CleanupOnSync: true,
+			Color: "auto",
 		},
 		Similarity: SimilarityConfig{
 			NameThreshold:    0.7, // 70% match required for name similarity
@@ -279,32 +202,10 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_SYNC_STRATEGY"); v != "" {
 		c.Sync.DefaultStrategy = v
 	}
-	if v := os.Getenv("SKILLSYNC_SYNC_AUTO_BACKUP"); v != "" {
-		c.Sync.AutoBackup = parseBool(v)
-	}
-
-	// Cache settings
-	if v := os.Getenv("SKILLSYNC_CACHE_ENABLED"); v != "" {
-		c.Cache.Enabled = parseBool(v)
-	}
-	if v := os.Getenv("SKILLSYNC_CACHE_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			c.Cache.TTL = d
-		}
-	}
-	if v := os.Getenv("SKILLSYNC_CACHE_LOCATION"); v != "" {
-		c.Cache.Location = v
-	}
 
 	// Output settings
-	if v := os.Getenv("SKILLSYNC_OUTPUT_FORMAT"); v != "" {
-		c.Output.Format = v
-	}
 	if v := os.Getenv("SKILLSYNC_OUTPUT_COLOR"); v != "" {
 		c.Output.Color = v
-	}
-	if v := os.Getenv("SKILLSYNC_OUTPUT_VERBOSE"); v != "" {
-		c.Output.Verbose = parseBool(v)
 	}
 
 	// Platform paths - new colon-separated format
@@ -329,22 +230,6 @@ func (c *Config) applyEnvironment() {
 		c.Platforms.Codex.SkillsPath = v
 	}
 
-	// Backup settings
-	if v := os.Getenv("SKILLSYNC_BACKUP_ENABLED"); v != "" {
-		c.Backup.Enabled = parseBool(v)
-	}
-	if v := os.Getenv("SKILLSYNC_BACKUP_LOCATION"); v != "" {
-		c.Backup.Location = v
-	}
-
-	// Plugins settings
-	if v := os.Getenv("SKILLSYNC_PLUGINS_ENABLED"); v != "" {
-		c.Plugins.Enabled = parseBool(v)
-	}
-	if v := os.Getenv("SKILLSYNC_PLUGINS_REPOSITORY"); v != "" {
-		c.Plugins.RepositoryURL = v
-	}
-
 	// Similarity settings
 	if v := os.Getenv("SKILLSYNC_SIMILARITY_NAME_THRESHOLD"); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
@@ -362,11 +247,6 @@ func (c *Config) applyEnvironment() {
 }
 
 // parseBool parses a boolean from common string representations.
-func parseBool(s string) bool {
-	s = strings.ToLower(strings.TrimSpace(s))
-	return s == "true" || s == "1" || s == "yes" || s == "on"
-}
-
 // splitPaths splits a colon-separated path string into individual paths.
 // Empty segments are filtered out.
 func splitPaths(s string) []string {

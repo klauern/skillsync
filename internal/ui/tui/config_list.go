@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
@@ -218,76 +217,8 @@ func (m *ConfigListModel) buildConfigItems() []configItem {
 			ValueType:   "string",
 			Options:     []string{"overwrite", "skip", "newer", "merge", "three-way", "interactive"},
 		},
-		{
-			Section:     "Sync",
-			Key:         "AutoBackup",
-			Description: "Automatic backup before sync",
-			Value:       fmt.Sprintf("%v", cfg.Sync.AutoBackup),
-			ValueType:   "bool",
-		},
-		{
-			Section:     "Sync",
-			Key:         "BackupRetentionDays",
-			Description: "Days to keep backups",
-			Value:       fmt.Sprintf("%d", cfg.Sync.BackupRetentionDays),
-			ValueType:   "int",
-		},
-
-		// Cache settings
-		{
-			Section:     "Cache",
-			Key:         "Enabled",
-			Description: "Enable caching",
-			Value:       fmt.Sprintf("%v", cfg.Cache.Enabled),
-			ValueType:   "bool",
-		},
-		{
-			Section:     "Cache",
-			Key:         "TTL",
-			Description: "Cache time-to-live",
-			Value:       cfg.Cache.TTL.String(),
-			ValueType:   "duration",
-		},
-		{
-			Section:     "Cache",
-			Key:         "Location",
-			Description: "Cache directory path",
-			Value:       cfg.Cache.Location,
-			ValueType:   "string",
-		},
-
-		// Plugins settings
-		{
-			Section:     "Plugins",
-			Key:         "Enabled",
-			Description: "Enable plugin discovery",
-			Value:       fmt.Sprintf("%v", cfg.Plugins.Enabled),
-			ValueType:   "bool",
-		},
-		{
-			Section:     "Plugins",
-			Key:         "CachePlugins",
-			Description: "Cache plugin skills",
-			Value:       fmt.Sprintf("%v", cfg.Plugins.CachePlugins),
-			ValueType:   "bool",
-		},
-		{
-			Section:     "Plugins",
-			Key:         "AutoFetch",
-			Description: "Auto-fetch remote plugins",
-			Value:       fmt.Sprintf("%v", cfg.Plugins.AutoFetch),
-			ValueType:   "bool",
-		},
 
 		// Output settings
-		{
-			Section:     "Output",
-			Key:         "Format",
-			Description: "Default output format",
-			Value:       cfg.Output.Format,
-			ValueType:   "string",
-			Options:     []string{"table", "json", "yaml"},
-		},
 		{
 			Section:     "Output",
 			Key:         "Color",
@@ -295,43 +226,6 @@ func (m *ConfigListModel) buildConfigItems() []configItem {
 			Value:       cfg.Output.Color,
 			ValueType:   "string",
 			Options:     []string{"auto", "always", "never"},
-		},
-		{
-			Section:     "Output",
-			Key:         "Verbose",
-			Description: "Enable verbose output",
-			Value:       fmt.Sprintf("%v", cfg.Output.Verbose),
-			ValueType:   "bool",
-		},
-
-		// Backup settings
-		{
-			Section:     "Backup",
-			Key:         "Enabled",
-			Description: "Enable automatic backups",
-			Value:       fmt.Sprintf("%v", cfg.Backup.Enabled),
-			ValueType:   "bool",
-		},
-		{
-			Section:     "Backup",
-			Key:         "Location",
-			Description: "Backup directory path",
-			Value:       cfg.Backup.Location,
-			ValueType:   "string",
-		},
-		{
-			Section:     "Backup",
-			Key:         "MaxBackups",
-			Description: "Maximum backups to keep",
-			Value:       fmt.Sprintf("%d", cfg.Backup.MaxBackups),
-			ValueType:   "int",
-		},
-		{
-			Section:     "Backup",
-			Key:         "CleanupOnSync",
-			Description: "Cleanup during sync",
-			Value:       fmt.Sprintf("%v", cfg.Backup.CleanupOnSync),
-			ValueType:   "bool",
 		},
 
 		// Similarity settings
@@ -620,14 +514,8 @@ func (m *ConfigListModel) updateConfigValue(section, key, value string) {
 	switch section {
 	case "Sync":
 		m.updateSyncConfig(key, value)
-	case "Cache":
-		m.updateCacheConfig(key, value)
-	case "Plugins":
-		m.updatePluginsConfig(key, value)
 	case "Output":
 		m.updateOutputConfig(key, value)
-	case "Backup":
-		m.updateBackupConfig(key, value)
 	case "Similarity":
 		m.updateSimilarityConfig(key, value)
 	}
@@ -638,62 +526,13 @@ func (m *ConfigListModel) updateSyncConfig(key, value string) {
 	switch key {
 	case "DefaultStrategy":
 		m.cfg.Sync.DefaultStrategy = value
-	case "AutoBackup":
-		m.cfg.Sync.AutoBackup = parseBool(value)
-	case "BackupRetentionDays":
-		if v, err := parseInt(value); err == nil {
-			m.cfg.Sync.BackupRetentionDays = v
-		}
-	}
-}
-
-func (m *ConfigListModel) updateCacheConfig(key, value string) {
-	switch key {
-	case "Enabled":
-		m.cfg.Cache.Enabled = parseBool(value)
-	case "TTL":
-		if d, err := time.ParseDuration(value); err == nil {
-			m.cfg.Cache.TTL = d
-		}
-	case "Location":
-		m.cfg.Cache.Location = value
-	}
-}
-
-func (m *ConfigListModel) updatePluginsConfig(key, value string) {
-	switch key {
-	case "Enabled":
-		m.cfg.Plugins.Enabled = parseBool(value)
-	case "CachePlugins":
-		m.cfg.Plugins.CachePlugins = parseBool(value)
-	case "AutoFetch":
-		m.cfg.Plugins.AutoFetch = parseBool(value)
 	}
 }
 
 func (m *ConfigListModel) updateOutputConfig(key, value string) {
 	switch key {
-	case "Format":
-		m.cfg.Output.Format = value
 	case "Color":
 		m.cfg.Output.Color = value
-	case "Verbose":
-		m.cfg.Output.Verbose = parseBool(value)
-	}
-}
-
-func (m *ConfigListModel) updateBackupConfig(key, value string) {
-	switch key {
-	case "Enabled":
-		m.cfg.Backup.Enabled = parseBool(value)
-	case "Location":
-		m.cfg.Backup.Location = value
-	case "MaxBackups":
-		if v, err := parseInt(value); err == nil {
-			m.cfg.Backup.MaxBackups = v
-		}
-	case "CleanupOnSync":
-		m.cfg.Backup.CleanupOnSync = parseBool(value)
 	}
 }
 
@@ -875,18 +714,7 @@ func RunConfigList(cfg *config.Config) (ConfigListResult, error) {
 	return ConfigListResult{}, nil
 }
 
-// Helper functions for parsing values.
-func parseBool(s string) bool {
-	s = strings.ToLower(strings.TrimSpace(s))
-	return s == "true" || s == "1" || s == "yes" || s == "on"
-}
-
-func parseInt(s string) (int, error) {
-	var v int
-	_, err := fmt.Sscanf(s, "%d", &v)
-	return v, err
-}
-
+// Helper function for parsing values.
 func parseFloat(s string) (float64, error) {
 	var v float64
 	_, err := fmt.Sscanf(s, "%f", &v)
