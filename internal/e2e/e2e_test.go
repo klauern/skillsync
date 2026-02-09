@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"flag"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -124,6 +125,19 @@ func TestConfigInitCreatesConfigFile(t *testing.T) {
 	showResult := h.Run("config", "show")
 	e2e.AssertSuccess(t, showResult)
 	e2e.AssertOutputContains(t, showResult, "Loaded from:")
+
+	configData, err := os.ReadFile(filepath.Join(h.HomeDir(), "config.yaml"))
+	if err != nil {
+		t.Fatalf("failed to read created config file: %v", err)
+	}
+
+	configText := string(configData)
+	if !strings.Contains(configText, ".claude/commands") {
+		t.Fatalf("expected config to include .claude/commands, got:\n%s", configText)
+	}
+	if !strings.Contains(configText, "~/.claude/commands") {
+		t.Fatalf("expected config to include ~/.claude/commands, got:\n%s", configText)
+	}
 }
 
 // TestConfigInitFailsIfExists verifies config init fails without force flag.

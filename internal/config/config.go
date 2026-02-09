@@ -74,8 +74,10 @@ func Default() *Config {
 		Platforms: PlatformsConfig{
 			ClaudeCode: PlatformConfig{
 				SkillsPaths: []string{
-					".claude/skills",   // Project (relative)
-					"~/.claude/skills", // User (absolute)
+					".claude/commands",   // Project slash commands/prompts (relative)
+					".claude/skills",     // Project skills (relative)
+					"~/.claude/commands", // User slash commands/prompts (absolute)
+					"~/.claude/skills",   // User skills (absolute)
 				},
 			},
 			Cursor: PlatformConfig{

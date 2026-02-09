@@ -437,14 +437,20 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	cfg := Default()
 
 	// Check Claude Code defaults
-	if len(cfg.Platforms.ClaudeCode.SkillsPaths) != 2 {
-		t.Errorf("expected 2 Claude Code skills paths, got %d", len(cfg.Platforms.ClaudeCode.SkillsPaths))
+	if len(cfg.Platforms.ClaudeCode.SkillsPaths) != 4 {
+		t.Errorf("expected 4 Claude Code skills paths, got %d", len(cfg.Platforms.ClaudeCode.SkillsPaths))
 	}
-	if cfg.Platforms.ClaudeCode.SkillsPaths[0] != ".claude/skills" {
-		t.Errorf("expected first Claude Code path to be '.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[0])
+	if cfg.Platforms.ClaudeCode.SkillsPaths[0] != ".claude/commands" {
+		t.Errorf("expected first Claude Code path to be '.claude/commands', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[0])
 	}
-	if cfg.Platforms.ClaudeCode.SkillsPaths[1] != "~/.claude/skills" {
-		t.Errorf("expected second Claude Code path to be '~/.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[1])
+	if cfg.Platforms.ClaudeCode.SkillsPaths[1] != ".claude/skills" {
+		t.Errorf("expected second Claude Code path to be '.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[1])
+	}
+	if cfg.Platforms.ClaudeCode.SkillsPaths[2] != "~/.claude/commands" {
+		t.Errorf("expected third Claude Code path to be '~/.claude/commands', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[2])
+	}
+	if cfg.Platforms.ClaudeCode.SkillsPaths[3] != "~/.claude/skills" {
+		t.Errorf("expected fourth Claude Code path to be '~/.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[3])
 	}
 
 	// Check Cursor defaults

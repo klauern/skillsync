@@ -65,6 +65,10 @@ override them with colon-separated environment variables:
 - `SKILLSYNC_CURSOR_SKILLS_PATHS`
 - `SKILLSYNC_CODEX_SKILLS_PATHS`
 
+By default, Claude Code discovery checks both `commands` and `skills` paths
+(`.claude/commands`, `.claude/skills`, `~/.claude/commands`, `~/.claude/skills`)
+so command-style prompts and standard skills are both synced.
+
 Legacy single-path overrides are still supported:
 
 - `SKILLSYNC_CLAUDE_CODE_PATH`

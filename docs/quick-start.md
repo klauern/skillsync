@@ -761,7 +761,9 @@ skillsync config path
 platforms:
   claude_code:
     skills_paths:
+      - .claude/commands
       - .claude/skills
+      - ~/.claude/commands
       - ~/.claude/skills
   cursor:
     skills_paths:
@@ -789,6 +791,8 @@ similarity:
   # Algorithm (levenshtein, jaro-winkler, combined)
   algorithm: combined
 ```
+
+Claude Code defaults include both `commands` and `skills` directories so slash-command style prompts are discovered alongside standard skills.
 
 ### Environment Variables
 
