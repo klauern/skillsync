@@ -1726,3 +1726,67 @@ Review content.`
 		t.Fatalf("expected prompt artifact to be synced with --include-prompts: %v", err)
 	}
 }
+
+func TestSyncIncludePromptsAutoIncludesClaudeCommandPaths(t *testing.T) {
+	tempDir := t.TempDir()
+	claudeCommands := filepath.Join(tempDir, ".claude", "commands")
+	claudeSkills := filepath.Join(tempDir, ".claude", "skills")
+	cursorSkills := filepath.Join(tempDir, ".cursor", "skills")
+	if err := os.MkdirAll(claudeCommands, 0o750); err != nil {
+		t.Fatalf("failed to create claude commands dir: %v", err)
+	}
+	if err := os.MkdirAll(claudeSkills, 0o750); err != nil {
+		t.Fatalf("failed to create claude skills dir: %v", err)
+	}
+	if err := os.MkdirAll(cursorSkills, 0o750); err != nil {
+		t.Fatalf("failed to create cursor dir: %v", err)
+	}
+
+	commandContent := `---
+description: review command
+allowed-tools: Bash, Read
+---
+Review content.`
+	if err := os.WriteFile(filepath.Join(claudeCommands, "review.md"), []byte(commandContent), 0o600); err != nil {
+		t.Fatalf("failed to write command file: %v", err)
+	}
+
+	// Simulate an older config that only contains Claude skills paths.
+	t.Setenv("HOME", tempDir)
+	t.Setenv("SKILLSYNC_HOME", filepath.Join(tempDir, ".skillsync"))
+	configYAML := `platforms:
+  claude_code:
+    skills_paths:
+      - .claude/skills
+      - ~/.claude/skills
+  cursor:
+    skills_paths:
+      - .cursor/skills
+      - ~/.cursor/skills
+  codex:
+    skills_paths:
+      - .codex/skills
+      - ~/.codex/skills
+sync:
+  default_strategy: overwrite
+  include_types:
+    - skill
+`
+	configPath := filepath.Join(tempDir, ".skillsync", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		t.Fatalf("failed to create config directory: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	ctx := context.Background()
+	err := Run(ctx, []string{"skillsync", "sync", "--yes", "--skip-backup", "--skip-validation", "--include-prompts", "claudecode", "cursor"})
+	if err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cursorSkills, "review.md")); err != nil {
+		t.Fatalf("expected prompt artifact to be synced from .claude/commands: %v", err)
+	}
+}
