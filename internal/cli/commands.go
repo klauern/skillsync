@@ -3132,27 +3132,33 @@ func runBackupsTUI() error {
 
 // runSyncTUI runs the sync TUI view.
 func runSyncTUI() error {
-	// Step 1: Pick source and target platforms
-	pickerResult, err := tui.RunPlatformPicker()
+	// Step 1: Pick source/target platform and scope
+	pickerResult, err := tui.RunSyncPicker()
 	if err != nil {
-		return fmt.Errorf("platform picker error: %w", err)
+		return fmt.Errorf("sync picker error: %w", err)
 	}
 
-	if pickerResult.Action == tui.PlatformPickerActionNone {
+	if pickerResult.Action == tui.SyncPickerActionNone {
 		return nil // User cancelled
 	}
 
 	sourcePlatform := pickerResult.Source
+	sourceScopes := pickerResult.SourceScopes
 	targetPlatform := pickerResult.Target
+	targetScope := pickerResult.TargetScope
 
 	// Step 2: Parse skills from the source platform
-	sourceSkills, err := parsePlatformSkillsWithScope(sourcePlatform, nil, false)
+	sourceSkills, err := parsePlatformSkillsWithScope(sourcePlatform, sourceScopes, false)
 	if err != nil {
 		return fmt.Errorf("failed to parse source skills: %w", err)
 	}
 
 	if len(sourceSkills) == 0 {
-		ui.Info(fmt.Sprintf("No skills found in %s", sourcePlatform))
+		sourceScopeLabel := "all"
+		if len(sourceScopes) == 1 {
+			sourceScopeLabel = string(sourceScopes[0])
+		}
+		ui.Info(fmt.Sprintf("No skills found in %s:%s", sourcePlatform, sourceScopeLabel))
 		return nil
 	}
 
@@ -3185,7 +3191,7 @@ func runSyncTUI() error {
 	prepareBackup(targetPlatform)
 	created, err := backupExistingTargetSkills(
 		targetPlatform,
-		model.ScopeUser,
+		targetScope,
 		syncResult.SelectedSkills,
 		"pre-sync backup",
 		[]string{"sync"},
@@ -3200,7 +3206,8 @@ func runSyncTUI() error {
 	// Perform sync
 	syncer := sync.New()
 	opts := sync.Options{
-		Strategy: sync.StrategyOverwrite,
+		Strategy:    sync.StrategyOverwrite,
+		TargetScope: targetScope,
 	}
 	result, err := syncer.SyncWithSkills(syncResult.SelectedSkills, targetPlatform, opts)
 	if err != nil {
