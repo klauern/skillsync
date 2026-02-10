@@ -1757,7 +1757,25 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
 	}
 
-	return resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot, nil
+	paths := resolveSkillsPaths(rawPaths, cwd, repoRoot)
+
+	// Backward compatibility: older config files may only include .claude/skills
+	// paths and omit .claude/commands paths. Always include command paths for
+	// Claude Code so prompt artifacts can be discovered when requested.
+	if platform == model.ClaudeCode {
+		commandPaths := resolveSkillsPaths([]string{".claude/commands", "~/.claude/commands"}, cwd, repoRoot)
+		seen := make(map[string]bool, len(paths))
+		for _, p := range paths {
+			seen[p] = true
+		}
+		for _, p := range commandPaths {
+			if !seen[p] {
+				paths = append(paths, p)
+			}
+		}
+	}
+
+	return paths, repoRoot, nil
 }
 
 func resolveSkillsPaths(rawPaths []string, cwd, repoRoot string) []string {
