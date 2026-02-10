@@ -66,6 +66,20 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 
 // transformPath generates the appropriate file path for the target platform.
 func (t *Transformer) transformPath(skill model.Skill, target model.Platform) string {
+	if skill.Type == model.SkillTypePrompt {
+		switch target {
+		case model.Codex:
+			// Codex discovery is SKILL.md-centric; store prompts as SKILL artifacts.
+			return filepath.Join(skill.Name, "SKILL.md")
+		case model.Cursor:
+			// Cursor prompt artifacts are markdown-based; keep simple filename layout.
+			return skill.Name + ".md"
+		case model.ClaudeCode:
+			// Claude prompt/command legacy artifacts are markdown files.
+			return skill.Name + ".md"
+		}
+	}
+
 	baseName := filepath.Base(skill.Path)
 	if isSkillFile(baseName) && skill.Name != "" {
 		switch target {
@@ -142,6 +156,13 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 	// Always include description if present
 	if skill.Description != "" {
 		fm["description"] = skill.Description
+	}
+
+	if skill.Type != "" {
+		fm["type"] = skill.Type.String()
+	}
+	if skill.Trigger != "" {
+		fm["trigger"] = skill.Trigger
 	}
 
 	switch target {

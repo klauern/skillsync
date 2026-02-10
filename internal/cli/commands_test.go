@@ -1594,3 +1594,135 @@ This is a user skill.
 		})
 	}
 }
+
+func TestParsePlatformSkillsFromPaths_ClaudeSkillOverridesCommandSameName(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	commandsDir := filepath.Join(tempDir, ".claude", "commands")
+	skillsDir := filepath.Join(tempDir, ".claude", "skills")
+	if err := os.MkdirAll(commandsDir, 0o750); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(skillsDir, "review"), 0o750); err != nil {
+		t.Fatalf("failed to create skills dir: %v", err)
+	}
+
+	commandContent := `---
+description: command version
+allowed-tools: Bash, Read
+---
+# /review
+Command content.`
+	if err := os.WriteFile(filepath.Join(commandsDir, "review.md"), []byte(commandContent), 0o600); err != nil {
+		t.Fatalf("failed to write command file: %v", err)
+	}
+
+	skillContent := `---
+name: review
+description: skill version
+---
+# Review Skill
+Skill content.`
+	if err := os.WriteFile(filepath.Join(skillsDir, "review", "SKILL.md"), []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("failed to write skill file: %v", err)
+	}
+
+	// Command path intentionally first to verify same-scope override behavior.
+	skills := parsePlatformSkillsFromPaths(
+		model.ClaudeCode,
+		[]string{commandsDir, skillsDir},
+		"",
+		nil,
+		false,
+	)
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 merged artifact, got %d", len(skills))
+	}
+	if skills[0].Name != "review" {
+		t.Fatalf("expected review artifact, got %q", skills[0].Name)
+	}
+	if skills[0].Type == model.SkillTypePrompt {
+		t.Fatalf("expected same-name skill to override command, got prompt type")
+	}
+	if skills[0].Description != "skill version" {
+		t.Fatalf("expected skill version to win, got description %q", skills[0].Description)
+	}
+}
+
+func TestSyncDefaultExcludesPromptArtifacts(t *testing.T) {
+	tempDir := t.TempDir()
+	claudeCommands := filepath.Join(tempDir, ".claude", "commands")
+	cursorSkills := filepath.Join(tempDir, ".cursor", "skills")
+	if err := os.MkdirAll(claudeCommands, 0o750); err != nil {
+		t.Fatalf("failed to create claude commands dir: %v", err)
+	}
+	if err := os.MkdirAll(cursorSkills, 0o750); err != nil {
+		t.Fatalf("failed to create cursor dir: %v", err)
+	}
+
+	commandContent := `---
+description: review command
+allowed-tools: Bash, Read
+---
+Review content.`
+	if err := os.WriteFile(filepath.Join(claudeCommands, "review.md"), []byte(commandContent), 0o600); err != nil {
+		t.Fatalf("failed to write command file: %v", err)
+	}
+
+	t.Setenv("SKILLSYNC_HOME", tempDir)
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", claudeCommands)
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", claudeCommands)
+	t.Setenv("SKILLSYNC_CURSOR_PATH", cursorSkills)
+	t.Setenv("SKILLSYNC_CURSOR_SKILLS_PATHS", cursorSkills)
+	t.Setenv("SKILLSYNC_CODEX_PATH", filepath.Join(tempDir, ".codex"))
+
+	ctx := context.Background()
+	err := Run(ctx, []string{"skillsync", "sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "cursor"})
+	if err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cursorSkills, "review.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected prompt artifact to be excluded by default sync type policy")
+	}
+}
+
+func TestSyncIncludePromptsIncludesPromptArtifacts(t *testing.T) {
+	tempDir := t.TempDir()
+	claudeCommands := filepath.Join(tempDir, ".claude", "commands")
+	cursorSkills := filepath.Join(tempDir, ".cursor", "skills")
+	if err := os.MkdirAll(claudeCommands, 0o750); err != nil {
+		t.Fatalf("failed to create claude commands dir: %v", err)
+	}
+	if err := os.MkdirAll(cursorSkills, 0o750); err != nil {
+		t.Fatalf("failed to create cursor dir: %v", err)
+	}
+
+	commandContent := `---
+description: review command
+allowed-tools: Bash, Read
+---
+Review content.`
+	if err := os.WriteFile(filepath.Join(claudeCommands, "review.md"), []byte(commandContent), 0o600); err != nil {
+		t.Fatalf("failed to write command file: %v", err)
+	}
+
+	t.Setenv("SKILLSYNC_HOME", tempDir)
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", claudeCommands)
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", claudeCommands)
+	t.Setenv("SKILLSYNC_CURSOR_PATH", cursorSkills)
+	t.Setenv("SKILLSYNC_CURSOR_SKILLS_PATHS", cursorSkills)
+	t.Setenv("SKILLSYNC_CODEX_PATH", filepath.Join(tempDir, ".codex"))
+
+	ctx := context.Background()
+	err := Run(ctx, []string{"skillsync", "sync", "--yes", "--skip-backup", "--skip-validation", "--include-prompts", "claudecode", "cursor"})
+	if err != nil {
+		t.Fatalf("sync failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cursorSkills, "review.md")); err != nil {
+		t.Fatalf("expected prompt artifact to be synced with --include-prompts: %v", err)
+	}
+}

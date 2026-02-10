@@ -1139,6 +1139,50 @@ func TestSyncClaudeCodeToCodex(t *testing.T) {
 	}
 }
 
+// TestDiscoverClaudeCommandArtifactsAsPrompts verifies command-style files are
+// discovered as prompt artifacts.
+func TestDiscoverClaudeCommandArtifactsAsPrompts(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture.WriteFile("review.md", `---
+description: review command
+allowed-tools: Bash, Read
+---
+# /review
+
+Review this code.`)
+
+	result := h.Run("discover", "--platform", "claudecode", "--type", "prompt", "--format", "json", "--no-plugins")
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, `"name": "review"`)
+	e2e.AssertOutputContains(t, result, `"type": "prompt"`)
+	e2e.AssertOutputContains(t, result, `"trigger": "/review"`)
+}
+
+// TestSyncClaudeCommandToCodexWithIncludePrompts verifies prompt/command
+// artifacts can be synced to Codex when explicitly enabled.
+func TestSyncClaudeCommandToCodexWithIncludePrompts(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture.WriteFile("review.md", `---
+description: review command
+allowed-tools: Bash, Read
+argument-hint: "<path>"
+---
+# /review
+
+Review this code.`)
+
+	codexFixture := h.CodexFixture()
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "--include-prompts", "claudecode", "codex")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, "lossy mapping")
+	e2e.AssertFileExists(t, codexFixture.Path("review/SKILL.md"))
+}
+
 // ============================================================================
 // Edge Cases and Error Handling E2E Tests
 // ============================================================================

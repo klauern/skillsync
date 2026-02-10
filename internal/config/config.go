@@ -50,6 +50,10 @@ type PlatformConfig struct {
 type SyncConfig struct {
 	// DefaultStrategy is the default conflict resolution strategy
 	DefaultStrategy string `yaml:"default_strategy"`
+
+	// IncludeTypes controls which artifact types sync/delete include by default.
+	// Valid values: skill, prompt.
+	IncludeTypes []string `yaml:"include_types,omitempty"`
 }
 
 // OutputConfig holds display preferences.
@@ -96,6 +100,7 @@ func Default() *Config {
 		},
 		Sync: SyncConfig{
 			DefaultStrategy: string(sync.StrategyOverwrite),
+			IncludeTypes:    []string{"skill"},
 		},
 		Output: OutputConfig{
 			Color: "auto",
@@ -203,6 +208,17 @@ func (c *Config) applyEnvironment() {
 	// Sync settings
 	if v := os.Getenv("SKILLSYNC_SYNC_STRATEGY"); v != "" {
 		c.Sync.DefaultStrategy = v
+	}
+	if v := os.Getenv("SKILLSYNC_SYNC_INCLUDE_TYPES"); v != "" {
+		types := strings.Split(v, ",")
+		parsed := make([]string, 0, len(types))
+		for _, t := range types {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				parsed = append(parsed, t)
+			}
+		}
+		c.Sync.IncludeTypes = parsed
 	}
 
 	// Output settings

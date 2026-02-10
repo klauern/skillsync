@@ -90,11 +90,22 @@ func TestTransformer_TransformPath(t *testing.T) {
 			target:     model.ClaudeCode,
 			expected:   "my-skill.md",
 		},
+		{
+			name:       "prompt to codex skill file",
+			sourcePath: "/source/review.md",
+			skillName:  "review",
+			target:     model.Codex,
+			expected:   "review/SKILL.md",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			skill := model.Skill{Path: tt.sourcePath, Name: tt.skillName}
+			if tt.name == "prompt to codex skill file" {
+				skill.Type = model.SkillTypePrompt
+				skill.Trigger = "/review"
+			}
 			result := tr.transformPath(skill, tt.target)
 			if result != tt.expected {
 				t.Errorf("transformPath() = %v, want %v", result, tt.expected)
@@ -221,6 +232,8 @@ func TestTransformer_BuildFrontmatter_Codex(t *testing.T) {
 	skill := model.Skill{
 		Name:        "test",
 		Description: "desc",
+		Type:        model.SkillTypePrompt,
+		Trigger:     "/test",
 	}
 
 	fm := tr.buildFrontmatter(skill, model.Codex)
@@ -235,6 +248,12 @@ func TestTransformer_BuildFrontmatter_Codex(t *testing.T) {
 	}
 	if fm["description"] != "desc" {
 		t.Error("Codex frontmatter should include description")
+	}
+	if fm["type"] != "prompt" {
+		t.Error("Codex frontmatter should include type for prompt artifacts")
+	}
+	if fm["trigger"] != "/test" {
+		t.Error("Codex frontmatter should include trigger for prompt artifacts")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/klauern/skillsync/internal/logging"
@@ -268,6 +269,12 @@ func (s *Synchronizer) processSkill(
 	result.Action = action
 	result.Message = message
 	result.Conflict = conflict
+	if warning := mappingWarning(source, targetPlatform); warning != "" {
+		if result.Message != "" {
+			result.Message += "; "
+		}
+		result.Message += warning
+	}
 
 	logging.Debug("action determined",
 		logging.Skill(source.Name),
@@ -403,6 +410,25 @@ func (s *Synchronizer) processSkill(
 	}
 
 	return result
+}
+
+func mappingWarning(skill model.Skill, target model.Platform) string {
+	if skill.Type != model.SkillTypePrompt {
+		return ""
+	}
+
+	warnings := []string{}
+	if target == model.Codex {
+		warnings = append(warnings, "lossy mapping: prompt trigger semantics are not guaranteed on Codex")
+	}
+	if target == model.Cursor && skill.Trigger != "" {
+		warnings = append(warnings, "lossy mapping: prompt trigger may require Cursor mode configuration")
+	}
+	if _, ok := skill.Metadata["argument-hint"]; ok && target != model.ClaudeCode {
+		warnings = append(warnings, "lossy mapping: argument-hint preserved as metadata only")
+	}
+
+	return strings.Join(warnings, "; ")
 }
 
 // determineAction decides what action to take based on strategy.

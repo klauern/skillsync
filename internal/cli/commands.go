@@ -309,15 +309,9 @@ func discoveryCommand() *cli.Command {
 			includePlugins := !excludePlugins
 
 			// Parse type filter
-			var typeFilter []model.SkillType
-			if typeStr != "" && typeStr != "all" {
-				for _, t := range strings.Split(typeStr, ",") {
-					skillType, err := model.ParseSkillType(strings.TrimSpace(t))
-					if err != nil {
-						return fmt.Errorf("invalid type: %w", err)
-					}
-					typeFilter = append(typeFilter, skillType)
-				}
+			typeFilter, err := parseTypeFilter(typeStr)
+			if err != nil {
+				return fmt.Errorf("invalid type: %w", err)
 			}
 
 			// Parse scope filter
@@ -401,6 +395,82 @@ func filterBySkillType(skills []model.Skill, typeFilter []model.SkillType) []mod
 		}
 	}
 	return filtered
+}
+
+// parseTypeFilter parses comma-separated skill types.
+// Supports "all" to disable type filtering.
+func parseTypeFilter(typeStr string) ([]model.SkillType, error) {
+	if strings.TrimSpace(typeStr) == "" || strings.EqualFold(strings.TrimSpace(typeStr), "all") {
+		return nil, nil
+	}
+
+	var typeFilter []model.SkillType
+	for _, t := range strings.Split(typeStr, ",") {
+		skillType, err := model.ParseSkillType(strings.TrimSpace(t))
+		if err != nil {
+			return nil, err
+		}
+		typeFilter = append(typeFilter, skillType)
+	}
+
+	return typeFilter, nil
+}
+
+// resolveSyncTypeFilter resolves sync/delete type filtering policy:
+// 1. CLI --type/--include-prompts overrides config
+// 2. sync.include_types config
+// 3. default: skill only
+func resolveSyncTypeFilter(cmd *cli.Command) ([]model.SkillType, error) {
+	typeStr := cmd.String("type")
+	includePrompts := cmd.Bool("include-prompts")
+
+	typeFilter, err := parseTypeFilter(typeStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid --type: %w", err)
+	}
+
+	if includePrompts {
+		if len(typeFilter) == 0 {
+			return []model.SkillType{model.SkillTypeSkill, model.SkillTypePrompt}, nil
+		}
+		if !slices.Contains(typeFilter, model.SkillTypePrompt) {
+			typeFilter = append(typeFilter, model.SkillTypePrompt)
+		}
+		if !slices.Contains(typeFilter, model.SkillTypeSkill) {
+			typeFilter = append(typeFilter, model.SkillTypeSkill)
+		}
+		return typeFilter, nil
+	}
+
+	if len(typeFilter) > 0 {
+		return typeFilter, nil
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config for type policy: %w", err)
+	}
+
+	if len(cfg.Sync.IncludeTypes) == 0 {
+		return []model.SkillType{model.SkillTypeSkill}, nil
+	}
+
+	configured := make([]model.SkillType, 0, len(cfg.Sync.IncludeTypes))
+	for _, t := range cfg.Sync.IncludeTypes {
+		skillType, err := model.ParseSkillType(strings.TrimSpace(t))
+		if err != nil {
+			return nil, fmt.Errorf("invalid sync.include_types value %q: %w", t, err)
+		}
+		if !slices.Contains(configured, skillType) {
+			configured = append(configured, skillType)
+		}
+	}
+
+	if len(configured) == 0 {
+		return []model.SkillType{model.SkillTypeSkill}, nil
+	}
+
+	return configured, nil
 }
 
 // discoverPluginSkills discovers skills from Claude Code plugins with optional caching.
@@ -905,6 +975,15 @@ func syncFlags() []cli.Flag {
 			Name:  "include-plugins",
 			Usage: "Include skills from Claude Code plugins (excluded by default)",
 		},
+		&cli.StringFlag{
+			Name:    "type",
+			Aliases: []string{"t"},
+			Usage:   "Artifact types to sync/delete: skill, prompt, all. Comma-separated for multiple.",
+		},
+		&cli.BoolFlag{
+			Name:  "include-prompts",
+			Usage: "Include prompt/command artifacts (equivalent to --type skill,prompt)",
+		},
 	}
 }
 
@@ -931,6 +1010,11 @@ func syncCommand() *cli.Command {
      - Use --include-plugins flag
      - Explicitly specify plugin scope: claudecode:plugin
 
+   Artifact Types:
+     By default, sync only includes skill artifacts.
+     Use --include-prompts or --type prompt (or skill,prompt) to include
+     command/prompt artifacts.
+
    Strategies:
      overwrite   - Replace target skills unconditionally (default)
      skip        - Skip skills that already exist in target
@@ -948,6 +1032,8 @@ func syncCommand() *cli.Command {
      skillsync sync --interactive cursor codex    # Interactive TUI mode
      skillsync sync --include-plugins claudecode cursor  # Include plugin skills
      skillsync sync claudecode:plugin cursor      # Sync only plugin skills
+     skillsync sync --include-prompts claudecode codex   # Include prompts/commands
+     skillsync sync --type prompt claudecode codex       # Prompts only
 
    See also:
      skillsync delete <source> <target>           # Remove skills from target`,
@@ -980,6 +1066,11 @@ func deleteCommand() *cli.Command {
      by default. To include them, either:
      - Use --include-plugins flag
      - Explicitly specify plugin scope: claudecode:plugin
+
+   Artifact Types:
+     By default, delete only includes skill artifacts.
+     Use --include-prompts or --type prompt (or skill,prompt) to include
+     command/prompt artifacts.
 
    Flags:
      Delete supports the same flags as sync (including --dry-run and --interactive).
@@ -1018,6 +1109,9 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse source skills: %w", err)
 	}
+
+	// Apply artifact type filter policy for sync/delete commands.
+	cfg.sourceSkills = filterBySkillType(cfg.sourceSkills, cfg.typeFilter)
 
 	// Interactive TUI mode
 	if interactive && cfg.deleteMode {
@@ -1132,6 +1226,7 @@ type syncConfig struct {
 	yesFlag        bool
 	deleteMode     bool
 	includePlugins bool
+	typeFilter     []model.SkillType
 	sourceSkills   []model.Skill
 }
 
@@ -1163,6 +1258,11 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourceSpec.Platform)
 	}
 
+	typeFilter, err := resolveSyncTypeFilter(cmd)
+	if err != nil {
+		return nil, err
+	}
+
 	strategyStr := cmd.String("strategy")
 	strategy := sync.Strategy(strategyStr)
 	if !strategy.IsValid() {
@@ -1179,6 +1279,7 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		yesFlag:        cmd.Bool("yes"),
 		deleteMode:     deleteMode,
 		includePlugins: cmd.Bool("include-plugins"),
+		typeFilter:     typeFilter,
 		sourceSkills:   make([]model.Skill, 0),
 	}, nil
 }
@@ -1231,6 +1332,13 @@ func showSyncSummaryAndConfirm(cfg *syncConfig) (bool, error) {
 	fmt.Printf("Source: %s\n", cfg.sourceSpec)
 	fmt.Printf("Target: %s\n", cfg.targetSpec)
 	fmt.Printf("Strategy: %s (%s)\n", cfg.strategy, cfg.strategy.Description())
+	if len(cfg.typeFilter) > 0 {
+		typeNames := make([]string, 0, len(cfg.typeFilter))
+		for _, t := range cfg.typeFilter {
+			typeNames = append(typeNames, t.String())
+		}
+		fmt.Printf("Types: %s\n", strings.Join(typeNames, ", "))
+	}
 
 	if len(cfg.sourceSkills) > 0 {
 		fmt.Printf("Skills to sync: %d\n", len(cfg.sourceSkills))
@@ -1717,7 +1825,7 @@ func parsePlatformSkillsFromPaths(
 		for _, skill := range skills {
 			skill.Scope = scope
 			if existing, exists := skillsByName[skill.Name]; exists {
-				if skill.Scope.IsHigherPrecedence(existing.Scope) {
+				if shouldOverrideSkill(existing, skill) {
 					skillsByName[skill.Name] = skill
 				}
 				continue
@@ -1735,7 +1843,7 @@ func parsePlatformSkillsFromPaths(
 		pluginSkills := parseClaudePluginCacheSkills()
 		for _, skill := range pluginSkills {
 			if existing, exists := skillsByName[skill.Name]; exists {
-				if skill.Scope.IsHigherPrecedence(existing.Scope) {
+				if shouldOverrideSkill(existing, skill) {
 					skillsByName[skill.Name] = skill
 				}
 				continue
@@ -1749,6 +1857,29 @@ func parsePlatformSkillsFromPaths(
 		result = append(result, skill)
 	}
 	return result
+}
+
+func shouldOverrideSkill(existing, candidate model.Skill) bool {
+	if candidate.Scope.IsHigherPrecedence(existing.Scope) {
+		return true
+	}
+	if existing.Scope != candidate.Scope {
+		return false
+	}
+
+	// Within the same scope, prefer regular skills over prompts/commands for
+	// same-name collisions (matches Claude documented behavior and is safer
+	// cross-platform for merged command systems).
+	existingType := existing.Type
+	if existingType == "" {
+		existingType = model.SkillTypeSkill
+	}
+	candidateType := candidate.Type
+	if candidateType == "" {
+		candidateType = model.SkillTypeSkill
+	}
+
+	return existingType == model.SkillTypePrompt && candidateType == model.SkillTypeSkill
 }
 
 // parseClaudePluginCacheSkills discovers skills from Claude Code's installed plugin cache.

@@ -3,6 +3,7 @@ package sync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -322,6 +323,73 @@ func TestSynchronizer_DetermineAction(t *testing.T) {
 			action, _, _ := s.determineAction(tt.source, tt.existing, tt.exists, tt.strategy)
 			if action != tt.expected {
 				t.Errorf("Expected action %s, got %s", tt.expected, action)
+			}
+		})
+	}
+}
+
+func TestMappingWarning(t *testing.T) {
+	tests := map[string]struct {
+		skill      model.Skill
+		target     model.Platform
+		contains   []string
+		notContain []string
+	}{
+		"non-prompt has no warning": {
+			skill: model.Skill{
+				Name: "plain-skill",
+				Type: model.SkillTypeSkill,
+			},
+			target:   model.Codex,
+			contains: nil,
+		},
+		"prompt to codex warns about trigger semantics": {
+			skill: model.Skill{
+				Name:    "review",
+				Type:    model.SkillTypePrompt,
+				Trigger: "/review",
+			},
+			target:   model.Codex,
+			contains: []string{"lossy mapping: prompt trigger semantics"},
+		},
+		"prompt with argument hint warns for non-claude target": {
+			skill: model.Skill{
+				Name: "review",
+				Type: model.SkillTypePrompt,
+				Metadata: map[string]string{
+					"argument-hint": "<path>",
+				},
+			},
+			target:   model.Cursor,
+			contains: []string{"lossy mapping: argument-hint preserved as metadata only"},
+		},
+		"prompt to claude has no non-portable warning": {
+			skill: model.Skill{
+				Name:    "review",
+				Type:    model.SkillTypePrompt,
+				Trigger: "/review",
+			},
+			target:     model.ClaudeCode,
+			contains:   nil,
+			notContain: []string{"lossy mapping"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			msg := mappingWarning(tt.skill, tt.target)
+			for _, want := range tt.contains {
+				if !strings.Contains(msg, want) {
+					t.Errorf("mappingWarning() = %q, want substring %q", msg, want)
+				}
+			}
+			for _, avoid := range tt.notContain {
+				if strings.Contains(msg, avoid) {
+					t.Errorf("mappingWarning() = %q, should not contain %q", msg, avoid)
+				}
+			}
+			if len(tt.contains) == 0 && msg != "" {
+				t.Errorf("mappingWarning() = %q, want empty", msg)
 			}
 		})
 	}

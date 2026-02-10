@@ -944,6 +944,169 @@ Legacy content.`
 	})
 }
 
+func TestParser_Parse_CommandFilesAsPrompts(t *testing.T) {
+	tmpDir := t.TempDir()
+	commandsDir := filepath.Join(tmpDir, "commands")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands directory: %v", err)
+	}
+
+	commandContent := `---
+description: Review code quality
+allowed-tools: Bash, Read, Grep
+---
+# /review
+
+Run a focused review.`
+
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(commandsDir, "review.md"), []byte(commandContent), 0o644); err != nil {
+		t.Fatalf("failed to write command file: %v", err)
+	}
+
+	p := New(commandsDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 parsed artifact, got %d", len(skills))
+	}
+
+	s := skills[0]
+	if s.Name != "review" {
+		t.Errorf("Name = %q, want %q", s.Name, "review")
+	}
+	if s.Type != model.SkillTypePrompt {
+		t.Errorf("Type = %q, want %q", s.Type, model.SkillTypePrompt)
+	}
+	if s.Trigger != "/review" {
+		t.Errorf("Trigger = %q, want %q", s.Trigger, "/review")
+	}
+	if s.Description != "Review code quality" {
+		t.Errorf("Description = %q, want %q", s.Description, "Review code quality")
+	}
+	if len(s.Tools) != 3 {
+		t.Fatalf("expected 3 tools, got %d", len(s.Tools))
+	}
+	wantTools := []string{"Bash", "Read", "Grep"}
+	for i, want := range wantTools {
+		if s.Tools[i] != want {
+			t.Errorf("Tools[%d] = %q, want %q", i, s.Tools[i], want)
+		}
+	}
+}
+
+func TestParser_Parse_CommandFrontmatterTypeOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	commandsDir := filepath.Join(tmpDir, "commands")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands directory: %v", err)
+	}
+
+	commandContent := `---
+name: build
+type: prompt
+trigger: /build-fast
+allowed-tools: [Bash, Read]
+---
+Build quickly.`
+
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(commandsDir, "build.md"), []byte(commandContent), 0o644); err != nil {
+		t.Fatalf("failed to write command file: %v", err)
+	}
+
+	p := New(commandsDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 parsed artifact, got %d", len(skills))
+	}
+
+	s := skills[0]
+	if s.Type != model.SkillTypePrompt {
+		t.Errorf("Type = %q, want %q", s.Type, model.SkillTypePrompt)
+	}
+	if s.Trigger != "/build-fast" {
+		t.Errorf("Trigger = %q, want %q", s.Trigger, "/build-fast")
+	}
+}
+
+func TestParser_Parse_CommandPathSkillStyleFrontmatterStaysSkill(t *testing.T) {
+	tmpDir := t.TempDir()
+	commandsDir := filepath.Join(tmpDir, "commands")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands directory: %v", err)
+	}
+
+	// This resembles legacy skill frontmatter stored in commands path.
+	// We keep it as skill for backward compatibility.
+	content := `---
+name: legacy-skill
+description: legacy skill style
+tools: [Read]
+---
+Legacy content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(commandsDir, "legacy-skill.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	p := New(commandsDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 parsed artifact, got %d", len(skills))
+	}
+	if skills[0].Type != model.SkillTypeSkill {
+		t.Errorf("Type = %q, want %q", skills[0].Type, model.SkillTypeSkill)
+	}
+	if skills[0].Trigger != "" {
+		t.Errorf("Trigger = %q, want empty", skills[0].Trigger)
+	}
+}
+
+func TestIsClaudeCommandFile(t *testing.T) {
+	tests := map[string]struct {
+		path string
+		want bool
+	}{
+		"repo commands": {
+			path: "/tmp/repo/.claude/commands/review.md",
+			want: true,
+		},
+		"user commands": {
+			path: "/Users/test/.claude/commands/build.md",
+			want: true,
+		},
+		"skills path": {
+			path: "/tmp/repo/.claude/skills/review.md",
+			want: false,
+		},
+		"non markdown": {
+			path: "/tmp/repo/.claude/commands/review.txt",
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := isClaudeCommandFile(tt.path)
+			if got != tt.want {
+				t.Errorf("isClaudeCommandFile(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestParser_CaseInsensitiveSkillMd tests that lowercase skill.md files are recognized
 func TestParser_CaseInsensitiveSkillMd(t *testing.T) {
 	t.Run("lowercase skill.md is recognized", func(t *testing.T) {

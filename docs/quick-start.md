@@ -180,6 +180,28 @@ By default, this:
 - Creates a backup before syncing
 - Uses the "overwrite" strategy (source replaces target)
 - Syncs to the user scope on the target platform
+- Includes `skill` artifacts only (prompts/commands are opt-in)
+
+### Command/Prompt Artifacts
+
+Discovery supports both skills and prompt/command artifacts. Sync and delete are
+skill-only by default for safety.
+
+```bash
+# Discover prompts/commands only
+skillsync discover --type prompt
+
+# Sync both skills and prompts/commands
+skillsync sync --include-prompts claude-code codex
+
+# Sync prompts/commands only
+skillsync sync --type prompt claude-code cursor
+```
+
+Compatibility caveats:
+- Claude command slash-trigger behavior may not map one-to-one to Codex/Cursor.
+- Some fields (for example `argument-hint`) are preserved as metadata on
+  non-Claude targets.
 
 ### Preview Before Syncing (Recommended)
 
@@ -778,6 +800,8 @@ platforms:
 sync:
   # Default sync strategy (overwrite, skip, newer, merge, three-way, interactive)
   default_strategy: overwrite
+  # Artifact types included by default for sync/delete (skill, prompt)
+  include_types: [skill]
 
 output:
   # Color output mode (auto, always, never)
@@ -804,6 +828,9 @@ export SKILLSYNC_OUTPUT_COLOR=never
 
 # Set default strategy
 export SKILLSYNC_SYNC_STRATEGY=three-way
+
+# Set default artifact types for sync/delete
+export SKILLSYNC_SYNC_INCLUDE_TYPES=skill,prompt
 ```
 
 ## Next Steps

@@ -19,6 +19,9 @@ func TestDefault(t *testing.T) {
 	if cfg.Sync.DefaultStrategy != string(sync.StrategyOverwrite) {
 		t.Errorf("expected default strategy %q, got %q", sync.StrategyOverwrite, cfg.Sync.DefaultStrategy)
 	}
+	if len(cfg.Sync.IncludeTypes) != 1 || cfg.Sync.IncludeTypes[0] != "skill" {
+		t.Errorf("expected default include_types [skill], got %v", cfg.Sync.IncludeTypes)
+	}
 
 	// Check output defaults
 	if cfg.Output.Color != "auto" {
@@ -34,6 +37,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	// Create a config with custom values
 	cfg := Default()
 	cfg.Sync.DefaultStrategy = string(sync.StrategyThreeWay)
+	cfg.Sync.IncludeTypes = []string{"skill", "prompt"}
 	cfg.Output.Color = "never"
 	cfg.Similarity.NameThreshold = 0.9
 
@@ -51,6 +55,9 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	// Verify values match
 	if loaded.Sync.DefaultStrategy != string(sync.StrategyThreeWay) {
 		t.Errorf("expected strategy %q, got %q", sync.StrategyThreeWay, loaded.Sync.DefaultStrategy)
+	}
+	if len(loaded.Sync.IncludeTypes) != 2 || loaded.Sync.IncludeTypes[0] != "skill" || loaded.Sync.IncludeTypes[1] != "prompt" {
+		t.Errorf("expected include_types [skill prompt], got %v", loaded.Sync.IncludeTypes)
 	}
 	if loaded.Output.Color != "never" {
 		t.Errorf("expected Output.Color to be 'never', got %q", loaded.Output.Color)
@@ -72,6 +79,16 @@ func TestEnvironmentOverrides(t *testing.T) {
 			envKey:   "SKILLSYNC_SYNC_STRATEGY",
 			envValue: "three-way",
 			check:    func(c *Config) bool { return c.Sync.DefaultStrategy == "three-way" },
+		},
+		{
+			name:     "sync include types",
+			envKey:   "SKILLSYNC_SYNC_INCLUDE_TYPES",
+			envValue: "skill,prompt",
+			check: func(c *Config) bool {
+				return len(c.Sync.IncludeTypes) == 2 &&
+					c.Sync.IncludeTypes[0] == "skill" &&
+					c.Sync.IncludeTypes[1] == "prompt"
+			},
 		},
 		{
 			name:     "output color",
@@ -176,6 +193,7 @@ func TestPartialConfigMerge(t *testing.T) {
 	partialConfig := `
 sync:
   default_strategy: "skip"
+  include_types: ["skill", "prompt"]
 `
 	// #nosec G306 - test file permissions are acceptable
 	if err := os.WriteFile(configPath, []byte(partialConfig), 0o644); err != nil {
@@ -191,6 +209,9 @@ sync:
 	// Partial overrides should apply
 	if cfg.Sync.DefaultStrategy != "skip" {
 		t.Errorf("expected strategy 'skip', got %q", cfg.Sync.DefaultStrategy)
+	}
+	if len(cfg.Sync.IncludeTypes) != 2 || cfg.Sync.IncludeTypes[0] != "skill" || cfg.Sync.IncludeTypes[1] != "prompt" {
+		t.Errorf("expected include_types [skill prompt], got %v", cfg.Sync.IncludeTypes)
 	}
 }
 

@@ -239,6 +239,20 @@ skills:
    - Cursor: `.cursor/rules/*.mdc`
    - Codex: `.codex/*.json`
 
+### Command-Aware Mapping Notes
+
+When treating slash-command style artifacts as portable prompts:
+
+| Source | Target | Preferred artifact mapping | Notes |
+|---|---|---|---|
+| Claude `.claude/commands/*.md` | Codex | `<name>/SKILL.md` with `type: prompt` | Trigger semantics may be lossy vs explicit slash invocation. |
+| Claude `.claude/commands/*.md` | Cursor | markdown prompt artifact | May require Cursor mode configuration for strict slash-trigger parity. |
+| Codex prompt skill | Claude | markdown artifact with prompt metadata | Trigger can be preserved as metadata/frontmatter, runtime behavior varies by host. |
+
+Known lossy fields:
+- `argument-hint` (Claude): preserved as metadata for non-Claude targets.
+- Per-command model hints: may not map directly across platforms.
+
 4. **Platform detection**: Can infer from presence of config directories
 
 ### Implementation Notes for SkillSync

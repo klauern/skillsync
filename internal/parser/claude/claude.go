@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
@@ -166,9 +167,13 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 	result := parser.SplitFrontmatter(content)
 
 	// Extract metadata from frontmatter
-	var name, description string
+	var name, description, trigger string
 	var tools []string
 	metadata := make(map[string]string)
+	skillType := model.SkillTypeSkill
+	isCommandPath := isClaudeCommandFile(filePath)
+	hasExplicitName := false
+	commandMetadataHint := false
 
 	if result.HasFrontmatter {
 		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
@@ -180,6 +185,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		if nameVal, ok := fm["name"]; ok {
 			if nameStr, ok := nameVal.(string); ok {
 				name = nameStr
+				hasExplicitName = true
 			}
 		}
 
@@ -190,21 +196,38 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 			}
 		}
 
-		// Extract tools array
-		if toolsVal, ok := fm["tools"]; ok {
-			if toolsSlice, ok := toolsVal.([]any); ok {
-				tools = make([]string, 0, len(toolsSlice))
-				for _, tool := range toolsSlice {
-					if toolStr, ok := tool.(string); ok {
-						tools = append(tools, toolStr)
-					}
-				}
+		// Extract tool allowlist.
+		// Claude command files commonly use `allowed-tools`, while skills use `tools`.
+		tools = extractTools(fm, "tools")
+		if len(tools) == 0 {
+			tools = extractTools(fm, "allowed-tools")
+		}
+		if _, ok := fm["allowed-tools"]; ok {
+			commandMetadataHint = true
+		}
+		if _, ok := fm["argument-hint"]; ok {
+			commandMetadataHint = true
+		}
+		if _, ok := fm["model"]; ok {
+			commandMetadataHint = true
+		}
+
+		// Extract type and trigger (for command/prompt artifacts).
+		if typeStr := extractString(fm, "type"); typeStr != "" {
+			parsedType, err := model.ParseSkillType(typeStr)
+			if err != nil {
+				return model.Skill{}, fmt.Errorf("failed to parse type in %q: %w", filePath, err)
 			}
+			skillType = parsedType
+		}
+		trigger = extractString(fm, "trigger")
+		if trigger != "" {
+			commandMetadataHint = true
 		}
 
 		// Store all other frontmatter fields in metadata
 		for key, val := range fm {
-			if key != "name" && key != "description" && key != "tools" {
+			if key != "name" && key != "description" && key != "tools" && key != "allowed-tools" && key != "type" && key != "trigger" {
 				if strVal, ok := val.(string); ok {
 					metadata[key] = strVal
 				} else {
@@ -218,6 +241,19 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 	if name == "" {
 		base := filepath.Base(filePath)
 		name = base[:len(base)-len(filepath.Ext(base))]
+	}
+
+	// Command files default to prompt type and filename-derived slash trigger.
+	commandLike := isCommandPath && (!hasExplicitName || commandMetadataHint || skillType == model.SkillTypePrompt)
+	if commandLike {
+		if skillType == model.SkillTypeSkill {
+			skillType = model.SkillTypePrompt
+		}
+		if trigger == "" {
+			base := filepath.Base(filePath)
+			stem := base[:len(base)-len(filepath.Ext(base))]
+			trigger = "/" + stem
+		}
 	}
 
 	// Validate skill name
@@ -244,6 +280,8 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		Metadata:    metadata,
 		Content:     normalizedContent,
 		ModifiedAt:  fileInfo.ModTime(),
+		Type:        skillType,
+		Trigger:     trigger,
 	}
 
 	return skill, nil
@@ -252,6 +290,57 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 // Platform returns the platform identifier for Claude Code
 func (p *Parser) Platform() model.Platform {
 	return model.ClaudeCode
+}
+
+func extractString(fm map[string]any, key string) string {
+	if val, ok := fm[key]; ok {
+		if strVal, ok := val.(string); ok {
+			return strVal
+		}
+	}
+	return ""
+}
+
+func extractTools(fm map[string]any, key string) []string {
+	val, ok := fm[key]
+	if !ok {
+		return nil
+	}
+
+	switch v := val.(type) {
+	case []any:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			if tool, ok := item.(string); ok {
+				result = append(result, strings.TrimSpace(tool))
+			}
+		}
+		return result
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return nil
+		}
+		parts := strings.Split(v, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			tool := strings.TrimSpace(part)
+			if tool != "" {
+				result = append(result, tool)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func isClaudeCommandFile(path string) bool {
+	if !strings.EqualFold(filepath.Ext(path), ".md") {
+		return false
+	}
+
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	return slices.Contains(parts, "commands")
 }
 
 // isInsideSkillDir checks if a file path is inside any of the skill directories.
