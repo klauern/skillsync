@@ -36,7 +36,7 @@ cd skillsync
 # Build the binary
 just build
 
-# Install to GOPATH/bin (optional)
+# Install to GOBIN (or GOPATH/bin if GOBIN is unset) (optional)
 just install
 
 # Or run directly

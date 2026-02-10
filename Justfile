@@ -18,13 +18,18 @@ build:
   @mkdir -p {{BUILD_DIR}}
   go build {{LDFLAGS}} -o {{BUILD_DIR}}/{{BINARY_NAME}} ./cmd/skillsync
 
-[group("build"), doc("Install the binary to GOPATH/bin")]
+[group("build"), doc("Install the binary to GOBIN (or GOPATH/bin if unset)")]
 install:
-  go install {{LDFLAGS}} ./cmd/skillsync
+  bin_dir="${GOBIN:-$(go env GOBIN)}"; \
+  if [ -z "$bin_dir" ]; then bin_dir="$(go env GOPATH)/bin"; fi; \
+  mkdir -p "$bin_dir"; \
+  go build {{LDFLAGS}} -o "$bin_dir/{{BINARY_NAME}}$(go env GOEXE)" ./cmd/skillsync; \
+  echo "Installed {{BINARY_NAME}} to $bin_dir"
 
-[group("build"), doc("Remove installed binary from GOPATH/bin")]
+[group("build"), doc("Remove installed binary from GOBIN (or GOPATH/bin if unset)")]
 uninstall:
-  bin_dir="${GOBIN:-$(go env GOPATH)/bin}"; \
+  bin_dir="${GOBIN:-$(go env GOBIN)}"; \
+  if [ -z "$bin_dir" ]; then bin_dir="$(go env GOPATH)/bin"; fi; \
   rm -f "${bin_dir}/{{BINARY_NAME}}$(go env GOEXE)"
 
 [group("test"), doc("Run tests with race and coverage")]
