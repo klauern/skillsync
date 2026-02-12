@@ -137,7 +137,7 @@ skillsync discover --scope user,plugin
 Launch the interactive dashboard for visual exploration:
 
 ```bash
-skillsync discover --interactive
+skillsync tui
 ```
 
 **Navigation:**
@@ -249,13 +249,13 @@ skillsync sync cursor:user claude-code
 
 ### Interactive Sync
 
-Use interactive mode for full control:
+Use the dashboard mode for full control:
 
 ```bash
-skillsync sync --interactive cursor claude-code
+skillsync tui
 ```
 
-This launches a TUI where you can:
+Then choose **Sync Operations**. This launches a TUI where you can:
 - Select which skills to sync
 - Preview diffs for each skill
 - Choose resolution strategy per-skill
@@ -394,7 +394,7 @@ skillsync sync --strategy skip cursor:user claude-code:user
 Carefully review each change:
 
 ```bash
-skillsync sync --interactive --strategy three-way cursor claude-code
+skillsync tui
 ```
 
 ## Managing Backups
@@ -421,7 +421,7 @@ skillsync backup list
 skillsync backup list --platform claude-code
 
 # Interactive TUI
-skillsync backup list --interactive
+skillsync tui
 
 # Export as JSON
 skillsync backup list --format json
@@ -712,8 +712,8 @@ The "overwrite" strategy doesn't detect conflicts—it always replaces target. I
 # Explicitly set strategy
 skillsync sync --strategy overwrite cursor claude-code
 
-# Or use interactive to resolve manually
-skillsync sync --interactive cursor claude-code
+# Or use the dashboard to resolve manually
+skillsync tui
 ```
 
 #### Issue: "Backup restore fails"

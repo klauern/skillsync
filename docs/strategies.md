@@ -41,5 +41,5 @@ Prompt for each conflict, allowing manual resolution in the TUI.
 skillsync sync cursor claudecode --dry-run
 skillsync sync cursor:repo claudecode:user --strategy=skip
 skillsync sync cursor codex --strategy=three-way
-skillsync sync cursor codex --strategy=interactive --interactive
+skillsync sync cursor codex --strategy=interactive
 ```

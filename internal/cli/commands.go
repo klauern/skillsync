@@ -239,7 +239,6 @@ func discoveryCommand() *cli.Command {
 		Aliases: []string{"discovery", "list"},
 		Usage:   "Discover and list skills across platforms",
 		UsageText: `skillsync discover [options]
-   skillsync discover --interactive       # Interactive TUI mode
    skillsync discover --platform claude-code
    skillsync discover --no-plugins
    skillsync discover --repo https://github.com/user/plugins
@@ -253,14 +252,8 @@ func discoveryCommand() *cli.Command {
    or specify a Git repository with --repo to fetch plugins from.
 
    Output formats: table (default), json, yaml
-
-   Use --interactive (-i) for a TUI with keyboard navigation and filtering.`,
+   For interactive browsing, use: skillsync tui`,
 		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "interactive",
-				Aliases: []string{"i"},
-				Usage:   "Interactive TUI mode with keyboard navigation",
-			},
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
@@ -302,7 +295,6 @@ func discoveryCommand() *cli.Command {
 			excludePlugins := cmd.Bool("no-plugins")
 			repoURL := cmd.String("repo")
 			noCache := cmd.Bool("no-cache")
-			interactive := cmd.Bool("interactive")
 			typeStr := cmd.String("type")
 
 			// Include plugins by default unless --no-plugins is set
@@ -366,10 +358,6 @@ func discoveryCommand() *cli.Command {
 				allSkills = filterBySkillType(allSkills, typeFilter)
 			}
 
-			// Output results
-			if interactive {
-				return discoverSkillsInteractive(allSkills)
-			}
 			return outputSkills(allSkills, format)
 		},
 	}
@@ -607,128 +595,6 @@ func discoverSkillsInteractive(skills []model.Skill) error {
 	return nil
 }
 
-// syncSkillsInteractive runs the interactive TUI for sync skill selection
-func syncSkillsInteractive(cfg *syncConfig) error {
-	if len(cfg.sourceSkills) == 0 {
-		fmt.Println("No skills found to sync.")
-		return nil
-	}
-
-	// Parse existing target skills for diff preview
-	targetSkills, err := parsePlatformSkills(cfg.targetSpec.Platform)
-	if err != nil {
-		// Not fatal - target may not have any skills yet
-		targetSkills = []model.Skill{}
-	}
-
-	// Create a map of target skills by name for quick lookup
-	targetSkillMap := make(map[string]model.Skill)
-	for _, s := range targetSkills {
-		targetSkillMap[s.Name] = s
-	}
-
-	// Main TUI loop - allows navigating between list and diff preview
-	// Track selections across navigation
-	var currentSelections map[string]bool
-
-	for {
-		result, err := tui.RunSyncList(cfg.sourceSkills, cfg.sourceSpec.Platform, cfg.targetSpec.Platform, currentSelections)
-		if err != nil {
-			return fmt.Errorf("TUI error: %w", err)
-		}
-
-		switch result.Action {
-		case tui.SyncActionNone:
-			// User quit without action
-			fmt.Println("Sync cancelled.")
-			return nil
-
-		case tui.SyncActionPreview:
-			// Show diff preview for selected skill
-			var targetSkill *model.Skill
-			if ts, exists := targetSkillMap[result.PreviewSkill.Name]; exists {
-				targetSkill = &ts
-			}
-
-			diffResult, err := tui.RunSyncDiff(result.PreviewSkill, targetSkill, cfg.sourceSpec.Platform, cfg.targetSpec.Platform)
-			if err != nil {
-				return fmt.Errorf("diff preview error: %w", err)
-			}
-
-			switch diffResult.Action {
-			case tui.DiffActionBack:
-				// Save current selections before going back
-				currentSelections = result.Selections
-				continue
-			case tui.DiffActionSync:
-				// Sync just this one skill
-				if err := executeSyncForSkills(cfg, []model.Skill{diffResult.Skill}); err != nil {
-					return err
-				}
-				return nil
-			case tui.DiffActionNone:
-				// User quit
-				fmt.Println("Sync cancelled.")
-				return nil
-			}
-
-		case tui.SyncActionSync:
-			// Sync selected skills
-			if len(result.SelectedSkills) == 0 {
-				fmt.Println("No skills selected.")
-				return nil
-			}
-
-			if err := executeSyncForSkills(cfg, result.SelectedSkills); err != nil {
-				return err
-			}
-			return nil
-		}
-	}
-}
-
-// executeSyncForSkills performs the actual sync operation for the given skills
-func executeSyncForSkills(cfg *syncConfig, skills []model.Skill) error {
-	// Create backup before sync
-	if !cfg.skipBackup && !cfg.dryRun {
-		prepareBackup(cfg.targetSpec.Platform)
-		created, err := backupExistingTargetSkills(
-			cfg.targetSpec.Platform,
-			cfg.targetSpec.TargetScope(),
-			skills,
-			"pre-sync backup",
-			[]string{"sync"},
-		)
-		if err != nil {
-			return err
-		}
-		if created > 0 {
-			fmt.Printf("✓ Created %d backup(s)\n", created)
-		}
-	}
-
-	// Create sync options and execute
-	opts := sync.Options{
-		DryRun:      cfg.dryRun,
-		Strategy:    cfg.strategy,
-		TargetScope: cfg.targetSpec.TargetScope(),
-	}
-
-	syncer := sync.New()
-	result, err := syncer.SyncWithSkills(skills, cfg.targetSpec.Platform, opts)
-	if err != nil {
-		return fmt.Errorf("sync failed: %w", err)
-	}
-
-	displaySyncResults(result)
-
-	if !result.Success() {
-		return errors.New("sync completed with errors")
-	}
-
-	return nil
-}
-
 // outputSkills formats and prints skills in the requested format
 func outputSkills(skills []model.Skill, format string) error {
 	switch format {
@@ -943,11 +809,6 @@ func colorSource(skill model.Skill, width int) string {
 func syncFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
-			Name:    "interactive",
-			Aliases: []string{"i"},
-			Usage:   "Interactive TUI mode with skill selection and diff preview",
-		},
-		&cli.BoolFlag{
 			Name:    "dry-run",
 			Aliases: []string{"d"},
 			Usage:   "Preview changes without modifying files",
@@ -1027,9 +888,9 @@ func syncCommand() *cli.Command {
      skillsync sync cursor claudecode             # All cursor skills to claudecode user scope
      skillsync sync cursor:repo claudecode:user   # Repo skills to user scope
      skillsync sync cursor:repo,user codex:repo   # Multiple source scopes to repo
+     skillsync tui                                # Interactive dashboard mode
      skillsync sync --dry-run cursor codex        # Preview changes
      skillsync sync --strategy=skip cursor codex
-     skillsync sync --interactive cursor codex    # Interactive TUI mode
      skillsync sync --include-plugins claudecode cursor  # Include plugin skills
      skillsync sync claudecode:plugin cursor      # Sync only plugin skills
      skillsync sync --include-prompts claudecode codex   # Include prompts/commands
@@ -1073,13 +934,13 @@ func deleteCommand() *cli.Command {
      command/prompt artifacts.
 
    Flags:
-     Delete supports the same flags as sync (including --dry-run and --interactive).
+     Delete supports the same flags as sync (including --dry-run).
 
    Examples:
      skillsync delete cursor claudecode           # Remove cursor skills from claudecode
      skillsync delete cursor:repo claudecode:user # Remove repo skills from user scope
+     skillsync tui                                # Interactive dashboard mode
      skillsync delete --dry-run cursor codex      # Preview changes
-     skillsync delete --interactive cursor codex  # Interactive TUI mode
      skillsync delete --include-plugins claudecode cursor`,
 		Flags: syncFlags(),
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -1093,8 +954,6 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	if err != nil {
 		return err
 	}
-
-	interactive := cmd.Bool("interactive")
 
 	// Always parse source skills (use tiered parser for scope filtering)
 	// Plugin scope skills are excluded by default unless --include-plugins is set
@@ -1112,15 +971,6 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 
 	// Apply artifact type filter policy for sync/delete commands.
 	cfg.sourceSkills = filterBySkillType(cfg.sourceSkills, cfg.typeFilter)
-
-	// Interactive TUI mode
-	if interactive && cfg.deleteMode {
-		return syncDeleteInteractive(cfg)
-	}
-
-	if interactive {
-		return syncSkillsInteractive(cfg)
-	}
 
 	// Delete mode has different flow
 	if cfg.deleteMode {
@@ -1484,47 +1334,6 @@ func displaySyncResults(result *sync.Result) {
 // syncDeleteMode handles the delete sync mode: removing skills from target that exist in source.
 func syncDeleteMode(cfg *syncConfig) error {
 	return executeDeleteForSkills(cfg, cfg.sourceSkills, false)
-}
-
-func syncDeleteInteractive(cfg *syncConfig) error {
-	targetSkills, err := parsePlatformSkillsWithScope(
-		cfg.targetSpec.Platform,
-		[]model.SkillScope{cfg.targetSpec.TargetScope()},
-		false,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to parse target skills: %w", err)
-	}
-
-	deleteCandidates := filterDeleteCandidates(cfg.sourceSkills, targetSkills)
-	if len(deleteCandidates) == 0 {
-		fmt.Println("No matching skills found to delete.")
-		return nil
-	}
-
-	result, err := tui.RunDeleteList(deleteCandidates)
-	if err != nil {
-		return fmt.Errorf("delete TUI error: %w", err)
-	}
-
-	switch result.Action {
-	case tui.DeleteActionNone:
-		fmt.Println("Delete cancelled.")
-		return nil
-	case tui.DeleteActionDelete:
-		if len(result.SelectedSkills) == 0 {
-			fmt.Println("No skills selected.")
-			return nil
-		}
-		selectedSourceSkills := selectSourceSkillsForDelete(cfg.sourceSkills, result.SelectedSkills)
-		if len(selectedSourceSkills) == 0 {
-			fmt.Println("No matching source skills found for deletion.")
-			return nil
-		}
-		return executeDeleteForSkills(cfg, selectedSourceSkills, true)
-	}
-
-	return nil
 }
 
 func filterDeleteCandidates(sourceSkills, targetSkills []model.Skill) []model.Skill {
@@ -2354,7 +2163,6 @@ func backupListCommand() *cli.Command {
 		Aliases: []string{"ls"},
 		Usage:   "List existing backups with metadata",
 		UsageText: `skillsync backup list [options]
-   skillsync backup list --interactive       # Interactive TUI mode
    skillsync backup list --platform claude-code
    skillsync backup list --format json
    skillsync backup list --limit 10`,
@@ -2363,14 +2171,8 @@ func backupListCommand() *cli.Command {
    Output includes: ID, Platform, Source File, Created At, Size
 
    Formats: table (default), json, yaml
-
-   Use --interactive (-i) for a TUI with keyboard navigation and actions.`,
+   For interactive backup management, use: skillsync tui`,
 		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "interactive",
-				Aliases: []string{"i"},
-				Usage:   "Interactive TUI mode with keyboard navigation",
-			},
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
@@ -2393,11 +2195,6 @@ func backupListCommand() *cli.Command {
 			platform := cmd.String("platform")
 			format := cmd.String("format")
 			limit := cmd.Int("limit")
-			interactive := cmd.Bool("interactive")
-
-			if interactive {
-				return listBackupsInteractive(platform)
-			}
 			return listBackups(platform, format, int(limit))
 		},
 	}
