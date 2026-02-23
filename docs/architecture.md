@@ -31,7 +31,7 @@ type Parser interface {
 }
 ```
 
-**Platform**: `ClaudeCode | Cursor | Codex | Copilot | Gemini` (`internal/model/platform.go`)
+**Platform**: `ClaudeCode | Cursor | Codex` (`internal/model/platform.go`); `Copilot` and `Gemini` are documented in `docs/platforms/` but not yet added to the runtime enum.
 
 See `docs/platforms/` for per-platform format references and `docs/platforms/cross-platform-mapping.md` for conversion rules.
 

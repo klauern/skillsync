@@ -14,7 +14,7 @@ Cursor also auto-discovers skills from other platforms' directories (`.claude/sk
 
 ## Directory Structure
 
-```
+```text
 <project>/
   .cursor/
     skills/               # Project-scoped Agent Skills Standard skills

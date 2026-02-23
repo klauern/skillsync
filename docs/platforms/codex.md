@@ -11,8 +11,9 @@ while broader instructions are delivered through hierarchical `AGENTS.md` files
 and `config.toml` settings.
 
 Codex selects skills implicitly based on task relevance -- the `description`
-frontmatter field drives matching. There is no user-invocable slash-command file
-format analogous to Claude Code's `.claude/commands/`.
+frontmatter field drives matching. Codex also has a **custom prompts** system
+at `~/.codex/prompts/*.md` (invoked as `/prompts:<name>`), but this feature is
+**deprecated** in favor of Skills.
 
 ## Directory Structure
 
@@ -34,7 +35,7 @@ format analogous to Claude Code's `.claude/commands/`.
   config.toml                    # User config
   AGENTS.md                      # User-level instructions
   AGENTS.override.md             # User-level override instructions
-  prompts/                       # Observed locally; undocumented (see Gaps)
+  prompts/                       # Custom Prompts (deprecated; use Skills instead)
     *.md
 
 /etc/codex/                      # System / admin-level
@@ -123,17 +124,35 @@ Other notable config fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `model` | string | Model to use (e.g., `gpt-5-codex`). |
+| `model` | string | Model to use (e.g., `gpt-5.3-codex`). |
 | `model_provider` | string | Provider ID from `model_providers` (default `openai`). |
 | `approval_policy` | string | `untrusted`, `on-request`, or `never`. |
 | `sandbox_mode` | string | `read-only`, `workspace-write`, or `danger-full-access`. |
 | `profiles.<name>.*` | table | Named profile overrides for any supported setting. |
 
-### Prompts (`~/.codex/prompts/*.md`)
+### Prompts (`~/.codex/prompts/*.md`) — Deprecated
 
-Markdown files observed in `~/.codex/prompts/` locally. This directory is **not
-documented** in official Codex docs as of 2026-02-22. Treat as experimental /
-undocumented. The SkillSync Codex parser does not currently parse this path.
+Custom prompts are user-scoped markdown files invoked as `/prompts:<name>` from
+the slash menu. This feature is **deprecated**; OpenAI recommends using Skills
+instead.
+
+#### Frontmatter Schema
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `description` | string | no | One-line summary shown in the slash menu. |
+| `argument-hint` | string | no | Hint for expected arguments. |
+
+#### Argument Placeholders
+
+| Syntax | Description |
+|---|---|
+| `$1`--`$9` | Positional arguments. |
+| `$ARGUMENTS` | All arguments joined by spaces. |
+| `$NAME` | Named placeholder (e.g., `$FILE` -> `FILE=path`). |
+| `$$` | Literal `$`. |
+
+The SkillSync Codex parser does not currently parse this path.
 
 ## Scope Levels
 
@@ -170,9 +189,10 @@ provide named configuration sets selectable at runtime.
 Codex skills can declare `allowed-tools` in SKILL.md frontmatter to restrict
 which tools the agent may use during skill execution.
 
-There is **no user-defined slash command file format** in Codex. Built-in slash
-commands exist in the CLI/TUI (e.g., `/status`, `/diff`, `/review`), but these
-are not file-backed or user-extensible.
+Codex has a **deprecated custom prompts system** (`~/.codex/prompts/*.md`)
+invoked as `/prompts:<name>`. Built-in slash commands also exist in the CLI/TUI
+(e.g., `/status`, `/diff`, `/review`). The recommended approach for user-defined
+reusable instructions is Skills.
 
 ## Parser Implementation Notes
 
@@ -203,16 +223,16 @@ The parser does **not** currently handle:
 
 ## Gaps
 
-- **No custom slash command format**: Codex has no documented file-backed
-  user-defined slash commands. Claude commands mapped to Codex become skills
-  with lossy trigger semantics.
-- **`~/.codex/prompts/` undocumented**: Observed locally but not covered in
-  official docs. Format and precedence unknown.
+- **Custom prompts deprecated**: Codex has a file-backed custom prompts system
+  (`~/.codex/prompts/*.md`, invoked as `/prompts:<name>`) but it is deprecated
+  in favor of Skills. Claude commands mapped to Codex become skills with lossy
+  trigger semantics.
 - **`agents/openai.yaml` not parsed**: Platform-specific metadata
   (`allow_implicit_invocation`, UI settings, MCP dependencies) is not yet
   handled by the SkillSync parser.
-- **Argument placeholders**: Claude's `$ARGUMENTS` / `$1` conventions have no
-  documented Codex equivalent. Preserved as literal text during sync.
+- **Argument placeholders in skills**: Codex custom prompts support `$1`--`$9`,
+  `$ARGUMENTS`, and `$NAME` placeholders, but Skills have no equivalent. Claude's
+  `$ARGUMENTS` / `$1` conventions are preserved as literal text during sync.
 - **Per-skill model hints**: Claude supports per-command `model` fields; Codex
   handles this at the config/profile level, not per-skill.
 

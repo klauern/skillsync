@@ -373,7 +373,7 @@ testdata/copilot/
 
 ## Gaps
 
-- **`excludeAgent`** was announced for GitHub.com (coding agent and code review); VS Code IDE support for this field is unverified as of February 2025
+- **`excludeAgent`** was announced for GitHub.com (coding agent and code review); VS Code IDE support for this field is unverified as of February 2026
 - **User-scoped profile folder path** varies by OS and VS Code profile; no stable cross-platform path constant
 - **Organization-level instructions** are configured via GitHub.com settings, not file-based — cannot be parsed from repo content
 - **`mcp-servers` in agent frontmatter** is supported at org/enterprise level on GitHub.com but not in repository-level agent files or VS Code IDE agent files

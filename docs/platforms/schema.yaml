@@ -22,7 +22,7 @@ platforms:
             required: false
             description: "What the skill does; used for automatic invocation matching."
           allowed-tools:
-            type: string
+            type: "string | string[]"
             required: false
             aliases: ["tools"]
             description: "Comma-separated or array of tools allowed without permission."
@@ -132,7 +132,18 @@ platforms:
       prompts:
         location:
           - "~/.codex/prompts/*.md"
-        status: undocumented  # observed but not in official docs
+        # User-scoped only; invoked as /prompts:<name> in the slash command menu (deprecated)
+        frontmatter:
+          description:
+            type: string
+            required: false
+          argument-hint:
+            type: string
+            required: false
+        argument_syntax:
+          - "$ARGUMENTS"
+          - "$1 .. $9"
+          - "$NAME (named placeholders)"
 
   copilot:
     name: GitHub Copilot (VS Code)

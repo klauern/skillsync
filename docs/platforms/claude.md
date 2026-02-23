@@ -15,7 +15,7 @@ skill at `.claude/skills/review/SKILL.md` both create `/review` and work the sam
 
 ## Directory Structure
 
-```
+```text
 ~/.claude/                          # Personal (user-scope) root
   skills/
     <skill-name>/

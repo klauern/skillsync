@@ -50,7 +50,7 @@ User-invocable prompt templates triggered by a name or filename.
 | Platform | Location | Format | Arguments | Trigger |
 |---|---|---|---|---|
 | Claude | `.claude/commands/*.md` | Markdown + frontmatter | `$ARGUMENTS`, `$1`, `$ARGUMENTS[N]` | Filename stem -> `/name` |
-| Codex | (none) | -- | -- | Built-in only |
+| Codex | `~/.codex/prompts/*.md` | Markdown + frontmatter | `$ARGUMENTS`, `$1`--`$9`, `$NAME` | `/prompts:<name>` (deprecated; use Skills) |
 | Copilot | `.github/prompts/*.prompt.md` | Markdown + frontmatter | `${file}`, `${input:var}`, `#file:`, `#tool:` | Filename stem -> `/name` |
 | Cursor | `.cursor/commands/*.md` | Markdown | (mode-dependent) | Mode-linked |
 | Gemini | `.gemini/commands/*.toml` | TOML | `{{args}}`, `!{shell}`, `@{path}` | File path -> `/ns:name` |
@@ -170,7 +170,7 @@ When converting artifacts between platforms, some information is lost or require
 | Claude | `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N` | Positional argument substitution |
 | Copilot | `${file}`, `${input:var}`, `#file:path` | VS Code variable interpolation |
 | Gemini | `{{args}}`, `!{shell}`, `@{path}` | Template injection (args, shell output, file content) |
-| Codex | -- | No argument substitution syntax |
+| Codex | `$ARGUMENTS`, `$1`--`$9`, `$NAME` | Positional + named placeholders (custom prompts only; deprecated) |
 | Cursor | -- | No argument substitution syntax |
 
 These are **not interchangeable**. Each uses different delimiters and supports different features (shell execution, file embedding, user prompts).

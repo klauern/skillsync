@@ -18,7 +18,7 @@ bundles all artifact types together.
 
 ## Directory Structure
 
-```
+```text
 ~/.gemini/                             # User-level config root
   GEMINI.md                            # Global context file
   settings.json                        # User settings
@@ -169,7 +169,7 @@ libraries.
 
 #### CLI Management
 
-```
+```shell
 gemini skills list              # Display all discovered skills and status
 gemini skills install <source>  # Install from Git repo, local path, or .skill file
 gemini skills link <path>       # Create symlinks from local directory
@@ -313,7 +313,7 @@ Supported in `gemini-extension.json` and `hooks/hooks.json`:
 
 #### Extension Management
 
-```
+```shell
 gemini extensions install <source>        # Install from Git URL or local path
 gemini extensions install <source> --ref <ref>  # Specific branch/tag/commit
 gemini extensions uninstall <name>        # Remove extension
