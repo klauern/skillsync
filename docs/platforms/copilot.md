@@ -10,7 +10,7 @@ VS Code also recognizes `AGENTS.md` (and experimentally `CLAUDE.md`) files for c
 
 ## Directory Structure
 
-```
+```text
 repo/
 ├── .github/
 │   ├── copilot-instructions.md        # always-on repo instructions
@@ -353,7 +353,7 @@ Tools are controlled at the agent and prompt file level via the `tools` frontmat
 
 **Suggested test fixtures:**
 
-```
+```text
 testdata/copilot/
 ├── copilot-instructions.md          # basic always-on
 ├── instructions/

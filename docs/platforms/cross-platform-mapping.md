@@ -10,7 +10,7 @@ What each platform calls equivalent concepts:
 |---|---|---|---|---|---|
 | Always-on instructions | `CLAUDE.md` | `AGENTS.md` | `.github/copilot-instructions.md` | Rules (`alwaysApply: true`) | `GEMINI.md` |
 | Reusable skills | `.claude/skills/*/SKILL.md` | `.codex/skills/*/SKILL.md` | `.github/agents/*.agent.md` | `.cursor/skills/*/SKILL.md` | `.gemini/skills/*/SKILL.md` |
-| Slash commands | `.claude/commands/*.md` | (built-in only) | `.github/prompts/*.prompt.md` | `.cursor/commands/` + modes | `.gemini/commands/*.toml` |
+| Slash commands | `.claude/commands/*.md` | `~/.codex/prompts/*.md` (deprecated) | `.github/prompts/*.prompt.md` | `.cursor/commands/` + modes | `.gemini/commands/*.toml` |
 | Pattern-based rules | -- | -- | `*.instructions.md` (`applyTo`) | Rules (`globs`) | -- |
 | Agent definitions | `.claude/agents/*.md` | -- | `.github/agents/*.agent.md` | Modes (`modes.json`) | `.gemini/agents/*.md` |
 | MCP config | `.claude/settings.json` | `config.toml` (`mcp_servers`) | `.vscode/mcp.json` | Mode/settings | `settings.json` (`mcpServers`) |
@@ -179,7 +179,7 @@ These are **not interchangeable**. Each uses different delimiters and supports d
 
 | Aspect | Impact |
 |---|---|
-| Gemini commands use TOML | Requires format conversion to/from markdown for all other platforms |
+| Gemini commands use TOML | Requires format conversion to/from Markdown for all other platforms |
 | Copilot uses multiple file extensions | `.instructions.md`, `.prompt.md`, `.agent.md` each have different schemas |
 | Cursor legacy `.mdc` format | Functionally identical to `.md` but extension is Cursor-specific |
 | Claude plugin namespacing | `plugin-name:skill-name` format has no equivalent on other platforms |

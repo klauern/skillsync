@@ -17,7 +17,7 @@ at `~/.codex/prompts/*.md` (invoked as `/prompts:<name>`), but this feature is
 
 ## Directory Structure
 
-```
+```text
 .codex/                          # Project-level config root
   skills/                        # Project skills
     <skill-name>/

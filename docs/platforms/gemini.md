@@ -367,7 +367,7 @@ A complete replacement of the built-in system prompt, activated via the
 | `/path/to/file.md` | Use custom path (absolute or relative, tilde expansion supported) |
 | `false` / `0` / unset | Disabled (default) |
 
-Can be set temporarily (shell export) or persistently via `.gemini/.env`.
+It can be set temporarily (shell export) or persistently via `.gemini/.env`.
 
 **Placeholder variables** for dynamic injection:
 

@@ -96,7 +96,7 @@ Review the Go code for:
 ### Rules (`*.md` / `*.mdc`)
 
 Rules are auto-applied context instructions stored in `.cursor/rules/`. They use YAML frontmatter
-for scope control. The `.mdc` extension is the legacy Cursor markdown format; `.md` is also
+for scope control. The `.mdc` extension is the legacy Cursor Markdown format; `.md` is also
 supported. Cursor recommends keeping rules under 500 lines and using `@filename` references
 rather than copying content.
 
@@ -139,7 +139,7 @@ Always wrap errors with fmt.Errorf and %w verb...
 Command files provide prompt templates that can be invoked as slash commands or linked to custom
 modes. They are stored in `.cursor/commands/` at project or global scope.
 
-Command files use markdown format. The filename becomes the command name (e.g., `review.md` becomes
+Command files use Markdown format. The filename becomes the command name (e.g., `review.md` becomes
 available as a prompt). Cursor's command system is tightly integrated with the modes system.
 
 ### Modes (`~/.cursor/modes.json`)

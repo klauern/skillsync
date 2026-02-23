@@ -73,7 +73,7 @@ All fields are optional. Only `description` is recommended.
 | `argument-hint`            | `string`   | No          | Hint shown during autocomplete to indicate expected arguments (e.g., `[issue-number]`, `[filename] [format]`). |
 | `disable-model-invocation` | `bool`     | No          | Set to `true` to prevent Claude from automatically loading this skill. User must invoke manually with `/name`. Default: `false`. |
 | `user-invocable`           | `bool`     | No          | Set to `false` to hide from the `/` menu. Use for background knowledge that only Claude should invoke. Default: `true`. |
-| `allowed-tools`            | `string`   | No          | Comma-separated list of tools Claude can use without permission when this skill is active (e.g., `Read, Grep, Glob`). Accepts tool patterns like `Bash(gh *)`. |
+| `allowed-tools`            | `string \| string[]` | No | Comma-separated list or array of tools Claude can use without permission when this skill is active (e.g., `Read, Grep, Glob`). Accepts tool patterns like `Bash(gh *)`. |
 | `model`                    | `string`   | No          | Model to use when this skill is active. |
 | `context`                  | `string`   | No          | Set to `fork` to run in a forked subagent context. |
 | `agent`                    | `string`   | No          | Which subagent type to use when `context: fork` is set. Options: `Explore`, `Plan`, `general-purpose`, or custom agent names from `.claude/agents/`. |
@@ -92,9 +92,9 @@ All fields are optional. Only `description` is recommended.
 
 #### Body Format
 
-The markdown body after frontmatter contains the skill instructions. It supports:
+The Markdown body after frontmatter contains the skill instructions. It supports:
 
-- Standard markdown formatting
+- Standard Markdown formatting
 - `$ARGUMENTS` -- replaced with all arguments passed when invoking the skill
 - `$ARGUMENTS[N]` -- access a specific argument by 0-based index
 - `$N` -- shorthand for `$ARGUMENTS[N]` (e.g., `$0`, `$1`)
