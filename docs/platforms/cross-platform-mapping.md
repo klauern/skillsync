@@ -110,7 +110,7 @@ Default paths side-by-side for all 5 platforms.
 |---|---|---|---|---|---|
 | Skills | `~/.claude/skills/` | `~/.codex/skills/` | VS Code profile | `~/.cursor/skills/` | `~/.gemini/skills/` (or `~/.agents/skills/`) |
 | Instructions | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | VS Code profile | `~/.cursor/rules/` | `~/.gemini/GEMINI.md` |
-| Commands | `~/.claude/commands/` | -- | VS Code profile (`prompts/`) | `~/.cursor/commands/` | `~/.gemini/commands/` |
+| Commands | `~/.claude/commands/` | `~/.codex/prompts/` (deprecated) | VS Code profile (`prompts/`) | `~/.cursor/commands/` | `~/.gemini/commands/` |
 | Config | `~/.claude/config.json` | `~/.codex/config.toml` | VS Code settings | `~/.cursor/modes.json` | `~/.gemini/settings.json` |
 
 ### System-Level Paths
@@ -150,7 +150,7 @@ When converting artifacts between platforms, some information is lost or require
 | Field | Supported | Unsupported | Conversion Behavior |
 |---|---|---|---|
 | `argument-hint` | Claude, Copilot | Codex, Cursor, Gemini | Preserved in `Metadata` map; no runtime effect on unsupported platforms |
-| `$ARGUMENTS` interpolation | Claude | Codex, Copilot, Cursor, Gemini | Kept as literal text; Gemini uses `{{args}}`, Copilot uses `${input:var}` |
+| `$ARGUMENTS` interpolation | Claude, Codex (deprecated custom prompts) | Copilot, Cursor, Gemini | Kept as literal text on unsupported platforms; Gemini uses `{{args}}`, Copilot uses `${input:var}` |
 | `allowed-tools` / `tools` | Claude, Codex, Copilot, Cursor (skills only) | Gemini | Preserved in `Metadata`; Gemini uses hooks/extension `excludeTools` instead |
 | `model` | Claude, Copilot | Codex (config-level), Cursor, Gemini (subagents) | Preserved in `Metadata`; no per-skill effect on unsupported platforms |
 | `disable-model-invocation` | Claude, Copilot (agents) | Codex, Cursor, Gemini | Preserved in `Metadata`; no equivalent toggle |
