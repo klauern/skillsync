@@ -26,7 +26,7 @@ Files loaded automatically into every session.
 | Platform | File | Format | Frontmatter | Loading |
 |---|---|---|---|---|
 | Claude | `CLAUDE.md` | Plain markdown | None | Hierarchical: global > project, merged |
-| Codex | `AGENTS.md` | Plain markdown | None | Root-to-cwd, concatenated, nearest wins |
+| Codex | `AGENTS.md` | Plain markdown | None | Root-to-cwd, concatenated; nearest file appears last (de-facto precedence) |
 | Copilot | `.github/copilot-instructions.md` | Plain markdown | Optional | Always included in chat |
 | Cursor | Rules with `alwaysApply: true` | Markdown + frontmatter | Yes (`globs`, `alwaysApply`) | Auto-injected |
 | Gemini | `GEMINI.md` | Plain markdown | None | Three-tier concatenation (global + workspace + JIT) |
