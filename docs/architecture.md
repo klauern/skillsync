@@ -31,7 +31,9 @@ type Parser interface {
 }
 ```
 
-**Platform**: `ClaudeCode | Cursor | Codex` (`internal/model/platform.go`)
+**Platform**: `ClaudeCode | Cursor | Codex | Copilot | Gemini` (`internal/model/platform.go`)
+
+See `docs/platforms/` for per-platform format references and `docs/platforms/cross-platform-mapping.md` for conversion rules.
 
 **Strategy**: `overwrite | skip | newer | merge | three-way | interactive`
 (`internal/sync/strategy.go`)
