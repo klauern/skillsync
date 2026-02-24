@@ -122,23 +122,41 @@ func (e *Exporter) filterByPlatform(skills []model.Skill) []model.Skill {
 
 // exportSkill is an internal representation for export.
 type exportSkill struct {
-	Name        string            `json:"name" yaml:"name"`
-	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Platform    string            `json:"platform" yaml:"platform"`
-	Path        string            `json:"path,omitempty" yaml:"path,omitempty"`
-	Tools       []string          `json:"tools,omitempty" yaml:"tools,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
-	Content     string            `json:"content" yaml:"content"`
-	ModifiedAt  string            `json:"modified_at,omitempty" yaml:"modified_at,omitempty"`
+	Name                   string            `json:"name" yaml:"name"`
+	Description            string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Platform               string            `json:"platform" yaml:"platform"`
+	Path                   string            `json:"path,omitempty" yaml:"path,omitempty"`
+	Tools                  []string          `json:"tools,omitempty" yaml:"tools,omitempty"`
+	Metadata               map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Content                string            `json:"content" yaml:"content"`
+	ModifiedAt             string            `json:"modified_at,omitempty" yaml:"modified_at,omitempty"`
+	Type                   string            `json:"type,omitempty" yaml:"type,omitempty"`
+	Trigger                string            `json:"trigger,omitempty" yaml:"trigger,omitempty"`
+	Scope                  string            `json:"scope,omitempty" yaml:"scope,omitempty"`
+	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty" yaml:"disable_model_invocation,omitempty"`
+	License                string            `json:"license,omitempty" yaml:"license,omitempty"`
+	Compatibility          map[string]string `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
+	Scripts                []string          `json:"scripts,omitempty" yaml:"scripts,omitempty"`
+	References             []string          `json:"references,omitempty" yaml:"references,omitempty"`
+	Assets                 []string          `json:"assets,omitempty" yaml:"assets,omitempty"`
 }
 
 // toExportSkill converts a model.Skill to exportSkill.
 func (e *Exporter) toExportSkill(skill model.Skill) exportSkill {
 	es := exportSkill{
-		Name:        skill.Name,
-		Description: skill.Description,
-		Platform:    string(skill.Platform),
-		Content:     skill.Content,
+		Name:                   skill.Name,
+		Description:            skill.Description,
+		Platform:               string(skill.Platform),
+		Content:                skill.Content,
+		Type:                   string(skill.Type),
+		Trigger:                skill.Trigger,
+		Scope:                  string(skill.Scope),
+		DisableModelInvocation: skill.DisableModelInvocation,
+		License:                skill.License,
+		Compatibility:          skill.Compatibility,
+		Scripts:                skill.Scripts,
+		References:             skill.References,
+		Assets:                 skill.Assets,
 	}
 
 	if e.opts.IncludeMetadata {

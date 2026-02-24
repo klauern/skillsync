@@ -202,39 +202,36 @@ func deriveNameFromPath(filePath string) string {
 	return filepath.Base(dir)
 }
 
-// detectSkillDirectoryStructure checks for standard skill subdirectories
-// and populates the skill's Scripts, References, and Assets fields if found.
+// detectSkillDirectoryStructure checks all subdirectories in a skill directory.
+// scripts/ and assets/ map to their dedicated fields; all other subdirectories
+// are treated as references to preserve supporting corpus artifacts.
 func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
-	// Check for scripts/ directory
-	scriptsDir := filepath.Join(skillDir, "scripts")
-	if entries := listFiles(scriptsDir); len(entries) > 0 {
-		// Append discovered scripts to any defined in frontmatter
-		for _, entry := range entries {
-			relPath := filepath.Join("scripts", entry)
-			if !slices.Contains(skill.Scripts, relPath) {
-				skill.Scripts = append(skill.Scripts, relPath)
-			}
-		}
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return
 	}
 
-	// Check for references/ directory
-	refsDir := filepath.Join(skillDir, "references")
-	if entries := listFiles(refsDir); len(entries) > 0 {
-		for _, entry := range entries {
-			relPath := filepath.Join("references", entry)
-			if !slices.Contains(skill.References, relPath) {
-				skill.References = append(skill.References, relPath)
-			}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
 		}
-	}
-
-	// Check for assets/ directory
-	assetsDir := filepath.Join(skillDir, "assets")
-	if entries := listFiles(assetsDir); len(entries) > 0 {
-		for _, entry := range entries {
-			relPath := filepath.Join("assets", entry)
-			if !slices.Contains(skill.Assets, relPath) {
-				skill.Assets = append(skill.Assets, relPath)
+		dirName := entry.Name()
+		files := listFiles(filepath.Join(skillDir, dirName))
+		for _, fileName := range files {
+			relPath := filepath.Join(dirName, fileName)
+			switch dirName {
+			case "scripts":
+				if !slices.Contains(skill.Scripts, relPath) {
+					skill.Scripts = append(skill.Scripts, relPath)
+				}
+			case "assets":
+				if !slices.Contains(skill.Assets, relPath) {
+					skill.Assets = append(skill.Assets, relPath)
+				}
+			default:
+				if !slices.Contains(skill.References, relPath) {
+					skill.References = append(skill.References, relPath)
+				}
 			}
 		}
 	}

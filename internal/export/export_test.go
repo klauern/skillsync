@@ -379,6 +379,109 @@ func TestExporter_ExportSingle(t *testing.T) {
 	}
 }
 
+func TestExporter_ExportJSON_IncludesAgentSkillFields(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:                   "agent-standard-skill",
+			Description:            "Includes all Agent Skills fields",
+			Platform:               model.ClaudeCode,
+			Content:                "content",
+			Type:                   model.SkillTypePrompt,
+			Trigger:                "/agent-standard",
+			Scope:                  model.ScopeRepo,
+			DisableModelInvocation: true,
+			License:                "MIT",
+			Compatibility: map[string]string{
+				"claude-code": ">=1.0.0",
+			},
+			Scripts:    []string{"scripts/setup.sh"},
+			References: []string{"references/guide.md"},
+			Assets:     []string{"assets/config.yaml"},
+		},
+	}
+
+	exporter := New(Options{
+		Format:          FormatJSON,
+		Pretty:          false,
+		IncludeMetadata: true,
+	})
+	var buf bytes.Buffer
+	if err := exporter.Export(skills, &buf); err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	var decoded []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal JSON output: %v", err)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("expected 1 exported skill, got %d", len(decoded))
+	}
+
+	got := decoded[0]
+	requiredKeys := []string{
+		"type",
+		"trigger",
+		"scope",
+		"disable_model_invocation",
+		"license",
+		"compatibility",
+		"scripts",
+		"references",
+		"assets",
+	}
+	for _, key := range requiredKeys {
+		if _, ok := got[key]; !ok {
+			t.Errorf("missing exported key %q in output: %v", key, got)
+		}
+	}
+}
+
+func TestExporter_ExportJSON_OmitsEmptyAgentSkillFields(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:     "minimal-skill",
+			Platform: model.ClaudeCode,
+			Content:  "content",
+		},
+	}
+
+	exporter := New(Options{
+		Format:          FormatJSON,
+		Pretty:          false,
+		IncludeMetadata: true,
+	})
+	var buf bytes.Buffer
+	if err := exporter.Export(skills, &buf); err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	var decoded []map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("failed to unmarshal JSON output: %v", err)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("expected 1 exported skill, got %d", len(decoded))
+	}
+
+	got := decoded[0]
+	for _, key := range []string{
+		"type",
+		"trigger",
+		"scope",
+		"disable_model_invocation",
+		"license",
+		"compatibility",
+		"scripts",
+		"references",
+		"assets",
+	} {
+		if _, ok := got[key]; ok {
+			t.Errorf("expected key %q to be omitted from output when empty: %v", key, got)
+		}
+	}
+}
+
 func TestExporter_EmptySkills(t *testing.T) {
 	opts := Options{
 		Format: FormatJSON,
@@ -434,6 +537,16 @@ func TestExporter_JSON_Golden(t *testing.T) {
 			Platform:    model.ClaudeCode,
 			Path:        "skill-alpha.md",
 			Tools:       []string{"read", "write"},
+			Type:        model.SkillTypePrompt,
+			Trigger:     "/alpha",
+			Scope:       model.ScopeRepo,
+			License:     "MIT",
+			Compatibility: map[string]string{
+				"claude-code": ">=1.0.0",
+			},
+			Scripts:    []string{"scripts/setup.sh"},
+			References: []string{"references/guide.md"},
+			Assets:     []string{"assets/config.yaml"},
 			Content:     "# Skill Alpha\n\nThis is the first skill content.",
 			ModifiedAt:  fixedTime,
 		},
@@ -500,6 +613,8 @@ func TestExporter_YAML_Golden(t *testing.T) {
 			Platform:    model.Cursor,
 			Path:        "yaml-skill.md",
 			Tools:       []string{"read", "write", "bash"},
+			Scope:       model.ScopeUser,
+			References:  []string{"references/guide.md"},
 			Content:     "# YAML Skill\n\nMultiline\ncontent\nhere.",
 			ModifiedAt:  fixedTime,
 		},

@@ -569,6 +569,72 @@ Content here.`
 	}
 }
 
+func TestParser_parseSkillFile_DiscoversAdditionalSubdirsAsReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "rich-skill")
+
+	subdirs := []string{
+		"examples",
+		"resources",
+		"templates",
+		"patterns",
+	}
+	for _, subdir := range subdirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(filepath.Join(skillDir, subdir), 0o755); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+	}
+
+	skillContent := `---
+name: rich-skill
+description: Skill with additional supporting directories
+---
+Content here.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	testFiles := map[string]string{
+		filepath.Join(skillDir, "examples", "usage.md"):      "# Usage",
+		filepath.Join(skillDir, "resources", "dataset.txt"):  "data",
+		filepath.Join(skillDir, "templates", "sample.tmpl"):  "template",
+		filepath.Join(skillDir, "patterns", "workflow.md"):   "# Workflow",
+		filepath.Join(skillDir, "references", "ignored.md"):  "# Not created",
+		filepath.Join(skillDir, "assets", "also-ignored.md"): "# Not created",
+	}
+	for path, content := range testFiles {
+		parent := filepath.Dir(path)
+		if filepath.Base(parent) == "references" || filepath.Base(parent) == "assets" {
+			continue
+		}
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skill, err := p.parseSkillFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	wantRefs := []string{
+		filepath.Join("examples", "usage.md"),
+		filepath.Join("resources", "dataset.txt"),
+		filepath.Join("templates", "sample.tmpl"),
+		filepath.Join("patterns", "workflow.md"),
+	}
+
+	for _, want := range wantRefs {
+		if !contains(skill.References, want) {
+			t.Errorf("References missing %q, got %v", want, skill.References)
+		}
+	}
+}
+
 func TestParser_parseSkillFile_Metadata(t *testing.T) {
 	content := `---
 name: metadata-test
@@ -959,6 +1025,15 @@ func equalSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func contains(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 // TestCaseInsensitiveSkillMd tests case-insensitive SKILL.md detection

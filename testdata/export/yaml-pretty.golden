@@ -13,3 +13,6 @@
     content
     here.
   modified_at: "2024-06-15T10:30:00Z"
+  scope: user
+  references:
+    - references/guide.md

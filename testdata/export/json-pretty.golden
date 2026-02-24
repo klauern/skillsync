@@ -9,7 +9,23 @@
       "write"
     ],
     "content": "# Skill Alpha\n\nThis is the first skill content.",
-    "modified_at": "2024-06-15T10:30:00Z"
+    "modified_at": "2024-06-15T10:30:00Z",
+    "type": "prompt",
+    "trigger": "/alpha",
+    "scope": "repo",
+    "license": "MIT",
+    "compatibility": {
+      "claude-code": "\u003e=1.0.0"
+    },
+    "scripts": [
+      "scripts/setup.sh"
+    ],
+    "references": [
+      "references/guide.md"
+    ],
+    "assets": [
+      "assets/config.yaml"
+    ]
   },
   {
     "name": "skill-beta",

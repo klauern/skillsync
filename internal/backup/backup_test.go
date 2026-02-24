@@ -57,6 +57,67 @@ func TestCreateBackup(t *testing.T) {
 	util.AssertEqual(t, string(backupContent), content)
 }
 
+func TestCreateBackup_DirectoryAndRestore(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "source-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(filepath.Join(sourceDir, "scripts"), 0o755); err != nil {
+		t.Fatalf("failed to create scripts dir: %v", err)
+	}
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create references dir: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(sourceDir, "SKILL.md"):                    "# Skill\n\ncontent",
+		filepath.Join(sourceDir, "scripts", "setup.sh"):         "#!/bin/sh\necho setup",
+		filepath.Join(sourceDir, "references", "guide.md"):      "# guide",
+		filepath.Join(sourceDir, "references", "deep", "x.txt"): "ignored",
+	}
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references", "deep"), 0o755); err != nil {
+		t.Fatalf("failed to create nested dir: %v", err)
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write test file %q: %v", path, err)
+		}
+	}
+
+	metadata, err := CreateBackup(sourceDir, Options{Platform: "claude-code"})
+	if err != nil {
+		t.Fatalf("CreateBackup for directory failed: %v", err)
+	}
+	if filepath.Ext(metadata.BackupPath) != ".zip" {
+		t.Fatalf("expected directory backup to be a .zip archive, got %q", metadata.BackupPath)
+	}
+
+	restoreDir := filepath.Join(tempHome, "restored-skill")
+	if err := RestoreBackup(metadata.ID, restoreDir); err != nil {
+		t.Fatalf("RestoreBackup for directory failed: %v", err)
+	}
+
+	for path, wantContent := range files {
+		rel, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			t.Fatalf("failed to create relative path: %v", err)
+		}
+		restoredPath := filepath.Join(restoreDir, rel)
+		// #nosec G304 - restoredPath is test-controlled
+		gotBytes, err := os.ReadFile(restoredPath)
+		if err != nil {
+			t.Fatalf("failed to read restored file %q: %v", restoredPath, err)
+		}
+		if string(gotBytes) != wantContent {
+			t.Errorf("restored content mismatch for %q: got %q want %q", rel, string(gotBytes), wantContent)
+		}
+	}
+}
+
 func TestBackupIndex(t *testing.T) {
 	// Setup temp environment
 	tempHome := util.CreateTempDir(t)
