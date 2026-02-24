@@ -221,6 +221,56 @@ func TestLoadPluginIndex_NonexistentFile(t *testing.T) {
 	}
 }
 
+func TestLoadPluginIndex_PrefersLatestVersionPerPlugin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	pluginsDir := filepath.Join(home, ".claude", "plugins")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugins dir: %v", err)
+	}
+
+	manifest := `{
+  "version": 1,
+  "plugins": {
+    "commits@klauern-skills": [
+      {
+        "scope": "user",
+        "installPath": "/tmp/cache/klauern-skills/commits/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2024-01-01T00:00:00Z",
+        "lastUpdated": "2024-01-01T00:00:00Z"
+      },
+      {
+        "scope": "user",
+        "installPath": "/tmp/cache/klauern-skills/commits/1.2.0",
+        "version": "1.2.0",
+        "installedAt": "2024-01-02T00:00:00Z",
+        "lastUpdated": "2024-01-02T00:00:00Z"
+      }
+    ]
+  }
+}`
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(pluginsDir, "installed_plugins.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("failed to write installed_plugins.json: %v", err)
+	}
+
+	index := LoadPluginIndex()
+	if index == nil {
+		t.Fatal("expected non-nil plugin index")
+	}
+
+	entries := index.entriesForParsing()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 latest entry for parsing, got %d", len(entries))
+	}
+	if entries[0].Version != "1.2.0" {
+		t.Fatalf("expected latest version 1.2.0, got %q", entries[0].Version)
+	}
+}
+
 func TestDetectPluginSource_CacheSymlink(t *testing.T) {
 	// Create a mock plugin cache structure
 	tmpDir := t.TempDir()

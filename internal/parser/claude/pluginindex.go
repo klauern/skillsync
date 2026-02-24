@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
@@ -41,6 +42,8 @@ type InstalledPluginsFile struct {
 type PluginIndex struct {
 	// byInstallPath maps absolute install paths to plugin metadata
 	byInstallPath map[string]*PluginIndexEntry
+	// latestByPluginKey stores the preferred (latest) installation per plugin key
+	latestByPluginKey map[string]*PluginIndexEntry
 }
 
 // PluginIndexEntry contains information about a single plugin from the index.
@@ -65,7 +68,8 @@ type PluginIndexEntry struct {
 // Returns an empty index if the file doesn't exist or can't be parsed.
 func LoadPluginIndex() *PluginIndex {
 	index := &PluginIndex{
-		byInstallPath: make(map[string]*PluginIndexEntry),
+		byInstallPath:     make(map[string]*PluginIndexEntry),
+		latestByPluginKey: make(map[string]*PluginIndexEntry),
 	}
 
 	pluginsPath := util.ClaudeInstalledPluginsPath()
@@ -119,6 +123,9 @@ func LoadPluginIndex() *PluginIndex {
 			}
 
 			index.byInstallPath[normalizedPath] = entry
+			if existing, ok := index.latestByPluginKey[pluginKey]; !ok || isVersionNewer(entry.Version, existing.Version) {
+				index.latestByPluginKey[pluginKey] = entry
+			}
 		}
 	}
 
@@ -127,6 +134,38 @@ func LoadPluginIndex() *PluginIndex {
 	)
 
 	return index
+}
+
+// entriesForParsing returns one preferred entry per plugin key.
+// It prefers the latest semver installation for each plugin.
+func (idx *PluginIndex) entriesForParsing() []*PluginIndexEntry {
+	if idx == nil {
+		return nil
+	}
+	if len(idx.latestByPluginKey) > 0 {
+		entries := make([]*PluginIndexEntry, 0, len(idx.latestByPluginKey))
+		for _, entry := range idx.latestByPluginKey {
+			entries = append(entries, entry)
+		}
+		return entries
+	}
+
+	// Backward compatibility for tests constructing PluginIndex manually.
+	latest := make(map[string]*PluginIndexEntry)
+	for _, entry := range idx.byInstallPath {
+		if entry == nil {
+			continue
+		}
+		if existing, ok := latest[entry.PluginKey]; !ok || isVersionNewer(entry.Version, existing.Version) {
+			latest[entry.PluginKey] = entry
+		}
+	}
+
+	entries := make([]*PluginIndexEntry, 0, len(latest))
+	for _, entry := range latest {
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 // LookupByPath looks up plugin information by install path.
@@ -160,6 +199,81 @@ func parsePluginKey(key string) (pluginName, marketplace string) {
 		return parts[0], parts[1]
 	}
 	return key, ""
+}
+
+// isVersionNewer compares plugin versions and returns true when candidate should
+// be preferred over current. Semver versions are compared numerically; non-semver
+// strings fall back to lexical comparison.
+func isVersionNewer(candidate, current string) bool {
+	if current == "" {
+		return true
+	}
+	if candidate == "" {
+		return false
+	}
+	cMajor, cMinor, cPatch, cPre, cOK := parseSemver(candidate)
+	oMajor, oMinor, oPatch, oPre, oOK := parseSemver(current)
+
+	if cOK && oOK {
+		if cMajor != oMajor {
+			return cMajor > oMajor
+		}
+		if cMinor != oMinor {
+			return cMinor > oMinor
+		}
+		if cPatch != oPatch {
+			return cPatch > oPatch
+		}
+		// Release versions are newer than prerelease versions.
+		if cPre == "" && oPre != "" {
+			return true
+		}
+		if cPre != "" && oPre == "" {
+			return false
+		}
+		return cPre > oPre
+	}
+
+	if cOK && !oOK {
+		return true
+	}
+	if !cOK && oOK {
+		return false
+	}
+
+	return candidate > current
+}
+
+func parseSemver(v string) (major, minor, patch int, pre string, ok bool) {
+	normalized := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(v, "v"), "V"))
+	if normalized == "" {
+		return 0, 0, 0, "", false
+	}
+
+	parts := strings.SplitN(normalized, "-", 2)
+	core := parts[0]
+	if len(parts) == 2 {
+		pre = parts[1]
+	}
+
+	segments := strings.Split(core, ".")
+	if len(segments) < 1 || len(segments) > 3 {
+		return 0, 0, 0, "", false
+	}
+
+	values := []int{0, 0, 0}
+	for i, segment := range segments {
+		if segment == "" {
+			return 0, 0, 0, "", false
+		}
+		n, err := strconv.Atoi(segment)
+		if err != nil {
+			return 0, 0, 0, "", false
+		}
+		values[i] = n
+	}
+
+	return values[0], values[1], values[2], pre, true
 }
 
 // DetectPluginSource examines a skill directory path to determine if it's

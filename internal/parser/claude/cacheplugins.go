@@ -58,9 +58,10 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 
 	var skills []model.Skill
 	seenPaths := make(map[string]bool)
+	seenSkillFiles := make(map[string]bool)
 
-	// Iterate over all installed plugins
-	for _, entry := range pluginIndex.byInstallPath {
+	// Iterate over preferred plugin installations (latest version per plugin key)
+	for _, entry := range pluginIndex.entriesForParsing() {
 		// Skip if we've already processed this install path (handles duplicates)
 		if seenPaths[entry.InstallPath] {
 			continue
@@ -94,7 +95,16 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 			continue
 		}
 
-		skills = append(skills, pluginSkills...)
+		for _, skill := range pluginSkills {
+			fileKey := canonicalFileKey(skill.Path)
+			if fileKey != "" && seenSkillFiles[fileKey] {
+				continue
+			}
+			if fileKey != "" {
+				seenSkillFiles[fileKey] = true
+			}
+			skills = append(skills, skill)
+		}
 	}
 
 	logging.Debug("discovered skills from Claude plugin cache",
@@ -307,6 +317,18 @@ func deduplicateBySameFile(paths []string) []string {
 		}
 	}
 	return result
+}
+
+func canonicalFileKey(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	// Use inode identity where available. Fall back to eval path.
+	if abs, err := filepath.EvalSymlinks(path); err == nil && abs != "" {
+		return filepath.Clean(abs) + "|" + info.Name()
+	}
+	return filepath.Clean(path) + "|" + info.Name()
 }
 
 // AllEntries returns all plugin entries from the index (useful for testing).
