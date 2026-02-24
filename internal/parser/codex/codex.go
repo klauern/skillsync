@@ -77,10 +77,10 @@ func New(basePath string) *Parser {
 	return &Parser{basePath: basePath}
 }
 
-// Parse parses Codex skills from SKILL.md files, config.toml, and AGENTS.md files
-// Supports both:
+// Parse parses Codex skills from SKILL.md files, config.toml, AGENTS.md, and flat legacy .md files.
+// Supports:
 // 1. Agent Skills Standard: SKILL.md files in subdirectories (takes precedence)
-// 2. Legacy formats: config.toml instructions and AGENTS.md files
+// 2. Legacy formats: config.toml instructions, AGENTS.md files, and flat .md files
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
@@ -93,6 +93,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	var allSkills []model.Skill
 	seenNames := make(map[string]bool)
+	skillDirs := make(map[string]bool)
 
 	// First, parse SKILL.md files (Agent Skills Standard format)
 	// These take precedence over legacy formats when names collide
@@ -107,6 +108,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	} else {
 		for _, skill := range agentSkills {
 			seenNames[skill.Name] = true
+			skillDirs[filepath.Dir(skill.Path)] = true
 			allSkills = append(allSkills, skill)
 		}
 		if len(agentSkills) > 0 {
@@ -144,6 +146,18 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		return nil, fmt.Errorf("failed to parse AGENTS.md files: %w", err)
 	}
 	allSkills = append(allSkills, agentsSkills...)
+
+	// Parse flat legacy .md files (excluding SKILL.md, AGENTS.md, and files in skill directories)
+	flatSkills, err := p.parseFlatLegacyMdFiles(seenNames, skillDirs)
+	if err != nil {
+		logging.Error("failed to parse flat legacy .md files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.basePath),
+			logging.Err(err),
+		)
+		return nil, fmt.Errorf("failed to parse flat legacy .md files: %w", err)
+	}
+	allSkills = append(allSkills, flatSkills...)
 
 	logging.Debug("completed parsing skills",
 		logging.Platform(string(p.Platform())),
@@ -319,6 +333,147 @@ func (p *Parser) parseAgentsFile(filePath string) (model.Skill, error) {
 	}
 
 	return skill, nil
+}
+
+// parseFlatLegacyMdFiles discovers and parses flat legacy .md files (excluding SKILL.md, AGENTS.md,
+// and files inside skill directories). Matches behavior style from Claude/Cursor parsers.
+func (p *Parser) parseFlatLegacyMdFiles(seenNames map[string]bool, skillDirs map[string]bool) ([]model.Skill, error) {
+	patterns := []string{"*.md", "**/*.md"}
+	files, err := parser.DiscoverFiles(p.basePath, patterns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover flat .md files: %w", err)
+	}
+
+	var legacyFiles []string
+	for _, f := range files {
+		base := filepath.Base(f)
+		// Skip SKILL.md (case-insensitive)
+		if strings.EqualFold(base, "SKILL.md") {
+			continue
+		}
+		// Skip AGENTS.md (already parsed by parseAgentsFiles)
+		if strings.EqualFold(base, "AGENTS.md") {
+			continue
+		}
+		// Skip files inside skill directories
+		if isInsideSkillDir(f, skillDirs) {
+			logging.Debug("skipping flat .md inside skill directory",
+				logging.Path(f),
+			)
+			continue
+		}
+		legacyFiles = append(legacyFiles, f)
+	}
+
+	logging.Debug("discovered flat legacy .md files",
+		logging.Platform(string(p.Platform())),
+		logging.Path(p.basePath),
+		logging.Count(len(legacyFiles)),
+	)
+
+	parsedSkills := make([]model.Skill, 0, len(legacyFiles))
+	for _, filePath := range legacyFiles {
+		skill, err := p.parseFlatMdFile(filePath)
+		if err != nil {
+			logging.Warn("failed to parse flat .md file",
+				logging.Platform(string(p.Platform())),
+				logging.Path(filePath),
+				logging.Err(err),
+			)
+			continue
+		}
+		if seenNames[skill.Name] {
+			logging.Debug("skipping flat legacy .md skill, higher precedence version exists",
+				logging.Skill(skill.Name),
+				logging.Path(filePath),
+			)
+			continue
+		}
+		seenNames[skill.Name] = true
+		parsedSkills = append(parsedSkills, skill)
+	}
+
+	return parsedSkills, nil
+}
+
+// parseFlatMdFile parses a single flat legacy .md file with optional YAML frontmatter.
+// Name is derived from frontmatter "name" or from the filename (stem).
+func (p *Parser) parseFlatMdFile(filePath string) (model.Skill, error) {
+	// #nosec G304 - filePath is validated through directory traversal from basePath
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return model.Skill{}, fmt.Errorf("failed to read file %q: %w", filePath, err)
+	}
+
+	result := parser.SplitFrontmatter(content)
+	var name, description string
+	metadata := make(map[string]string)
+
+	if result.HasFrontmatter {
+		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
+		if err != nil {
+			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
+		}
+		if nameVal, ok := fm["name"]; ok {
+			if nameStr, ok := nameVal.(string); ok {
+				name = nameStr
+			}
+		}
+		if descVal, ok := fm["description"]; ok {
+			if descStr, ok := descVal.(string); ok {
+				description = descStr
+			}
+		}
+		for key, val := range fm {
+			if key != "name" && key != "description" {
+				if strVal, ok := val.(string); ok {
+					metadata[key] = strVal
+				} else {
+					metadata[key] = fmt.Sprintf("%v", val)
+				}
+			}
+		}
+	}
+
+	if name == "" {
+		base := filepath.Base(filePath)
+		name = base[:len(base)-len(filepath.Ext(base))]
+	}
+
+	if err := parser.ValidateSkillName(name); err != nil {
+		return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
+	}
+
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return model.Skill{}, fmt.Errorf("failed to stat file %q: %w", filePath, err)
+	}
+
+	return model.Skill{
+		Name:        name,
+		Description: description,
+		Platform:    model.Codex,
+		Path:        filePath,
+		Metadata:    metadata,
+		Content:     parser.NormalizeContent(result.Content),
+		ModifiedAt:  fileInfo.ModTime(),
+	}, nil
+}
+
+// isInsideSkillDir checks if a file path is inside any of the skill directories.
+func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
+	dir := filepath.Dir(filePath)
+	for dir != "/" && dir != "." && dir != "" {
+		if skillDirs[dir] {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
 }
 
 // Platform returns the platform identifier for Codex

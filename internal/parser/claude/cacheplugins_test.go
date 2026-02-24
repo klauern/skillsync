@@ -673,3 +673,94 @@ func TestCachePluginsParser_ParseWithPluginIndex_ScopePreserved(t *testing.T) {
 		t.Errorf("metadata install_scope = %q, want %q", skill.Metadata["install_scope"], "user")
 	}
 }
+
+func TestCachePluginsParser_DiscoverLowercaseSkill(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, "lowercase-plugin")
+	skillPath := filepath.Join(pluginDir, "skill.md")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(skillPath, []byte(`---
+name: lowercase-skill
+description: Discovered via skill.md
+---
+# Content
+`), 0o644); err != nil {
+		t.Fatalf("failed to write skill.md: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "lowercase-plugin@test",
+				PluginName:  "lowercase-plugin",
+				Marketplace: "test",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill from lowercase skill.md, got %d", len(skills))
+	}
+	if skills[0].Name != "lowercase-skill" {
+		t.Errorf("expected skill name 'lowercase-skill', got %q", skills[0].Name)
+	}
+}
+
+func TestCachePluginsParser_SkipsOrphanedPlugins(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, "orphaned-plugin")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+	orphanedMarker := filepath.Join(pluginDir, ".orphaned_at")
+	// #nosec G306 - test file
+	if err := os.WriteFile(orphanedMarker, []byte(""), 0o644); err != nil {
+		t.Fatalf("failed to write .orphaned_at: %v", err)
+	}
+	skillDir := filepath.Join(pluginDir, "skills", "some-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Orphaned\nContent"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "orphaned-plugin@test",
+				PluginName:  "orphaned-plugin",
+				Marketplace: "test",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 0 {
+		t.Errorf("expected 0 skills from orphaned plugin, got %d", len(skills))
+	}
+}

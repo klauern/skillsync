@@ -67,6 +67,15 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 		}
 		seenPaths[entry.InstallPath] = true
 
+		// Skip orphaned plugins
+		orphanedMarker := filepath.Join(entry.InstallPath, ".orphaned_at")
+		if _, err := os.Stat(orphanedMarker); err == nil {
+			logging.Debug("skipping orphaned plugin",
+				logging.Path(entry.InstallPath),
+			)
+			continue
+		}
+
 		// Check if the install path exists
 		if _, err := os.Stat(entry.InstallPath); os.IsNotExist(err) {
 			logging.Debug("plugin install path does not exist",
@@ -97,15 +106,23 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 
 // parsePluginDirectory scans a plugin directory for SKILL.md files and parses them.
 func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]model.Skill, error) {
-	// Find all SKILL.md files in the plugin directory
-	patterns := []string{"**/SKILL.md", "SKILL.md"}
+	// Find all SKILL files in the plugin directory (SKILL.md, skill.md, Skill.md)
+	patterns := []string{
+		"**/SKILL.md", "SKILL.md",
+		"**/skill.md", "skill.md",
+		"**/Skill.md", "Skill.md",
+	}
 	files, err := parser.DiscoverFiles(entry.InstallPath, patterns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover skill files: %w", err)
 	}
 
+	// Deduplicate by same physical file (case-insensitive filesystems can return
+	// multiple path strings for one file when matching SKILL.md, skill.md, Skill.md)
+	files = deduplicateBySameFile(files)
+
 	if len(files) == 0 {
-		logging.Debug("no SKILL.md files found in plugin",
+		logging.Debug("no skill files found in plugin",
 			logging.Path(entry.InstallPath),
 		)
 		return []model.Skill{}, nil
@@ -264,6 +281,32 @@ func (p *CachePluginsParser) Platform() model.Platform {
 // DefaultPath returns the default path for Claude plugin cache.
 func (p *CachePluginsParser) DefaultPath() string {
 	return util.ClaudePluginCachePath()
+}
+
+// deduplicateBySameFile removes paths that refer to the same physical file.
+// Handles case-insensitive filesystems where SKILL.md, skill.md, and Skill.md
+// can resolve to the same file but produce different path strings.
+func deduplicateBySameFile(paths []string) []string {
+	var result []string
+	var resultInfo []os.FileInfo
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		dup := false
+		for _, ri := range resultInfo {
+			if os.SameFile(info, ri) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			result = append(result, p)
+			resultInfo = append(resultInfo, info)
+		}
+	}
+	return result
 }
 
 // AllEntries returns all plugin entries from the index (useful for testing).
