@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -237,6 +238,43 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 	sb.WriteString("| Property | Value |\n")
 	sb.WriteString("|----------|-------|\n")
 	sb.WriteString(fmt.Sprintf("| Platform | %s |\n", skill.Platform))
+
+	if skill.Type != "" {
+		sb.WriteString(fmt.Sprintf("| Type | %s |\n", skill.Type))
+	}
+	if skill.Trigger != "" {
+		sb.WriteString(fmt.Sprintf("| Trigger | %s |\n", skill.Trigger))
+	}
+	if skill.Scope != "" {
+		sb.WriteString(fmt.Sprintf("| Scope | %s |\n", skill.Scope))
+	}
+	if skill.DisableModelInvocation {
+		sb.WriteString("| Disable Model Invocation | true |\n")
+	}
+	if skill.License != "" {
+		sb.WriteString(fmt.Sprintf("| License | %s |\n", skill.License))
+	}
+	if len(skill.Compatibility) > 0 {
+		keys := make([]string, 0, len(skill.Compatibility))
+		for k := range skill.Compatibility {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var parts []string
+		for _, k := range keys {
+			parts = append(parts, k+": "+skill.Compatibility[k])
+		}
+		sb.WriteString(fmt.Sprintf("| Compatibility | %s |\n", strings.Join(parts, ", ")))
+	}
+	if len(skill.Scripts) > 0 {
+		sb.WriteString(fmt.Sprintf("| Scripts | %s |\n", strings.Join(skill.Scripts, ", ")))
+	}
+	if len(skill.References) > 0 {
+		sb.WriteString(fmt.Sprintf("| References | %s |\n", strings.Join(skill.References, ", ")))
+	}
+	if len(skill.Assets) > 0 {
+		sb.WriteString(fmt.Sprintf("| Assets | %s |\n", strings.Join(skill.Assets, ", ")))
+	}
 
 	if e.opts.IncludeMetadata {
 		if skill.Path != "" {

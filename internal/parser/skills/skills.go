@@ -53,6 +53,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		)
 		return nil, fmt.Errorf("failed to discover SKILL.md files in %q: %w", p.basePath, err)
 	}
+	files = deduplicateSkillEntrypoints(files)
 
 	logging.Debug("discovered SKILL.md files",
 		logging.Platform(string(p.platform)),
@@ -202,9 +203,58 @@ func deriveNameFromPath(filePath string) string {
 	return filepath.Base(dir)
 }
 
+func skillEntrypointPriority(name string) int {
+	switch strings.ToLower(name) {
+	case "skill.md":
+		// Prefer canonical uppercase form when multiple variants exist in one dir.
+		if name == "SKILL.md" {
+			return 0
+		}
+		if name == "skill.md" {
+			return 1
+		}
+		return 2
+	default:
+		return 3
+	}
+}
+
+// deduplicateSkillEntrypoints keeps at most one SKILL.md variant per directory.
+// This avoids duplicate skills on case-sensitive filesystems where SKILL.md and
+// skill.md may coexist in the same skill directory.
+func deduplicateSkillEntrypoints(files []string) []string {
+	type selection struct {
+		path     string
+		priority int
+	}
+	byDir := make(map[string]selection, len(files))
+	order := make([]string, 0, len(files))
+
+	for _, file := range files {
+		dir := filepath.Clean(filepath.Dir(file))
+		prio := skillEntrypointPriority(filepath.Base(file))
+		if existing, ok := byDir[dir]; ok {
+			if prio < existing.priority {
+				byDir[dir] = selection{path: file, priority: prio}
+			}
+			continue
+		}
+		byDir[dir] = selection{path: file, priority: prio}
+		order = append(order, dir)
+	}
+
+	deduped := make([]string, 0, len(order))
+	for _, dir := range order {
+		deduped = append(deduped, byDir[dir].path)
+	}
+	return deduped
+}
+
 // detectSkillDirectoryStructure checks all subdirectories in a skill directory.
 // scripts/ and assets/ map to their dedicated fields; all other subdirectories
+// (examples, resources, templates, patterns, references, and any other subdir)
 // are treated as references to preserve supporting corpus artifacts.
+// Uses recursive listing so nested files (e.g. references/docs/guide.md) are included.
 func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
 	entries, err := os.ReadDir(skillDir)
 	if err != nil {
@@ -216,9 +266,9 @@ func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
 			continue
 		}
 		dirName := entry.Name()
-		files := listFiles(filepath.Join(skillDir, dirName))
-		for _, fileName := range files {
-			relPath := filepath.Join(dirName, fileName)
+		files := listFilesRecursive(filepath.Join(skillDir, dirName))
+		for _, relFile := range files {
+			relPath := filepath.Join(dirName, relFile)
 			switch dirName {
 			case "scripts":
 				if !slices.Contains(skill.Scripts, relPath) {
@@ -237,7 +287,7 @@ func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
 	}
 }
 
-// listFiles returns a list of file names in a directory.
+// listFiles returns a list of file names in a directory (non-recursive).
 // Returns an empty slice if the directory doesn't exist or can't be read.
 func listFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
@@ -252,6 +302,30 @@ func listFiles(dir string) []string {
 		}
 	}
 	return files
+}
+
+// listFilesRecursive returns all file paths under dir, relative to dir.
+// Nested structure is preserved (e.g. docs/guide.md, templates/config.yaml).
+// Returns an empty slice if the directory doesn't exist or can't be read.
+func listFilesRecursive(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var result []string
+	for _, entry := range entries {
+		name := entry.Name()
+		fullPath := filepath.Join(dir, name)
+		if entry.IsDir() {
+			for _, nested := range listFilesRecursive(fullPath) {
+				result = append(result, filepath.Join(name, nested))
+			}
+		} else {
+			result = append(result, name)
+		}
+	}
+	return result
 }
 
 // extractString extracts a string value from a frontmatter map.
@@ -471,9 +545,9 @@ func ListSkillDirectories(basePath string) ([]string, error) {
 // SkillDirectoryContents returns information about the contents of a skill directory.
 type SkillDirectoryContents struct {
 	SkillFile  string   // Path to SKILL.md
-	Scripts    []string // Files in scripts/
-	References []string // Files in references/
-	Assets     []string // Files in assets/
+	Scripts    []string // Files in scripts/ (recursive)
+	References []string // Files in references/ (recursive)
+	Assets     []string // Files in assets/ (recursive)
 }
 
 // GetSkillDirectoryContents returns the contents of a skill directory.
@@ -493,9 +567,9 @@ func GetSkillDirectoryContents(skillDir string) (*SkillDirectoryContents, error)
 
 	contents := &SkillDirectoryContents{
 		SkillFile:  skillFile,
-		Scripts:    listFiles(filepath.Join(skillDir, "scripts")),
-		References: listFiles(filepath.Join(skillDir, "references")),
-		Assets:     listFiles(filepath.Join(skillDir, "assets")),
+		Scripts:    listFilesRecursive(filepath.Join(skillDir, "scripts")),
+		References: listFilesRecursive(filepath.Join(skillDir, "references")),
+		Assets:     listFilesRecursive(filepath.Join(skillDir, "assets")),
 	}
 
 	return contents, nil

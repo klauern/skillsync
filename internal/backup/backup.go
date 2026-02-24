@@ -33,13 +33,48 @@ type Options struct {
 	Tags        []string          // Tags for categorization
 }
 
-// CreateBackup creates a backup of the specified file or directory
+// skillEntrypointNames are the recognized SKILL.md basenames (Agent Skills Standard).
+var skillEntrypointNames = map[string]bool{
+	"SKILL.md": true, "skill.md": true, "Skill.md": true,
+}
+
+func isSkillEntrypoint(name string) bool {
+	return skillEntrypointNames[name]
+}
+
+// resolveSourcePath returns the path to backup. When given a skill entrypoint
+// file (SKILL.md), resolves to its parent directory so the full skill folder is backed up.
+func resolveSourcePath(sourcePath string) (string, error) {
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		return sourcePath, nil
+	}
+	base := filepath.Base(sourcePath)
+	if isSkillEntrypoint(base) {
+		return filepath.Dir(sourcePath), nil
+	}
+	return sourcePath, nil
+}
+
+// CreateBackup creates a backup of the specified file or directory.
+// When the source is a skill entrypoint file (SKILL.md), backs up the entire
+// parent directory as a zip archive.
 func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 	// Ensure backups directory exists
 	backupsDir := util.SkillsyncBackupsPath()
 	if err := os.MkdirAll(backupsDir, BackupDirPerm); err != nil {
 		return nil, fmt.Errorf("failed to create backups directory: %w", err)
 	}
+
+	// Resolve skill entrypoint files to their parent directory
+	resolvedPath, err := resolveSourcePath(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat source path %q: %w", sourcePath, err)
+	}
+	sourcePath = resolvedPath
 
 	// Get source file info
 	sourceInfo, err := os.Stat(sourcePath)
@@ -349,27 +384,75 @@ func DeleteBackup(backupID string) error {
 	return nil
 }
 
-// Directory creates backups of all files in a directory
+// isUnderSkillDirectory returns true if path is inside a directory that contains
+// a skill entrypoint (SKILL.md), so it would be included in a directory backup.
+func isUnderSkillDirectory(filePath, rootPath string) bool {
+	dir := filepath.Dir(filePath)
+	rootClean := filepath.Clean(rootPath)
+	for {
+		dirClean := filepath.Clean(dir)
+		rel, err := filepath.Rel(rootClean, dirClean)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			break
+		}
+		for name := range skillEntrypointNames {
+			candidate := filepath.Join(dir, name)
+			if _, statErr := os.Stat(candidate); statErr == nil {
+				return true
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
+}
+
+// Directory creates backups of skill directories and orphan files.
+// For each directory containing SKILL.md, creates one zip backup.
+// Files not under a skill directory are backed up individually.
 func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 	var backups []Metadata
+	rootClean, err := filepath.Abs(filepath.Clean(sourcePath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve source path: %w", err)
+	}
+	seenSkillRoots := make(map[string]bool)
 
-	// Walk directory
-	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	err = filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 
-		// Skip directories
 		if info.IsDir() {
 			return nil
 		}
 
-		// Create backup for each file
+		pathAbs, absErr := filepath.Abs(path)
+		if absErr != nil {
+			return absErr
+		}
+		isEntrypoint := isSkillEntrypoint(filepath.Base(path))
+		// Skip files under a skill directory that are not the entrypoint
+		if isUnderSkillDirectory(pathAbs, rootClean) && !isEntrypoint {
+			return nil
+		}
+		// On case-sensitive filesystems, a directory may contain multiple entrypoint
+		// variants (e.g. SKILL.md and skill.md). Back up each skill root once.
+		if isEntrypoint {
+			skillRoot := filepath.Clean(filepath.Dir(pathAbs))
+			if seenSkillRoots[skillRoot] {
+				return nil
+			}
+			seenSkillRoots[skillRoot] = true
+		}
+
 		metadata, err := CreateBackup(path, opts)
 		if err != nil {
 			return fmt.Errorf("failed to backup %q: %w", path, err)
 		}
-
 		backups = append(backups, *metadata)
 		return nil
 	})

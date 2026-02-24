@@ -122,6 +122,103 @@ func TestCreateBackup_DirectoryAndRestore(t *testing.T) {
 	}
 }
 
+func TestCreateBackup_SkillFileBacksUpDirectory(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "my-skill")
+	// #nosec G301 - test directory permissions
+	for _, sub := range []string{"scripts", "references", "assets"} {
+		if err := os.MkdirAll(filepath.Join(sourceDir, sub), 0o755); err != nil {
+			t.Fatalf("failed to create %s dir: %v", sub, err)
+		}
+	}
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references", "deep"), 0o755); err != nil {
+		t.Fatalf("failed to create nested dir: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(sourceDir, "SKILL.md"):                    "# Skill entrypoint\n\ncontent",
+		filepath.Join(sourceDir, "scripts", "setup.sh"):         "#!/bin/sh\necho setup",
+		filepath.Join(sourceDir, "references", "guide.md"):      "# guide",
+		filepath.Join(sourceDir, "references", "deep", "x.txt"): "deep content",
+		filepath.Join(sourceDir, "assets", "config.yaml"):       "key: value",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write test file %q: %v", path, err)
+		}
+	}
+
+	// Pass SKILL.md path (as CLI does via skill.Path) - should backup whole dir
+	skillFilePath := filepath.Join(sourceDir, "SKILL.md")
+	metadata, err := CreateBackup(skillFilePath, Options{Platform: "claude-code"})
+	if err != nil {
+		t.Fatalf("CreateBackup for SKILL.md file failed: %v", err)
+	}
+	if filepath.Ext(metadata.BackupPath) != ".zip" {
+		t.Fatalf("expected directory backup as .zip, got %q", metadata.BackupPath)
+	}
+	if metadata.SourcePath != sourceDir {
+		t.Errorf("expected SourcePath to be skill dir %q, got %q", sourceDir, metadata.SourcePath)
+	}
+
+	restoreDir := filepath.Join(tempHome, "restored-skill")
+	if err := RestoreBackup(metadata.ID, restoreDir); err != nil {
+		t.Fatalf("RestoreBackup failed: %v", err)
+	}
+
+	for path, wantContent := range files {
+		rel, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			t.Fatalf("failed to create relative path: %v", err)
+		}
+		restoredPath := filepath.Join(restoreDir, rel)
+		// #nosec G304 - restoredPath is test-controlled
+		gotBytes, err := os.ReadFile(restoredPath)
+		if err != nil {
+			t.Fatalf("failed to read restored file %q: %v", restoredPath, err)
+		}
+		if string(gotBytes) != wantContent {
+			t.Errorf("restored content mismatch for %q: got %q want %q", rel, string(gotBytes), wantContent)
+		}
+	}
+}
+
+func TestRestoreBackup_LegacyFileBackup(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	flatFile := filepath.Join(tempHome, "flat-skill.md")
+	content := "# Flat skill\n\nsingle file"
+	if err := os.WriteFile(flatFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to create flat file: %v", err)
+	}
+
+	metadata, err := CreateBackup(flatFile, Options{Platform: "claude-code"})
+	if err != nil {
+		t.Fatalf("CreateBackup failed: %v", err)
+	}
+	if filepath.Ext(metadata.BackupPath) != ".md" {
+		t.Errorf("expected legacy file backup extension .md, got %q", metadata.BackupPath)
+	}
+
+	restoreFile := filepath.Join(tempHome, "restored-flat.md")
+	if err := RestoreBackup(metadata.ID, restoreFile); err != nil {
+		t.Fatalf("RestoreBackup failed: %v", err)
+	}
+	// #nosec G304 - restoreFile is test-controlled
+	got, err := os.ReadFile(restoreFile)
+	if err != nil {
+		t.Fatalf("failed to read restored file: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("restored content mismatch: got %q want %q", string(got), content)
+	}
+}
+
 func TestRestoreBackup_DirectoryRejectsPathTraversal(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)
@@ -456,7 +553,7 @@ func TestDirectory(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)
 
-	// Create test directory with multiple files
+	// Create test directory with multiple files (no SKILL.md - orphan files)
 	testDir := filepath.Join(tempHome, "skills")
 	if err := os.MkdirAll(testDir, 0o750); err != nil {
 		t.Fatalf("failed to create test directory: %v", err)
@@ -478,6 +575,104 @@ func TestDirectory(t *testing.T) {
 	}
 
 	util.AssertEqual(t, len(backups), 3)
+}
+
+func TestDirectory_SkillDirectoriesProduceZipBackups(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	skillsRoot := filepath.Join(tempHome, "skills")
+	skillA := filepath.Join(skillsRoot, "skill-a")
+	skillB := filepath.Join(skillsRoot, "skill-b")
+	// #nosec G301 - test directory permissions
+	for _, d := range []string{filepath.Join(skillA, "scripts"), filepath.Join(skillB, "references")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("failed to create dir: %v", err)
+		}
+	}
+	files := map[string]string{
+		filepath.Join(skillA, "SKILL.md"):             "# Skill A",
+		filepath.Join(skillA, "scripts", "init.sh"):   "#!/bin/sh",
+		filepath.Join(skillB, "SKILL.md"):             "# Skill B",
+		filepath.Join(skillB, "references", "doc.md"): "reference",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write %q: %v", path, err)
+		}
+	}
+
+	opts := Options{Platform: "claude-code"}
+	backups, err := Directory(skillsRoot, opts)
+	if err != nil {
+		t.Fatalf("Directory failed: %v", err)
+	}
+	util.AssertEqual(t, len(backups), 2)
+
+	zipCount := 0
+	for _, b := range backups {
+		if filepath.Ext(b.BackupPath) == ".zip" {
+			zipCount++
+		}
+	}
+	util.AssertEqual(t, zipCount, 2)
+
+	// Restore one backup and verify directory contents preserved
+	restoreDir := filepath.Join(tempHome, "restored")
+	if err := RestoreBackup(backups[0].ID, restoreDir); err != nil {
+		t.Fatalf("RestoreBackup failed: %v", err)
+	}
+	skillMD := filepath.Join(restoreDir, "SKILL.md")
+	if _, err := os.Stat(skillMD); err != nil {
+		t.Fatalf("restored SKILL.md missing: %v", err)
+	}
+	// Each skill has either scripts/init.sh (skill-a) or references/doc.md (skill-b)
+	hasScripts := func() bool {
+		_, err := os.Stat(filepath.Join(restoreDir, "scripts", "init.sh"))
+		return err == nil
+	}
+	hasRefs := func() bool {
+		_, err := os.Stat(filepath.Join(restoreDir, "references", "doc.md"))
+		return err == nil
+	}
+	if !hasScripts() && !hasRefs() {
+		t.Error("restored skill dir should contain scripts/init.sh or references/doc.md")
+	}
+}
+
+func TestDirectory_DeduplicatesSkillEntrypointVariants(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	skillsRoot := filepath.Join(tempHome, "skills")
+	skillDir := filepath.Join(skillsRoot, "skill-a")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Upper"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# Lower"), 0o644); err != nil {
+		t.Fatalf("failed to write skill.md: %v", err)
+	}
+
+	upperInfo, upperErr := os.Stat(filepath.Join(skillDir, "SKILL.md"))
+	lowerInfo, lowerErr := os.Stat(filepath.Join(skillDir, "skill.md"))
+	if upperErr == nil && lowerErr == nil && os.SameFile(upperInfo, lowerInfo) {
+		t.Skip("filesystem is case-insensitive; cannot create distinct SKILL.md and skill.md")
+	}
+
+	backups, err := Directory(skillsRoot, Options{Platform: "claude-code"})
+	if err != nil {
+		t.Fatalf("Directory failed: %v", err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("expected one backup for a single skill directory, got %d", len(backups))
+	}
+	if filepath.Ext(backups[0].BackupPath) != ".zip" {
+		t.Fatalf("expected zip backup for skill directory, got %q", backups[0].BackupPath)
+	}
 }
 
 func TestGetStats(t *testing.T) {

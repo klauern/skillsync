@@ -175,6 +175,48 @@ func TestParser_Parse_NonexistentDirectory(t *testing.T) {
 	}
 }
 
+func TestParser_Parse_DeduplicatesSkillEntrypointVariants(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "dupe-skill")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	upper := filepath.Join(skillDir, "SKILL.md")
+	lower := filepath.Join(skillDir, "skill.md")
+	if err := os.WriteFile(upper, []byte(`---
+name: preferred-upper
+description: Upper variant
+---
+Upper content`), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(lower, []byte(`---
+name: lower-variant
+description: Lower variant
+---
+Lower content`), 0o644); err != nil {
+		t.Fatalf("failed to write skill.md: %v", err)
+	}
+
+	upperInfo, upperErr := os.Stat(upper)
+	lowerInfo, lowerErr := os.Stat(lower)
+	if upperErr == nil && lowerErr == nil && os.SameFile(upperInfo, lowerInfo) {
+		t.Skip("filesystem is case-insensitive; cannot create distinct SKILL.md and skill.md")
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("expected one deduplicated skill, got %d", len(skills))
+	}
+	if skills[0].Name != "preferred-upper" {
+		t.Fatalf("expected canonical SKILL.md variant to win, got %q", skills[0].Name)
+	}
+}
+
 func TestParser_parseSkillFile_BasicFields(t *testing.T) {
 	tests := map[string]struct {
 		content     string
@@ -566,6 +608,141 @@ Content here.`
 	// Should have both frontmatter-defined and directory-discovered scripts
 	if len(skill.Scripts) < 2 {
 		t.Errorf("Scripts count = %d, want at least 2 (frontmatter + directory)", len(skill.Scripts))
+	}
+}
+
+func TestParser_parseSkillFile_NestedSubdirsDiscovered(t *testing.T) {
+	// Verifies listFilesRecursive discovers nested files (e.g. references/docs/guide.md)
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "nested-skill")
+
+	dirs := []string{
+		skillDir,
+		filepath.Join(skillDir, "scripts"),
+		filepath.Join(skillDir, "references", "docs"),
+		filepath.Join(skillDir, "assets", "templates"),
+		filepath.Join(skillDir, "assets", "data"),
+	}
+	for _, dir := range dirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("failed to create directory %q: %v", dir, err)
+		}
+	}
+
+	skillContent := `---
+name: nested-skill
+description: Skill with nested subdir structure
+---
+Content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(skillDir, "scripts", "init.sh"):                 "#!/bin/bash",
+		filepath.Join(skillDir, "references", "docs", "guide.md"):     "# Guide",
+		filepath.Join(skillDir, "assets", "templates", "config.yaml"): "key: value",
+		filepath.Join(skillDir, "assets", "data", "schema.json"):      "{}",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skill, err := p.parseSkillFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	wantScripts := []string{"scripts/init.sh"}
+	wantReferences := []string{"references/docs/guide.md"}
+	wantAssets := []string{"assets/templates/config.yaml", "assets/data/schema.json"}
+
+	for _, want := range wantScripts {
+		if !contains(skill.Scripts, want) {
+			t.Errorf("Scripts missing %q, got %v", want, skill.Scripts)
+		}
+	}
+	for _, want := range wantReferences {
+		if !contains(skill.References, want) {
+			t.Errorf("References missing %q, got %v", want, skill.References)
+		}
+	}
+	for _, want := range wantAssets {
+		if !contains(skill.Assets, want) {
+			t.Errorf("Assets missing %q, got %v", want, skill.Assets)
+		}
+	}
+}
+
+func TestParser_parseSkillFile_TestdataFullAgentSkill(t *testing.T) {
+	// Integration test: parses real testdata fixture and verifies all subdirs discovered
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "skills", "claude", "full-agent-skill")
+	skillPath := filepath.Join(fixtureDir, "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Skipf("testdata fixture not found: %v", err)
+	}
+
+	p := New(filepath.Join("..", "..", "..", "testdata", "skills", "claude"), model.ClaudeCode)
+	skill, err := p.parseSkillFile(skillPath)
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	// scripts/
+	if !contains(skill.Scripts, "scripts/setup.sh") || !contains(skill.Scripts, "scripts/validate.sh") {
+		t.Errorf("Scripts missing setup.sh or validate.sh, got %v", skill.Scripts)
+	}
+	// references/ (nested docs/)
+	if !contains(skill.References, "references/docs/guide.md") {
+		t.Errorf("References missing references/docs/guide.md, got %v", skill.References)
+	}
+	// assets/ (nested templates/, data/)
+	if !contains(skill.Assets, "assets/templates/config.yaml") || !contains(skill.Assets, "assets/data/schema.json") {
+		t.Errorf("Assets missing nested files, got %v", skill.Assets)
+	}
+	// examples/, resources/, templates/, patterns/ → References
+	wantGenericRefs := []string{
+		"examples/quickstart.md",
+		"resources/data-source.txt",
+		"templates/prompt-template.md",
+		"patterns/naming.md",
+	}
+	for _, want := range wantGenericRefs {
+		if !contains(skill.References, want) {
+			t.Errorf("References missing %q (examples/resources/templates/patterns), got %v", want, skill.References)
+		}
+	}
+}
+
+func TestParser_parseSkillFile_TestdataCodexStructured(t *testing.T) {
+	// Integration test: parses codex-structured fixture (scripts, assets, templates, patterns)
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "skills", "codex", "codex-structured")
+	skillPath := filepath.Join(fixtureDir, "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Skipf("testdata fixture not found: %v", err)
+	}
+
+	p := New(filepath.Join("..", "..", "..", "testdata", "skills", "codex"), model.Codex)
+	skill, err := p.parseSkillFile(skillPath)
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	if !contains(skill.Scripts, "scripts/init.sh") {
+		t.Errorf("Scripts missing scripts/init.sh, got %v", skill.Scripts)
+	}
+	if !contains(skill.Assets, "assets/config.toml") {
+		t.Errorf("Assets missing assets/config.toml, got %v", skill.Assets)
+	}
+	// templates/ and patterns/ → References
+	if !contains(skill.References, "templates/command-template.md") || !contains(skill.References, "patterns/response-style.md") {
+		t.Errorf("References missing templates/patterns, got %v", skill.References)
 	}
 }
 
@@ -963,6 +1140,40 @@ func TestGetSkillDirectoryContents(t *testing.T) {
 	}
 	if len(contents.Assets) != 1 {
 		t.Errorf("Assets count = %d, want 1", len(contents.Assets))
+	}
+}
+
+func TestGetSkillDirectoryContents_RecursiveSubdirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	for _, dir := range []string{
+		filepath.Join(skillDir, "references", "docs"),
+		filepath.Join(skillDir, "assets", "templates"),
+		filepath.Join(skillDir, "scripts"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("content"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "references", "docs", "guide.md"), []byte("guide"), 0o644); err != nil {
+		t.Fatalf("failed to write nested reference: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "assets", "templates", "config.yaml"), []byte("k: v"), 0o644); err != nil {
+		t.Fatalf("failed to write nested asset: %v", err)
+	}
+
+	contents, err := GetSkillDirectoryContents(skillDir)
+	if err != nil {
+		t.Fatalf("GetSkillDirectoryContents() error = %v", err)
+	}
+	if !contains(contents.References, filepath.Join("docs", "guide.md")) {
+		t.Fatalf("expected recursive reference file, got %v", contents.References)
+	}
+	if !contains(contents.Assets, filepath.Join("templates", "config.yaml")) {
+		t.Fatalf("expected recursive asset file, got %v", contents.Assets)
 	}
 }
 

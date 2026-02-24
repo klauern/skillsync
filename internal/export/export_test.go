@@ -524,6 +524,82 @@ func TestExporter_MarkdownEmptyContent(t *testing.T) {
 	}
 }
 
+func TestExporter_Markdown_IncludesAgentSkillFields(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:                   "md-agent-skill",
+			Description:            "Markdown with Agent Skills fields",
+			Platform:               model.ClaudeCode,
+			Type:                   model.SkillTypePrompt,
+			Trigger:                "/md-test",
+			Scope:                  model.ScopeUser,
+			DisableModelInvocation: true,
+			License:                "Apache-2.0",
+			Compatibility:          map[string]string{"claude-code": ">=1.0.0"},
+			Scripts:                []string{"setup.sh"},
+			References:             []string{"guide.md"},
+			Assets:                 []string{"config.yaml"},
+			Content:                "Content",
+		},
+	}
+
+	exporter := New(Options{Format: FormatMarkdown, IncludeMetadata: true})
+	var buf bytes.Buffer
+	if err := exporter.Export(skills, &buf); err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	output := buf.String()
+	for _, s := range []string{
+		"| Type | prompt |",
+		"| Trigger | /md-test |",
+		"| Scope | user |",
+		"| Disable Model Invocation | true |",
+		"| License | Apache-2.0 |",
+		"| Compatibility | claude-code: >=1.0.0 |",
+		"| Scripts | setup.sh |",
+		"| References | guide.md |",
+		"| Assets | config.yaml |",
+	} {
+		if !strings.Contains(output, s) {
+			t.Errorf("Markdown output missing %q: %s", s, output)
+		}
+	}
+}
+
+func TestExporter_Markdown_OmitsEmptyAgentSkillFields(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:     "minimal-md-skill",
+			Platform: model.ClaudeCode,
+			Content:  "Minimal content",
+		},
+	}
+
+	exporter := New(Options{Format: FormatMarkdown})
+	var buf bytes.Buffer
+	if err := exporter.Export(skills, &buf); err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	output := buf.String()
+	for _, s := range []string{
+		"| Type |",
+		"| Trigger |",
+		"| Scope |",
+		"| Disable Model Invocation |",
+		"| License |",
+		"| Compatibility |",
+		"| Scripts |",
+		"| References |",
+		"| Assets |",
+	} {
+		if strings.Contains(output, s) {
+			t.Errorf("Markdown should omit empty field %q for minimal skill: %s", s, output)
+		}
+	}
+}
+
 // Golden tests for export output verification
 
 func TestExporter_JSON_Golden(t *testing.T) {
@@ -646,8 +722,18 @@ func TestExporter_Markdown_Golden(t *testing.T) {
 			Platform:    model.Codex,
 			Path:        "markdown-skill.md",
 			Tools:       []string{"read", "write", "edit"},
-			Content:     "# Markdown Skill\n\nThis skill demonstrates the Markdown export format.\n\n## Features\n\n- Feature 1\n- Feature 2\n",
-			ModifiedAt:  fixedTime,
+			Type:        model.SkillTypePrompt,
+			Trigger:     "/markdown-skill",
+			Scope:       model.ScopeRepo,
+			License:     "MIT",
+			Compatibility: map[string]string{
+				"codex": ">=1.0.0",
+			},
+			Scripts:    []string{"scripts/setup.sh"},
+			References: []string{"references/guide.md"},
+			Assets:     []string{"assets/config.yaml"},
+			Content:    "# Markdown Skill\n\nThis skill demonstrates the Markdown export format.\n\n## Features\n\n- Feature 1\n- Feature 2\n",
+			ModifiedAt: fixedTime,
 		},
 	}
 
