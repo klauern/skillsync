@@ -531,3 +531,56 @@ func TestPluginIndexEntry_ScopeAndEnabled(t *testing.T) {
 		t.Errorf("Scope = %q, want %q", entry.Scope, "project")
 	}
 }
+
+func TestIsVersionNewer(t *testing.T) {
+	tests := map[string]struct {
+		candidate string
+		current   string
+		want      bool
+	}{
+		"higher patch": {
+			candidate: "1.0.1",
+			current:   "1.0.0",
+			want:      true,
+		},
+		"lower patch": {
+			candidate: "1.0.0",
+			current:   "1.0.1",
+			want:      false,
+		},
+		"release over prerelease": {
+			candidate: "1.2.0",
+			current:   "1.2.0-beta",
+			want:      true,
+		},
+		"prerelease under release": {
+			candidate: "1.2.0-beta",
+			current:   "1.2.0",
+			want:      false,
+		},
+		"lexical fallback for non-semver": {
+			candidate: "zeta",
+			current:   "alpha",
+			want:      true,
+		},
+		"semver preferred over non-semver": {
+			candidate: "1.0.0",
+			current:   "abc",
+			want:      true,
+		},
+		"non-semver not preferred over semver": {
+			candidate: "abc",
+			current:   "1.0.0",
+			want:      false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := isVersionNewer(tt.candidate, tt.current)
+			if got != tt.want {
+				t.Fatalf("isVersionNewer(%q, %q) = %v, want %v", tt.candidate, tt.current, got, tt.want)
+			}
+		})
+	}
+}

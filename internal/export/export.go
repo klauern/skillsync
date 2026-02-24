@@ -208,7 +208,7 @@ func (e *Exporter) exportMarkdown(skills []model.Skill, w io.Writer) error {
 	var sb strings.Builder
 
 	sb.WriteString("# Exported Skills\n\n")
-	sb.WriteString(fmt.Sprintf("Total: %d skill(s)\n\n", len(skills)))
+	_, _ = fmt.Fprintf(&sb, "Total: %d skill(s)\n\n", len(skills))
 
 	for i, skill := range skills {
 		if i > 0 {
@@ -226,11 +226,11 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 	var sb strings.Builder
 
 	// Title
-	sb.WriteString(fmt.Sprintf("## %s\n\n", skill.Name))
+	_, _ = fmt.Fprintf(&sb, "## %s\n\n", skill.Name)
 
 	// Description
 	if skill.Description != "" {
-		sb.WriteString(fmt.Sprintf("*%s*\n\n", skill.Description))
+		_, _ = fmt.Fprintf(&sb, "*%s*\n\n", skill.Description)
 	}
 
 	// Metadata table

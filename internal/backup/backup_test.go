@@ -1,6 +1,10 @@
 package backup
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -115,6 +119,63 @@ func TestCreateBackup_DirectoryAndRestore(t *testing.T) {
 		if string(gotBytes) != wantContent {
 			t.Errorf("restored content mismatch for %q: got %q want %q", rel, string(gotBytes), wantContent)
 		}
+	}
+}
+
+func TestRestoreBackup_DirectoryRejectsPathTraversal(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	// Build a malicious zip containing a path traversal entry.
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create("../escape.txt")
+	if err != nil {
+		t.Fatalf("failed to create malicious zip entry: %v", err)
+	}
+	if _, err := w.Write([]byte("escape")); err != nil {
+		t.Fatalf("failed to write malicious zip entry: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+
+	zipBytes := buf.Bytes()
+	hash := sha256.Sum256(zipBytes)
+	hashStr := hex.EncodeToString(hash[:])
+
+	backupPath := filepath.Join(util.SkillsyncBackupsPath(), "claude-code", "malicious.zip")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(filepath.Dir(backupPath), 0o755); err != nil {
+		t.Fatalf("failed to create backup dir: %v", err)
+	}
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(backupPath, zipBytes, 0o644); err != nil {
+		t.Fatalf("failed to write malicious backup: %v", err)
+	}
+
+	index, err := LoadIndex()
+	if err != nil {
+		t.Fatalf("failed to load index: %v", err)
+	}
+	meta := Metadata{
+		ID:         "malicious-backup",
+		SourcePath: filepath.Join(tempHome, "source-dir"),
+		BackupPath: backupPath,
+		Platform:   "claude-code",
+		CreatedAt:  time.Now(),
+		ModifiedAt: time.Now(),
+		Hash:       hashStr,
+		Size:       int64(len(zipBytes)),
+	}
+	if err := index.AddBackup(meta); err != nil {
+		t.Fatalf("failed to add malicious backup metadata: %v", err)
+	}
+
+	restoreDir := filepath.Join(tempHome, "restore-target")
+	err = RestoreBackup(meta.ID, restoreDir)
+	if err == nil {
+		t.Fatal("expected RestoreBackup to reject path traversal archive entry")
 	}
 }
 

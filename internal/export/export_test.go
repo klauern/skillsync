@@ -547,8 +547,8 @@ func TestExporter_JSON_Golden(t *testing.T) {
 			Scripts:    []string{"scripts/setup.sh"},
 			References: []string{"references/guide.md"},
 			Assets:     []string{"assets/config.yaml"},
-			Content:     "# Skill Alpha\n\nThis is the first skill content.",
-			ModifiedAt:  fixedTime,
+			Content:    "# Skill Alpha\n\nThis is the first skill content.",
+			ModifiedAt: fixedTime,
 		},
 		{
 			Name:        "skill-beta",

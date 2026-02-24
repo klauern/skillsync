@@ -21,6 +21,8 @@ const (
 	BackupDirPerm = 0o750
 	// BackupFilePerm is the permission for backup files (rw-r-----)
 	BackupFilePerm = 0o640
+	// maxArchiveEntryBytes limits restored zip entry size to avoid resource exhaustion.
+	maxArchiveEntryBytes = 50 * 1024 * 1024 // 50 MiB
 )
 
 // Options configures backup behavior
@@ -230,10 +232,19 @@ func restoreDirectoryArchive(archive []byte, targetPath string) error {
 	}
 
 	cleanTarget := filepath.Clean(targetPath)
+	absTarget, err := filepath.Abs(cleanTarget)
+	if err != nil {
+		return fmt.Errorf("failed to resolve restore directory: %w", err)
+	}
 	for _, file := range reader.File {
 		cleanName := filepath.Clean(file.Name)
 		outPath := filepath.Join(cleanTarget, cleanName)
-		if !strings.HasPrefix(outPath, cleanTarget+string(os.PathSeparator)) && outPath != cleanTarget {
+		absOut, err := filepath.Abs(outPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve archived path %q: %w", file.Name, err)
+		}
+		relPath, err := filepath.Rel(absTarget, absOut)
+		if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
 			return fmt.Errorf("invalid archive path %q", file.Name)
 		}
 
@@ -253,12 +264,25 @@ func restoreDirectoryArchive(archive []byte, targetPath string) error {
 			return fmt.Errorf("failed to open archived file %q: %w", file.Name, err)
 		}
 
+		// #nosec G304 -- outPath is validated to remain under cleanTarget above
 		outFile, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, BackupFilePerm)
 		if err != nil {
 			_ = rc.Close()
 			return fmt.Errorf("failed to create restored file %q: %w", outPath, err)
 		}
-		if _, err := io.Copy(outFile, rc); err != nil {
+
+		data, err := io.ReadAll(io.LimitReader(rc, maxArchiveEntryBytes+1))
+		if err != nil {
+			_ = outFile.Close()
+			_ = rc.Close()
+			return fmt.Errorf("failed to read archived file %q: %w", file.Name, err)
+		}
+		if len(data) > maxArchiveEntryBytes {
+			_ = outFile.Close()
+			_ = rc.Close()
+			return fmt.Errorf("archived file %q exceeds max restore size of %d bytes", file.Name, maxArchiveEntryBytes)
+		}
+		if _, err := outFile.Write(data); err != nil {
 			_ = outFile.Close()
 			_ = rc.Close()
 			return fmt.Errorf("failed to restore file %q: %w", outPath, err)
