@@ -845,6 +845,10 @@ func syncFlags() []cli.Flag {
 			Name:  "include-prompts",
 			Usage: "Include prompt/command artifacts (equivalent to --type skill,prompt)",
 		},
+		&cli.BoolFlag{
+			Name:  "delete",
+			Usage: "After sync, delete target skills not present in source (orphan cleanup)",
+		},
 	}
 }
 
@@ -895,6 +899,7 @@ func syncCommand() *cli.Command {
      skillsync sync claudecode:plugin cursor      # Sync only plugin skills
      skillsync sync --include-prompts claudecode codex   # Include prompts/commands
      skillsync sync --type prompt claudecode codex       # Prompts only
+     skillsync sync --delete cursor claudecode          # Sync and remove orphaned skills from target
 
    See also:
      skillsync delete <source> <target>           # Remove skills from target`,
@@ -1058,6 +1063,46 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 
 	displaySyncResults(result)
 
+	// Post-sync orphan deletion (--delete flag)
+	if cfg.deleteOrphans && !cfg.deleteMode {
+		targetSkills, err := parsePlatformSkillsWithScope(
+			cfg.targetSpec.Platform,
+			[]model.SkillScope{cfg.targetSpec.TargetScope()},
+			cfg.includePlugins,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to parse target skills for orphan detection: %w", err)
+		}
+
+		orphans := findOrphanedSkills(cfg.sourceSkills, targetSkills)
+		if len(orphans) > 0 {
+			fmt.Printf("\nFound %d orphaned skill(s) in target (not in source):\n", len(orphans))
+			for _, s := range orphans {
+				fmt.Printf("  - %s\n", s.Name)
+			}
+
+			if cfg.dryRun {
+				fmt.Println("\n(dry-run) Would delete the above orphaned skills")
+			} else {
+				deleteCfg := &syncConfig{
+					sourceSpec:     cfg.sourceSpec,
+					targetSpec:     cfg.targetSpec,
+					dryRun:         cfg.dryRun,
+					skipBackup:     cfg.skipBackup,
+					yesFlag:        cfg.yesFlag,
+					deleteMode:     true,
+					includePlugins: cfg.includePlugins,
+					sourceSkills:   orphans,
+				}
+				if err := executeDeleteForSkills(deleteCfg, orphans, false); err != nil {
+					return fmt.Errorf("orphan deletion failed: %w", err)
+				}
+			}
+		} else {
+			fmt.Println("\nNo orphaned skills found in target")
+		}
+	}
+
 	if !result.Success() {
 		return errors.New("sync completed with errors")
 	}
@@ -1075,6 +1120,7 @@ type syncConfig struct {
 	skipValidation bool
 	yesFlag        bool
 	deleteMode     bool
+	deleteOrphans  bool
 	includePlugins bool
 	typeFilter     []model.SkillType
 	sourceSkills   []model.Skill
@@ -1128,6 +1174,7 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		skipValidation: cmd.Bool("skip-validation"),
 		yesFlag:        cmd.Bool("yes"),
 		deleteMode:     deleteMode,
+		deleteOrphans:  cmd.Bool("delete"),
 		includePlugins: cmd.Bool("include-plugins"),
 		typeFilter:     typeFilter,
 		sourceSkills:   make([]model.Skill, 0),
@@ -1354,6 +1401,28 @@ func filterDeleteCandidates(sourceSkills, targetSkills []model.Skill) []model.Sk
 	}
 
 	return candidates
+}
+
+// findOrphanedSkills returns target skills whose names don't appear in the source list.
+// These are candidates for deletion when --delete is used with sync.
+func findOrphanedSkills(sourceSkills, targetSkills []model.Skill) []model.Skill {
+	if len(targetSkills) == 0 {
+		return nil
+	}
+
+	sourceNames := make(map[string]bool, len(sourceSkills))
+	for _, skill := range sourceSkills {
+		sourceNames[skill.Name] = true
+	}
+
+	var orphans []model.Skill
+	for _, skill := range targetSkills {
+		if !sourceNames[skill.Name] {
+			orphans = append(orphans, skill)
+		}
+	}
+
+	return orphans
 }
 
 func selectSourceSkillsForDelete(sourceSkills, selectedTargets []model.Skill) []model.Skill {
@@ -3019,6 +3088,40 @@ func runSyncTUI() error {
 	}
 	if result.HasConflicts() {
 		ui.Warning(fmt.Sprintf("%d conflicts detected - use 'Resolve Conflicts' to handle them", len(result.Conflicts())))
+	}
+
+	// Post-sync orphan detection and cleanup
+	targetSkills, err := parsePlatformSkillsWithScope(
+		targetPlatform,
+		[]model.SkillScope{targetScope},
+		false,
+	)
+	if err != nil {
+		ui.Warning(fmt.Sprintf("Could not check for orphaned skills: %v", err))
+		return nil
+	}
+
+	orphans := findOrphanedSkills(sourceSkills, targetSkills)
+	if len(orphans) == 0 {
+		return nil
+	}
+
+	fmt.Printf("\nFound %d orphaned skill(s) in %s not present in %s\n", len(orphans), targetPlatform, sourcePlatform)
+	confirmed, err := confirmAction(
+		"Review orphaned skills for cleanup?",
+		riskLevelInfo,
+	)
+	if err != nil || !confirmed {
+		return nil
+	}
+
+	deleteResult, err := tui.RunDeleteList(orphans)
+	if err != nil {
+		return fmt.Errorf("delete list error: %w", err)
+	}
+
+	if deleteResult.Action == tui.DeleteActionDelete {
+		return executeDelete(deleteResult)
 	}
 
 	return nil
