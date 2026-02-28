@@ -253,7 +253,7 @@ func (t *Transformer) MergeContent(sourceContent, targetContent string, sourceNa
 
 	// Add separator and source content
 	sb.WriteString("\n\n---\n\n")
-	sb.WriteString(fmt.Sprintf("## Merged from: %s\n\n", sourceName))
+	fmt.Fprintf(&sb, "## Merged from: %s\n\n", sourceName)
 	sb.WriteString(sourceContent)
 
 	return sb.String()

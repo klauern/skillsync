@@ -647,13 +647,13 @@ func TestDirectory_DeduplicatesSkillEntrypointVariants(t *testing.T) {
 
 	skillsRoot := filepath.Join(tempHome, "skills")
 	skillDir := filepath.Join(skillsRoot, "skill-a")
-	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
 		t.Fatalf("failed to create dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Upper"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Upper"), 0o600); err != nil {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# Lower"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("# Lower"), 0o600); err != nil {
 		t.Fatalf("failed to write skill.md: %v", err)
 	}
 

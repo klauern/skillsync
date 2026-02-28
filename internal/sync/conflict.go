@@ -152,8 +152,8 @@ func (c *Conflict) DiffSummary() string {
 		}
 	}
 
-	sb.WriteString(fmt.Sprintf("%d hunk(s), ", len(c.Hunks)))
-	sb.WriteString(fmt.Sprintf("+%d/-%d lines", added, removed))
+	fmt.Fprintf(&sb, "%d hunk(s), ", len(c.Hunks))
+	fmt.Fprintf(&sb, "+%d/-%d lines", added, removed)
 
 	return sb.String()
 }

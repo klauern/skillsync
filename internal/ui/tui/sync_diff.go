@@ -199,9 +199,9 @@ func (m SyncDiffModel) buildDiffContent() string {
 	// Skill metadata
 	b.WriteString(syncDiffStyles.SectionHdr.Render("Skill Information"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Name:        %s\n", m.skill.Name))
-	b.WriteString(fmt.Sprintf("  Platform:    %s\n", m.skill.Platform))
-	b.WriteString(fmt.Sprintf("  Scope:       %s\n", m.skill.DisplayScope()))
+	fmt.Fprintf(&b, "  Name:        %s\n", m.skill.Name)
+	fmt.Fprintf(&b, "  Platform:    %s\n", m.skill.Platform)
+	fmt.Fprintf(&b, "  Scope:       %s\n", m.skill.DisplayScope())
 	if m.skill.Description != "" {
 		b.WriteString(wrapLabeledText("  Description: ", m.skill.Description, contentWidth))
 		b.WriteString("\n")

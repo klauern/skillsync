@@ -151,23 +151,23 @@ func (r *Result) Summary() string {
 		sb.WriteString("Dry run - no changes made\n")
 	}
 
-	sb.WriteString(fmt.Sprintf("Synced %s -> %s using %s strategy\n",
-		r.Source, r.Target, r.Strategy))
+	fmt.Fprintf(&sb, "Synced %s -> %s using %s strategy\n",
+		r.Source, r.Target, r.Strategy)
 
-	sb.WriteString(fmt.Sprintf("  Created:   %d\n", len(r.Created())))
-	sb.WriteString(fmt.Sprintf("  Updated:   %d\n", len(r.Updated())))
-	sb.WriteString(fmt.Sprintf("  Merged:    %d\n", len(r.Merged())))
-	sb.WriteString(fmt.Sprintf("  Deleted:   %d\n", len(r.Deleted())))
-	sb.WriteString(fmt.Sprintf("  Skipped:   %d\n", len(r.Skipped())))
-	sb.WriteString(fmt.Sprintf("  Conflicts: %d\n", len(r.Conflicts())))
-	sb.WriteString(fmt.Sprintf("  Failed:    %d\n", len(r.Failed())))
+	fmt.Fprintf(&sb, "  Created:   %d\n", len(r.Created()))
+	fmt.Fprintf(&sb, "  Updated:   %d\n", len(r.Updated()))
+	fmt.Fprintf(&sb, "  Merged:    %d\n", len(r.Merged()))
+	fmt.Fprintf(&sb, "  Deleted:   %d\n", len(r.Deleted()))
+	fmt.Fprintf(&sb, "  Skipped:   %d\n", len(r.Skipped()))
+	fmt.Fprintf(&sb, "  Conflicts: %d\n", len(r.Conflicts()))
+	fmt.Fprintf(&sb, "  Failed:    %d\n", len(r.Failed()))
 
 	if r.HasConflicts() {
 		sb.WriteString("\nConflicts requiring resolution:\n")
 		for _, c := range r.Conflicts() {
-			sb.WriteString(fmt.Sprintf("  - %s", c.Skill.Name))
+			fmt.Fprintf(&sb, "  - %s", c.Skill.Name)
 			if c.Conflict != nil {
-				sb.WriteString(fmt.Sprintf(": %s", c.Conflict.Summary()))
+				fmt.Fprintf(&sb, ": %s", c.Conflict.Summary())
 			}
 			sb.WriteString("\n")
 		}
@@ -176,7 +176,7 @@ func (r *Result) Summary() string {
 	if !r.Success() {
 		sb.WriteString("\nErrors:\n")
 		for _, f := range r.Failed() {
-			sb.WriteString(fmt.Sprintf("  - %s: %v\n", f.Skill.Name, f.Error))
+			fmt.Fprintf(&sb, "  - %s: %v\n", f.Skill.Name, f.Error)
 		}
 	}
 

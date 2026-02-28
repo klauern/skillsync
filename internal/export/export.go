@@ -237,22 +237,22 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 	// Metadata table
 	sb.WriteString("| Property | Value |\n")
 	sb.WriteString("|----------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Platform | %s |\n", skill.Platform))
+	fmt.Fprintf(&sb, "| Platform | %s |\n", skill.Platform)
 
 	if skill.Type != "" {
-		sb.WriteString(fmt.Sprintf("| Type | %s |\n", skill.Type))
+		fmt.Fprintf(&sb, "| Type | %s |\n", skill.Type)
 	}
 	if skill.Trigger != "" {
-		sb.WriteString(fmt.Sprintf("| Trigger | %s |\n", skill.Trigger))
+		fmt.Fprintf(&sb, "| Trigger | %s |\n", skill.Trigger)
 	}
 	if skill.Scope != "" {
-		sb.WriteString(fmt.Sprintf("| Scope | %s |\n", skill.Scope))
+		fmt.Fprintf(&sb, "| Scope | %s |\n", skill.Scope)
 	}
 	if skill.DisableModelInvocation {
 		sb.WriteString("| Disable Model Invocation | true |\n")
 	}
 	if skill.License != "" {
-		sb.WriteString(fmt.Sprintf("| License | %s |\n", skill.License))
+		fmt.Fprintf(&sb, "| License | %s |\n", skill.License)
 	}
 	if len(skill.Compatibility) > 0 {
 		keys := make([]string, 0, len(skill.Compatibility))
@@ -264,27 +264,27 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 		for _, k := range keys {
 			parts = append(parts, k+": "+skill.Compatibility[k])
 		}
-		sb.WriteString(fmt.Sprintf("| Compatibility | %s |\n", strings.Join(parts, ", ")))
+		fmt.Fprintf(&sb, "| Compatibility | %s |\n", strings.Join(parts, ", "))
 	}
 	if len(skill.Scripts) > 0 {
-		sb.WriteString(fmt.Sprintf("| Scripts | %s |\n", strings.Join(skill.Scripts, ", ")))
+		fmt.Fprintf(&sb, "| Scripts | %s |\n", strings.Join(skill.Scripts, ", "))
 	}
 	if len(skill.References) > 0 {
-		sb.WriteString(fmt.Sprintf("| References | %s |\n", strings.Join(skill.References, ", ")))
+		fmt.Fprintf(&sb, "| References | %s |\n", strings.Join(skill.References, ", "))
 	}
 	if len(skill.Assets) > 0 {
-		sb.WriteString(fmt.Sprintf("| Assets | %s |\n", strings.Join(skill.Assets, ", ")))
+		fmt.Fprintf(&sb, "| Assets | %s |\n", strings.Join(skill.Assets, ", "))
 	}
 
 	if e.opts.IncludeMetadata {
 		if skill.Path != "" {
-			sb.WriteString(fmt.Sprintf("| Path | `%s` |\n", skill.Path))
+			fmt.Fprintf(&sb, "| Path | `%s` |\n", skill.Path)
 		}
 		if len(skill.Tools) > 0 {
-			sb.WriteString(fmt.Sprintf("| Tools | %s |\n", strings.Join(skill.Tools, ", ")))
+			fmt.Fprintf(&sb, "| Tools | %s |\n", strings.Join(skill.Tools, ", "))
 		}
 		if !skill.ModifiedAt.IsZero() {
-			sb.WriteString(fmt.Sprintf("| Modified | %s |\n", skill.ModifiedAt.Format("2006-01-02 15:04:05")))
+			fmt.Fprintf(&sb, "| Modified | %s |\n", skill.ModifiedAt.Format("2006-01-02 15:04:05"))
 		}
 	}
 

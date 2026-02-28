@@ -743,10 +743,10 @@ func (m ImportListModel) viewConfirm() string {
 	b.WriteString("Skills to import:\n")
 	for i, s := range selectedSkills {
 		if i >= 10 {
-			b.WriteString(fmt.Sprintf("  ... and %d more\n", len(selectedSkills)-10))
+			fmt.Fprintf(&b, "  ... and %d more\n", len(selectedSkills)-10)
 			break
 		}
-		b.WriteString(fmt.Sprintf("  • %s\n", s.Name))
+		fmt.Fprintf(&b, "  • %s\n", s.Name)
 	}
 
 	return b.String()

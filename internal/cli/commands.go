@@ -636,7 +636,7 @@ type columnWidths struct {
 
 // getTerminalWidth returns the current terminal width, or a default of 120 if unavailable
 func getTerminalWidth() int {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	width, _, err := term.GetSize(int(os.Stdout.Fd())) //nolint:gosec // fd is always a small value
 	if err != nil || width <= 0 {
 		return 120 // sensible default for non-TTY or error cases
 	}
@@ -1002,21 +1002,8 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	}
 
 	// Create backup before sync (unless skipped or dry-run)
-	if !cfg.dryRun && !cfg.skipBackup {
-		prepareBackup(cfg.targetSpec.Platform)
-		created, err := backupExistingTargetSkills(
-			cfg.targetSpec.Platform,
-			cfg.targetSpec.TargetScope(),
-			cfg.sourceSkills,
-			"pre-sync backup",
-			[]string{"sync"},
-		)
-		if err != nil {
-			return err
-		}
-		if created > 0 {
-			fmt.Printf("✓ Created %d backup(s)\n", created)
-		}
+	if err := runSyncBackup(cfg); err != nil {
+		return err
 	}
 
 	// Create sync options and execute
@@ -1033,80 +1020,124 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	}
 
 	// Handle conflicts if interactive strategy is used
-	if result.HasConflicts() && cfg.strategy == sync.StrategyInteractive {
-		resolver := NewConflictResolver()
-
-		// Gather conflicts
-		var conflicts []*sync.Conflict
-		for _, sr := range result.Conflicts() {
-			if sr.Conflict != nil {
-				conflicts = append(conflicts, sr.Conflict)
-			}
-		}
-
-		// Display summary and resolve
-		resolver.DisplayConflictSummary(conflicts)
-		resolved, err := resolver.ResolveConflicts(conflicts)
-		if err != nil {
-			return fmt.Errorf("conflict resolution failed: %w", err)
-		}
-
-		// Apply resolved content
-		if !cfg.dryRun {
-			if err := applyResolvedConflicts(result, resolved); err != nil {
-				return fmt.Errorf("failed to apply resolved conflicts: %w", err)
-			}
-		}
-
-		fmt.Printf("\nResolved %d conflict(s)\n", len(resolved))
+	if err := runSyncConflictResolution(cfg, result); err != nil {
+		return err
 	}
 
 	displaySyncResults(result)
 
 	// Post-sync orphan deletion (--delete flag)
-	if cfg.deleteOrphans && !cfg.deleteMode {
-		targetSkills, err := parsePlatformSkillsWithScope(
-			cfg.targetSpec.Platform,
-			[]model.SkillScope{cfg.targetSpec.TargetScope()},
-			cfg.includePlugins,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to parse target skills for orphan detection: %w", err)
-		}
-
-		orphans := findOrphanedSkills(cfg.sourceSkills, targetSkills)
-		if len(orphans) > 0 {
-			fmt.Printf("\nFound %d orphaned skill(s) in target (not in source):\n", len(orphans))
-			for _, s := range orphans {
-				fmt.Printf("  - %s\n", s.Name)
-			}
-
-			if cfg.dryRun {
-				fmt.Println("\n(dry-run) Would delete the above orphaned skills")
-			} else {
-				deleteCfg := &syncConfig{
-					sourceSpec:     cfg.sourceSpec,
-					targetSpec:     cfg.targetSpec,
-					dryRun:         cfg.dryRun,
-					skipBackup:     cfg.skipBackup,
-					yesFlag:        cfg.yesFlag,
-					deleteMode:     true,
-					includePlugins: cfg.includePlugins,
-					sourceSkills:   orphans,
-				}
-				if err := executeDeleteForSkills(deleteCfg, orphans, false); err != nil {
-					return fmt.Errorf("orphan deletion failed: %w", err)
-				}
-			}
-		} else {
-			fmt.Println("\nNo orphaned skills found in target")
-		}
+	if err := runSyncOrphanDeletion(cfg); err != nil {
+		return err
 	}
 
 	if !result.Success() {
 		return errors.New("sync completed with errors")
 	}
 
+	return nil
+}
+
+// runSyncBackup creates a backup before sync unless skipped or dry-run.
+func runSyncBackup(cfg *syncConfig) error {
+	if cfg.dryRun || cfg.skipBackup {
+		return nil
+	}
+	prepareBackup(cfg.targetSpec.Platform)
+	created, err := backupExistingTargetSkills(
+		cfg.targetSpec.Platform,
+		cfg.targetSpec.TargetScope(),
+		cfg.sourceSkills,
+		"pre-sync backup",
+		[]string{"sync"},
+	)
+	if err != nil {
+		return err
+	}
+	if created > 0 {
+		fmt.Printf("✓ Created %d backup(s)\n", created)
+	}
+	return nil
+}
+
+// runSyncConflictResolution handles interactive conflict resolution after sync.
+func runSyncConflictResolution(cfg *syncConfig, result *sync.Result) error {
+	if !result.HasConflicts() || cfg.strategy != sync.StrategyInteractive {
+		return nil
+	}
+
+	resolver := NewConflictResolver()
+
+	// Gather conflicts
+	var conflicts []*sync.Conflict
+	for _, sr := range result.Conflicts() {
+		if sr.Conflict != nil {
+			conflicts = append(conflicts, sr.Conflict)
+		}
+	}
+
+	// Display summary and resolve
+	resolver.DisplayConflictSummary(conflicts)
+	resolved, err := resolver.ResolveConflicts(conflicts)
+	if err != nil {
+		return fmt.Errorf("conflict resolution failed: %w", err)
+	}
+
+	// Apply resolved content
+	if !cfg.dryRun {
+		if err := applyResolvedConflicts(result, resolved); err != nil {
+			return fmt.Errorf("failed to apply resolved conflicts: %w", err)
+		}
+	}
+
+	fmt.Printf("\nResolved %d conflict(s)\n", len(resolved))
+	return nil
+}
+
+// runSyncOrphanDeletion handles post-sync orphan deletion when --delete flag is set.
+func runSyncOrphanDeletion(cfg *syncConfig) error {
+	if !cfg.deleteOrphans || cfg.deleteMode {
+		return nil
+	}
+
+	targetSkills, err := parsePlatformSkillsWithScope(
+		cfg.targetSpec.Platform,
+		[]model.SkillScope{cfg.targetSpec.TargetScope()},
+		cfg.includePlugins,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to parse target skills for orphan detection: %w", err)
+	}
+
+	orphans := findOrphanedSkills(cfg.sourceSkills, targetSkills)
+	if len(orphans) == 0 {
+		fmt.Println("\nNo orphaned skills found in target")
+		return nil
+	}
+
+	fmt.Printf("\nFound %d orphaned skill(s) in target (not in source):\n", len(orphans))
+	for _, s := range orphans {
+		fmt.Printf("  - %s\n", s.Name)
+	}
+
+	if cfg.dryRun {
+		fmt.Println("\n(dry-run) Would delete the above orphaned skills")
+		return nil
+	}
+
+	deleteCfg := &syncConfig{
+		sourceSpec:     cfg.sourceSpec,
+		targetSpec:     cfg.targetSpec,
+		dryRun:         cfg.dryRun,
+		skipBackup:     cfg.skipBackup,
+		yesFlag:        cfg.yesFlag,
+		deleteMode:     true,
+		includePlugins: cfg.includePlugins,
+		sourceSkills:   orphans,
+	}
+	if err := executeDeleteForSkills(deleteCfg, orphans, false); err != nil {
+		return fmt.Errorf("orphan deletion failed: %w", err)
+	}
 	return nil
 }
 

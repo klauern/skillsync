@@ -113,8 +113,9 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		skill.Name = extractString(fm, "name")
 		skill.Description = extractString(fm, "description")
 
-		// Extract optional legacy fields
-		skill.Tools = extractStringSlice(fm, "tools")
+		// Extract tool allowlist fields.
+		// SKILL.md content can use either `tools` or `allowed-tools`.
+		skill.Tools = extractTools(fm)
 
 		// Extract skill type (skill vs prompt/slash-command)
 		if typeStr := extractString(fm, "type"); typeStr != "" {
@@ -154,7 +155,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 		// Store remaining frontmatter fields in metadata
 		knownFields := map[string]bool{
-			"name": true, "description": true, "tools": true, "type": true, "trigger": true,
+			"name": true, "description": true, "tools": true, "allowed-tools": true, "type": true, "trigger": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
 			"compatibility": true, "scripts": true, "references": true, "assets": true,
 		}
@@ -287,23 +288,6 @@ func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
 	}
 }
 
-// listFiles returns a list of file names in a directory (non-recursive).
-// Returns an empty slice if the directory doesn't exist or can't be read.
-func listFiles(dir string) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-
-	var files []string
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			files = append(files, entry.Name())
-		}
-	}
-	return files
-}
-
 // listFilesRecursive returns all file paths under dir, relative to dir.
 // Nested structure is preserved (e.g. docs/guide.md, templates/config.yaml).
 // Returns an empty slice if the directory doesn't exist or can't be read.
@@ -362,6 +346,71 @@ func extractStringSlice(fm map[string]any, key string) []string {
 		}
 	}
 	return nil
+}
+
+// extractTools extracts tool allowlist values from `tools` or `allowed-tools`.
+// Supports YAML arrays and string values.
+func extractTools(fm map[string]any) []string {
+	tools := extractToolsByKey(fm, "tools")
+	if len(tools) == 0 {
+		tools = extractToolsByKey(fm, "allowed-tools")
+	}
+	return tools
+}
+
+func extractToolsByKey(fm map[string]any, key string) []string {
+	val, ok := fm[key]
+	if !ok {
+		return nil
+	}
+
+	switch v := val.(type) {
+	case []any:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			strVal, ok := item.(string)
+			if !ok {
+				continue
+			}
+			tool := strings.TrimSpace(strVal)
+			if tool != "" {
+				result = append(result, tool)
+			}
+		}
+		return result
+	case []string:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			tool := strings.TrimSpace(item)
+			if tool != "" {
+				result = append(result, tool)
+			}
+		}
+		return result
+	case string:
+		raw := strings.TrimSpace(v)
+		if raw == "" {
+			return nil
+		}
+
+		var parts []string
+		if strings.Contains(raw, ",") {
+			parts = strings.Split(raw, ",")
+		} else {
+			parts = strings.Fields(raw)
+		}
+
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			tool := strings.TrimSpace(part)
+			if tool != "" {
+				result = append(result, tool)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
 }
 
 // extractStringMap extracts a string map from a frontmatter map.
@@ -425,7 +474,7 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 			skill.Name = fmName
 		}
 		skill.Description = extractString(fm, "description")
-		skill.Tools = extractStringSlice(fm, "tools")
+		skill.Tools = extractTools(fm)
 
 		// Extract skill type (skill vs prompt/slash-command)
 		if typeStr := extractString(fm, "type"); typeStr != "" {
@@ -453,7 +502,7 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 
 		// Store remaining fields in metadata
 		knownFields := map[string]bool{
-			"name": true, "description": true, "tools": true, "type": true, "trigger": true,
+			"name": true, "description": true, "tools": true, "allowed-tools": true, "type": true, "trigger": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
 			"compatibility": true, "scripts": true, "references": true, "assets": true,
 		}
