@@ -269,7 +269,7 @@ func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
 		dirName := entry.Name()
 		files := listFilesRecursive(filepath.Join(skillDir, dirName))
 		for _, relFile := range files {
-			relPath := filepath.Join(dirName, relFile)
+			relPath := filepath.ToSlash(filepath.Join(dirName, relFile))
 			switch dirName {
 			case "scripts":
 				if !slices.Contains(skill.Scripts, relPath) {
@@ -303,7 +303,7 @@ func listFilesRecursive(dir string) []string {
 		fullPath := filepath.Join(dir, name)
 		if entry.IsDir() {
 			for _, nested := range listFilesRecursive(fullPath) {
-				result = append(result, filepath.Join(name, nested))
+				result = append(result, filepath.ToSlash(filepath.Join(name, nested)))
 			}
 		} else {
 			result = append(result, name)

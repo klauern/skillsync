@@ -231,7 +231,7 @@ func isVersionNewer(candidate, current string) bool {
 		if cPre != "" && oPre == "" {
 			return false
 		}
-		return cPre > oPre
+		return compareSemverPrerelease(cPre, oPre) > 0
 	}
 
 	if cOK && !oOK {
@@ -242,6 +242,60 @@ func isVersionNewer(candidate, current string) bool {
 	}
 
 	return candidate > current
+}
+
+// compareSemverPrerelease compares two semver prerelease strings following
+// semver 2.0 precedence rules. Returns -1 if a < b, 0 if a == b, 1 if a > b.
+// Identifiers are split on '.', numeric identifiers are compared as integers,
+// and numeric identifiers always have lower precedence than alphanumeric ones.
+func compareSemverPrerelease(a, b string) int {
+	if a == b {
+		return 0
+	}
+
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+
+	n := min(len(aParts), len(bParts))
+
+	for i := range n {
+		aNum, aIsNum := strconv.Atoi(aParts[i])
+		bNum, bIsNum := strconv.Atoi(bParts[i])
+
+		switch {
+		case aIsNum == nil && bIsNum == nil:
+			// Both numeric: compare as integers.
+			if aNum < bNum {
+				return -1
+			}
+			if aNum > bNum {
+				return 1
+			}
+		case aIsNum == nil && bIsNum != nil:
+			// Numeric identifiers have lower precedence than alphanumeric.
+			return -1
+		case aIsNum != nil && bIsNum == nil:
+			return 1
+		default:
+			// Both alphanumeric: compare lexically.
+			if aParts[i] < bParts[i] {
+				return -1
+			}
+			if aParts[i] > bParts[i] {
+				return 1
+			}
+		}
+	}
+
+	// All compared identifiers are equal; the version with more identifiers
+	// has higher precedence.
+	if len(aParts) < len(bParts) {
+		return -1
+	}
+	if len(aParts) > len(bParts) {
+		return 1
+	}
+	return 0
 }
 
 func parseSemver(v string) (major, minor, patch int, pre string, ok bool) {

@@ -573,6 +573,31 @@ func TestIsVersionNewer(t *testing.T) {
 			current:   "1.0.0",
 			want:      false,
 		},
+		"numeric prerelease: beta.10 > beta.2": {
+			candidate: "1.0.0-beta.10",
+			current:   "1.0.0-beta.2",
+			want:      true,
+		},
+		"numeric prerelease: beta.2 < beta.10": {
+			candidate: "1.0.0-beta.2",
+			current:   "1.0.0-beta.10",
+			want:      false,
+		},
+		"numeric vs alpha prerelease: numeric lower precedence": {
+			candidate: "1.0.0-1",
+			current:   "1.0.0-alpha",
+			want:      false,
+		},
+		"alpha vs numeric prerelease: alpha higher precedence": {
+			candidate: "1.0.0-alpha",
+			current:   "1.0.0-1",
+			want:      true,
+		},
+		"more prerelease identifiers win": {
+			candidate: "1.0.0-alpha.1.2",
+			current:   "1.0.0-alpha.1",
+			want:      true,
+		},
 	}
 
 	for name, tt := range tests {

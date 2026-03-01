@@ -264,6 +264,7 @@ func TestRestoreBackup_DirectoryRejectsPathTraversal(t *testing.T) {
 		ModifiedAt: time.Now(),
 		Hash:       hashStr,
 		Size:       int64(len(zipBytes)),
+		Metadata:   map[string]string{"backup_format": "dir-zip"},
 	}
 	if err := index.AddBackup(meta); err != nil {
 		t.Fatalf("failed to add malicious backup metadata: %v", err)

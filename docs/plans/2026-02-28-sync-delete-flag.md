@@ -384,7 +384,7 @@ Wait — actually, let's make this conditional. The TUI should ask the user if t
     fmt.Printf("\nFound %d orphaned skill(s) in %s not present in %s\n", len(orphans), targetPlatform, sourcePlatform)
     confirmed, err := confirmAction(
         "Review orphaned skills for cleanup?",
-        riskLevelNormal,
+        riskLevelInfo,
     )
     if err != nil || !confirmed {
         return nil

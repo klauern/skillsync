@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,8 @@ const (
 	BackupFilePerm = 0o640
 	// maxArchiveEntryBytes limits restored zip entry size to avoid resource exhaustion.
 	maxArchiveEntryBytes = 50 * 1024 * 1024 // 50 MiB
+	// maxArchiveTotalBytes limits total extracted archive size to prevent disk exhaustion.
+	maxArchiveTotalBytes = 500 * 1024 * 1024 // 500 MiB
 )
 
 // Options configures backup behavior
@@ -86,16 +89,19 @@ func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 		content       []byte
 		readErr       error
 		backupExt     string
+		backupFormat  string
 		metadataSize  int64
 		metadataMTime = sourceInfo.ModTime()
 	)
 	if sourceInfo.IsDir() {
 		content, readErr = createDirectoryArchive(sourcePath)
 		backupExt = ".zip"
+		backupFormat = "dir-zip"
 	} else {
 		// #nosec G304 - sourcePath is controlled by the caller and validated
 		content, readErr = os.ReadFile(sourcePath)
 		backupExt = filepath.Ext(sourcePath)
+		backupFormat = "file"
 	}
 	if readErr != nil {
 		return nil, fmt.Errorf("failed to read source path %q: %w", sourcePath, readErr)
@@ -124,6 +130,11 @@ func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 		return nil, fmt.Errorf("failed to write backup file: %w", err)
 	}
 
+	// Build metadata map with backup format included
+	metaMap := make(map[string]string)
+	maps.Copy(metaMap, opts.Metadata)
+	metaMap["backup_format"] = backupFormat
+
 	// Create metadata
 	metadata := &Metadata{
 		ID:          backupID,
@@ -135,7 +146,7 @@ func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 		Hash:        hashStr,
 		Size:        metadataSize,
 		Description: opts.Description,
-		Metadata:    opts.Metadata,
+		Metadata:    metaMap,
 		Tags:        opts.Tags,
 	}
 
@@ -179,7 +190,7 @@ func RestoreBackup(backupID string, targetPath string) error {
 		return fmt.Errorf("backup file corrupted: hash mismatch")
 	}
 
-	if filepath.Ext(metadata.BackupPath) == ".zip" {
+	if metadata.Metadata["backup_format"] == "dir-zip" {
 		if err := restoreDirectoryArchive(content, targetPath); err != nil {
 			return fmt.Errorf("failed to restore directory backup: %w", err)
 		}
@@ -271,6 +282,7 @@ func restoreDirectoryArchive(archive []byte, targetPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve restore directory: %w", err)
 	}
+	var totalExtracted int64
 	for _, file := range reader.File {
 		cleanName := filepath.Clean(file.Name)
 		outPath := filepath.Join(cleanTarget, cleanName)
@@ -316,6 +328,12 @@ func restoreDirectoryArchive(archive []byte, targetPath string) error {
 			_ = outFile.Close()
 			_ = rc.Close()
 			return fmt.Errorf("archived file %q exceeds max restore size of %d bytes", file.Name, maxArchiveEntryBytes)
+		}
+		totalExtracted += int64(len(data))
+		if totalExtracted > maxArchiveTotalBytes {
+			_ = outFile.Close()
+			_ = rc.Close()
+			return fmt.Errorf("archive exceeds max total restore size of %d bytes", maxArchiveTotalBytes)
 		}
 		if _, err := outFile.Write(data); err != nil {
 			_ = outFile.Close()
