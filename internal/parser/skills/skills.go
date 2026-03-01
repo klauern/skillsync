@@ -270,7 +270,7 @@ func detectSkillDirectoryStructure(skill *model.Skill, skillDir string) {
 		files := listFilesRecursive(filepath.Join(skillDir, dirName))
 		for _, relFile := range files {
 			relPath := filepath.ToSlash(filepath.Join(dirName, relFile))
-			switch dirName {
+			switch strings.ToLower(dirName) {
 			case "scripts":
 				if !slices.Contains(skill.Scripts, relPath) {
 					skill.Scripts = append(skill.Scripts, relPath)
@@ -615,10 +615,24 @@ func GetSkillDirectoryContents(skillDir string) (*SkillDirectoryContents, error)
 	}
 
 	contents := &SkillDirectoryContents{
-		SkillFile:  skillFile,
-		Scripts:    listFilesRecursive(filepath.Join(skillDir, "scripts")),
-		References: listFilesRecursive(filepath.Join(skillDir, "references")),
-		Assets:     listFilesRecursive(filepath.Join(skillDir, "assets")),
+		SkillFile: skillFile,
+	}
+
+	entries, err := os.ReadDir(skillDir)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			switch strings.ToLower(entry.Name()) {
+			case "scripts":
+				contents.Scripts = append(contents.Scripts, listFilesRecursive(filepath.Join(skillDir, entry.Name()))...)
+			case "references":
+				contents.References = append(contents.References, listFilesRecursive(filepath.Join(skillDir, entry.Name()))...)
+			case "assets":
+				contents.Assets = append(contents.Assets, listFilesRecursive(filepath.Join(skillDir, entry.Name()))...)
+			}
+		}
 	}
 
 	return contents, nil

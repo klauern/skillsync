@@ -1408,3 +1408,118 @@ Content here.`
 		}
 	})
 }
+
+func TestDetectSkillDirectoryStructure_CaseInsensitive(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "case-skill")
+
+	// Create capitalized subdirectories
+	dirs := []string{
+		skillDir,
+		filepath.Join(skillDir, "Scripts"),
+		filepath.Join(skillDir, "Assets"),
+	}
+	for _, dir := range dirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create directory %q: %v", dir, err)
+		}
+	}
+
+	skillContent := `---
+name: case-skill
+description: Skill with capitalized directory names
+---
+Content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(skillDir, "Scripts", "setup.sh"):    "#!/bin/bash",
+		filepath.Join(skillDir, "Assets", "config.yaml"):  "key: value",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skill, err := p.parseSkillFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	// Scripts/ should be detected as scripts
+	foundScript := false
+	for _, s := range skill.Scripts {
+		if filepath.Base(s) == "setup.sh" {
+			foundScript = true
+			break
+		}
+	}
+	if !foundScript {
+		t.Errorf("Scripts not detected from capitalized 'Scripts/' dir, got: %v", skill.Scripts)
+	}
+
+	// Assets/ should be detected as assets
+	foundAsset := false
+	for _, a := range skill.Assets {
+		if filepath.Base(a) == "config.yaml" {
+			foundAsset = true
+			break
+		}
+	}
+	if !foundAsset {
+		t.Errorf("Assets not detected from capitalized 'Assets/' dir, got: %v", skill.Assets)
+	}
+}
+
+func TestGetSkillDirectoryContents_CaseInsensitive(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "case-contents-skill")
+
+	// Create capitalized subdirectories
+	dirs := []string{
+		skillDir,
+		filepath.Join(skillDir, "Scripts"),
+		filepath.Join(skillDir, "References"),
+	}
+	for _, dir := range dirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create directory %q: %v", dir, err)
+		}
+	}
+
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Skill"), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(skillDir, "Scripts", "run.sh"):       "#!/bin/bash",
+		filepath.Join(skillDir, "References", "guide.md"):  "# Guide",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	contents, err := GetSkillDirectoryContents(skillDir)
+	if err != nil {
+		t.Fatalf("GetSkillDirectoryContents() error = %v", err)
+	}
+
+	if len(contents.Scripts) != 1 {
+		t.Errorf("Scripts count = %d, want 1; got: %v", len(contents.Scripts), contents.Scripts)
+	}
+	if len(contents.References) != 1 {
+		t.Errorf("References count = %d, want 1; got: %v", len(contents.References), contents.References)
+	}
+}

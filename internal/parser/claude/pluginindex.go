@@ -304,6 +304,11 @@ func parseSemver(v string) (major, minor, patch int, pre string, ok bool) {
 		return 0, 0, 0, "", false
 	}
 
+	// Strip build metadata (semver 2.0: ignored for precedence).
+	if idx := strings.Index(normalized, "+"); idx >= 0 {
+		normalized = normalized[:idx]
+	}
+
 	parts := strings.SplitN(normalized, "-", 2)
 	core := parts[0]
 	if len(parts) == 2 {

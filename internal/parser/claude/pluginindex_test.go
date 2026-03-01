@@ -598,6 +598,21 @@ func TestIsVersionNewer(t *testing.T) {
 			current:   "1.0.0-alpha.1",
 			want:      true,
 		},
+		"build metadata ignored: same version": {
+			candidate: "1.0.0+build.1",
+			current:   "1.0.0+build.2",
+			want:      false,
+		},
+		"build metadata stripped: higher patch wins": {
+			candidate: "1.0.1+build",
+			current:   "1.0.0+build",
+			want:      true,
+		},
+		"prerelease with build metadata": {
+			candidate: "1.0.0-beta+build",
+			current:   "1.0.0-alpha+build",
+			want:      true,
+		},
 	}
 
 	for name, tt := range tests {

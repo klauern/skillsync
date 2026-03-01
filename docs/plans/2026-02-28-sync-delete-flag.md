@@ -61,7 +61,7 @@ deleteOrphans:  cmd.Bool("delete"),
 
 In `internal/cli/commands.go`, in the `syncCommand()` Description (line 856), add an example:
 
-```
+```text
     skillsync sync --delete cursor claudecode          # Sync and remove orphaned skills from target
 ```
 
