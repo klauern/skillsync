@@ -10,9 +10,10 @@
 
 ---
 
-### Task 1: Add `--delete` flag and `syncConfig` field
+## Task 1: Add `--delete` flag and `syncConfig` field
 
 **Files:**
+
 - Modify: `internal/cli/commands.go:809-848` (syncFlags function)
 - Modify: `internal/cli/commands.go:1069-1081` (syncConfig struct)
 - Modify: `internal/cli/commands.go:1122-1134` (parseSyncConfig return)
@@ -74,9 +75,10 @@ git commit -m "feat(sync): add --delete flag definition to sync command"
 
 ---
 
-### Task 2: Implement orphan detection function
+## Task 2: Implement orphan detection function
 
 **Files:**
+
 - Modify: `internal/cli/commands.go` (add new function near `filterDeleteCandidates` at line 1339)
 - Create: `internal/cli/orphan_detection_test.go`
 
@@ -225,9 +227,10 @@ git commit -m "feat(sync): add orphan detection for --delete flag"
 
 ---
 
-### Task 3: Integrate `--delete` into CLI sync path
+## Task 3: Integrate `--delete` into CLI sync path
 
 **Files:**
+
 - Modify: `internal/cli/commands.go:1058-1065` (end of `runSyncCommand`, after sync completes)
 
 **Step 1: Write the failing test**
@@ -324,9 +327,10 @@ git commit -m "feat(sync): integrate --delete orphan cleanup into CLI sync path"
 
 ---
 
-### Task 4: Integrate `--delete` into TUI sync path
+## Task 4: Integrate `--delete` into TUI sync path
 
 **Files:**
+
 - Modify: `internal/cli/commands.go:2931-3025` (`runSyncTUI` function)
 
 **Step 1: Add post-sync orphan detection and delete list to `runSyncTUI`**
@@ -339,7 +343,7 @@ In `internal/cli/commands.go`, after the sync results display in `runSyncTUI` (l
     targetSkills, err := parsePlatformSkillsWithScope(
         targetPlatform,
         []model.SkillScope{targetScope},
-        false,
+        includePlugins,
     )
     if err != nil {
         // Non-fatal: just skip orphan detection
@@ -369,7 +373,7 @@ In `internal/cli/commands.go`, after the sync results display in `runSyncTUI` (l
     }
 ```
 
-**Important note:** The TUI sync path currently has no `--delete` flag concept — it always shows the orphan cleanup step after sync. This is the right UX for TUI since the user is already in interactive mode.
+**Important note:** Keep plugin inclusion consistent with CLI by plumbing the same `includePlugins` setting into the TUI path before orphan detection. This avoids mismatched orphan sets between CLI and TUI flows.
 
 Wait — actually, let's make this conditional. The TUI should ask the user if they want to clean up orphans, rather than always showing the delete list. We can use a simple prompt.
 
@@ -417,7 +421,7 @@ git commit -m "feat(sync): add orphan cleanup phase to TUI sync flow"
 
 ---
 
-### Task 5: Quality gates and final verification
+## Task 5: Quality gates and final verification
 
 **Step 1: Run full test suite**
 

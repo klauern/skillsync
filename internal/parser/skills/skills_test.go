@@ -823,10 +823,10 @@ Content here.`
 	}
 
 	wantRefs := []string{
-		filepath.Join("examples", "usage.md"),
-		filepath.Join("resources", "dataset.txt"),
-		filepath.Join("templates", "sample.tmpl"),
-		filepath.Join("patterns", "workflow.md"),
+		filepath.ToSlash(filepath.Join("examples", "usage.md")),
+		filepath.ToSlash(filepath.Join("resources", "dataset.txt")),
+		filepath.ToSlash(filepath.Join("templates", "sample.tmpl")),
+		filepath.ToSlash(filepath.Join("patterns", "workflow.md")),
 	}
 
 	for _, want := range wantRefs {
@@ -1209,10 +1209,10 @@ func TestGetSkillDirectoryContents_RecursiveSubdirs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSkillDirectoryContents() error = %v", err)
 	}
-	if !contains(contents.References, filepath.Join("docs", "guide.md")) {
+	if !contains(contents.References, filepath.ToSlash(filepath.Join("docs", "guide.md"))) {
 		t.Fatalf("expected recursive reference file, got %v", contents.References)
 	}
-	if !contains(contents.Assets, filepath.Join("templates", "config.yaml")) {
+	if !contains(contents.Assets, filepath.ToSlash(filepath.Join("templates", "config.yaml"))) {
 		t.Fatalf("expected recursive asset file, got %v", contents.Assets)
 	}
 }
@@ -1437,8 +1437,8 @@ Content.`
 	}
 
 	files := map[string]string{
-		filepath.Join(skillDir, "Scripts", "setup.sh"):    "#!/bin/bash",
-		filepath.Join(skillDir, "Assets", "config.yaml"):  "key: value",
+		filepath.Join(skillDir, "Scripts", "setup.sh"):   "#!/bin/bash",
+		filepath.Join(skillDir, "Assets", "config.yaml"): "key: value",
 	}
 	for path, content := range files {
 		// #nosec G306 - test file permissions
@@ -1501,8 +1501,8 @@ func TestGetSkillDirectoryContents_CaseInsensitive(t *testing.T) {
 	}
 
 	files := map[string]string{
-		filepath.Join(skillDir, "Scripts", "run.sh"):       "#!/bin/bash",
-		filepath.Join(skillDir, "References", "guide.md"):  "# Guide",
+		filepath.Join(skillDir, "Scripts", "run.sh"):      "#!/bin/bash",
+		filepath.Join(skillDir, "References", "guide.md"): "# Guide",
 	}
 	for path, content := range files {
 		// #nosec G306 - test file permissions
