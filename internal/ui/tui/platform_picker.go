@@ -227,7 +227,7 @@ func (m PlatformPickerModel) View() string {
 	// Show selected source when picking target
 	if m.phase == phaseTargetPlatform {
 		sourceLabel := platformPickerStyles.Highlight.Render(string(m.source))
-		b.WriteString(fmt.Sprintf("  Source: %s\n\n", sourceLabel))
+		fmt.Fprintf(&b, "  Source: %s\n\n", sourceLabel)
 	}
 
 	// Platform list

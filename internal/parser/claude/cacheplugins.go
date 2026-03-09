@@ -58,14 +58,24 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 
 	var skills []model.Skill
 	seenPaths := make(map[string]bool)
+	seenSkillFiles := make(map[string]bool)
 
-	// Iterate over all installed plugins
-	for _, entry := range pluginIndex.byInstallPath {
+	// Iterate over preferred plugin installations (latest version per plugin key)
+	for _, entry := range pluginIndex.entriesForParsing() {
 		// Skip if we've already processed this install path (handles duplicates)
 		if seenPaths[entry.InstallPath] {
 			continue
 		}
 		seenPaths[entry.InstallPath] = true
+
+		// Skip orphaned plugins
+		orphanedMarker := filepath.Join(entry.InstallPath, ".orphaned_at")
+		if _, err := os.Stat(orphanedMarker); err == nil {
+			logging.Debug("skipping orphaned plugin",
+				logging.Path(entry.InstallPath),
+			)
+			continue
+		}
 
 		// Check if the install path exists
 		if _, err := os.Stat(entry.InstallPath); os.IsNotExist(err) {
@@ -85,7 +95,16 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 			continue
 		}
 
-		skills = append(skills, pluginSkills...)
+		for _, skill := range pluginSkills {
+			fileKey := canonicalFileKey(skill.Path)
+			if fileKey != "" && seenSkillFiles[fileKey] {
+				continue
+			}
+			if fileKey != "" {
+				seenSkillFiles[fileKey] = true
+			}
+			skills = append(skills, skill)
+		}
 	}
 
 	logging.Debug("discovered skills from Claude plugin cache",
@@ -97,15 +116,23 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 
 // parsePluginDirectory scans a plugin directory for SKILL.md files and parses them.
 func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]model.Skill, error) {
-	// Find all SKILL.md files in the plugin directory
-	patterns := []string{"**/SKILL.md", "SKILL.md"}
+	// Find all SKILL files in the plugin directory (SKILL.md, skill.md, Skill.md)
+	patterns := []string{
+		"**/SKILL.md", "SKILL.md",
+		"**/skill.md", "skill.md",
+		"**/Skill.md", "Skill.md",
+	}
 	files, err := parser.DiscoverFiles(entry.InstallPath, patterns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover skill files: %w", err)
 	}
 
+	// Deduplicate by same physical file (case-insensitive filesystems can return
+	// multiple path strings for one file when matching SKILL.md, skill.md, Skill.md)
+	files = deduplicateBySameFile(files)
+
 	if len(files) == 0 {
-		logging.Debug("no SKILL.md files found in plugin",
+		logging.Debug("no skill files found in plugin",
 			logging.Path(entry.InstallPath),
 		)
 		return []model.Skill{}, nil
@@ -264,6 +291,44 @@ func (p *CachePluginsParser) Platform() model.Platform {
 // DefaultPath returns the default path for Claude plugin cache.
 func (p *CachePluginsParser) DefaultPath() string {
 	return util.ClaudePluginCachePath()
+}
+
+// deduplicateBySameFile removes paths that refer to the same physical file.
+// Handles case-insensitive filesystems where SKILL.md, skill.md, and Skill.md
+// can resolve to the same file but produce different path strings.
+func deduplicateBySameFile(paths []string) []string {
+	var result []string
+	var resultInfo []os.FileInfo
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		dup := false
+		for _, ri := range resultInfo {
+			if os.SameFile(info, ri) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			result = append(result, p)
+			resultInfo = append(resultInfo, info)
+		}
+	}
+	return result
+}
+
+func canonicalFileKey(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	// Use inode identity where available. Fall back to eval path.
+	if abs, err := filepath.EvalSymlinks(path); err == nil && abs != "" {
+		return filepath.Clean(abs) + "|" + info.Name()
+	}
+	return filepath.Clean(path) + "|" + info.Name()
 }
 
 // AllEntries returns all plugin entries from the index (useful for testing).

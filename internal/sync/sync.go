@@ -123,6 +123,20 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		return result, nil // Nothing to sync
 	}
 
+	// Skip nested skills when a parent directory/symlink skill is also present.
+	// The parent copy already includes nested content, so syncing both creates
+	// duplicate top-level artifacts.
+	filteredSourceSkills, nestedSkipped := filterNestedDirectorySkills(sourceSkills)
+	if len(nestedSkipped) > 0 {
+		result.Skills = append(result.Skills, nestedSkipped...)
+	}
+	sourceSkills = filteredSourceSkills
+
+	if len(sourceSkills) == 0 {
+		logging.Debug("all source skills were skipped as nested duplicates")
+		return result, nil
+	}
+
 	// Get target path
 	targetPath := opts.TargetPath
 	if targetPath == "" {
@@ -208,6 +222,116 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 	}
 
 	return p.Parse()
+}
+
+// filterNestedDirectorySkills removes nested directory/symlink skills that would
+// already be copied as part of a parent directory/symlink skill.
+func filterNestedDirectorySkills(skills []model.Skill) ([]model.Skill, []SkillResult) {
+	if len(skills) < 2 {
+		return skills, nil
+	}
+
+	type rootInfo struct {
+		skill      model.Skill
+		sourceType SourceType
+		rootPath   string
+	}
+
+	roots := make([]rootInfo, 0, len(skills))
+	for _, skill := range skills {
+		sourceType, rootPath := detectSourceType(skill.Path)
+		roots = append(roots, rootInfo{
+			skill:      skill,
+			sourceType: sourceType,
+			rootPath:   filepath.Clean(rootPath),
+		})
+	}
+
+	// Build skip map by index, preferring the deepest matching parent path.
+	skipParent := make(map[int]string)
+	for childIdx := range roots {
+		child := roots[childIdx]
+		bestParentDepth := -1
+		bestParentName := ""
+
+		for parentIdx := range roots {
+			if parentIdx == childIdx {
+				continue
+			}
+
+			parent := roots[parentIdx]
+			if parent.sourceType != SourceTypeDirectory && parent.sourceType != SourceTypeSymlink {
+				continue
+			}
+
+			if !isNestedPath(child.rootPath, parent.rootPath) {
+				continue
+			}
+
+			depth := pathDepth(parent.rootPath)
+			if depth > bestParentDepth {
+				bestParentDepth = depth
+				bestParentName = parent.skill.Name
+			}
+		}
+
+		if bestParentName != "" {
+			skipParent[childIdx] = bestParentName
+		}
+	}
+
+	if len(skipParent) == 0 {
+		return skills, nil
+	}
+
+	filtered := make([]model.Skill, 0, len(skills)-len(skipParent))
+	skipped := make([]SkillResult, 0, len(skipParent))
+	for idx, info := range roots {
+		parentName, shouldSkip := skipParent[idx]
+		if !shouldSkip {
+			filtered = append(filtered, info.skill)
+			continue
+		}
+
+		msg := fmt.Sprintf("nested skill already included via parent directory copy: %s", parentName)
+		skipped = append(skipped, SkillResult{
+			Skill:   info.skill,
+			Action:  ActionSkipped,
+			Message: msg,
+		})
+		logging.Debug("skipping nested skill to avoid duplicate copy",
+			logging.Skill(info.skill.Name),
+			slog.String("parent_skill", parentName),
+			logging.Path(info.rootPath),
+		)
+	}
+
+	return filtered, skipped
+}
+
+func isNestedPath(path, parent string) bool {
+	if path == parent {
+		return false
+	}
+
+	rel, err := filepath.Rel(parent, path)
+	if err != nil {
+		return false
+	}
+	if rel == "." || rel == ".." {
+		return false
+	}
+
+	parentPrefix := ".." + string(os.PathSeparator)
+	return !strings.HasPrefix(rel, parentPrefix)
+}
+
+func pathDepth(path string) int {
+	cleaned := filepath.Clean(path)
+	if cleaned == string(os.PathSeparator) || cleaned == "." {
+		return 0
+	}
+	return strings.Count(cleaned, string(os.PathSeparator))
 }
 
 // processSkill handles syncing a single skill.
@@ -561,6 +685,20 @@ func (s *Synchronizer) SyncWithSkills(
 	// Set default strategy
 	if result.Strategy == "" {
 		result.Strategy = StrategyOverwrite
+	}
+
+	// Skip nested skills when a parent directory/symlink skill is also present.
+	// The parent copy already includes nested content, so syncing both creates
+	// duplicate top-level artifacts.
+	filteredSkills, nestedSkipped := filterNestedDirectorySkills(skills)
+	if len(nestedSkipped) > 0 {
+		result.Skills = append(result.Skills, nestedSkipped...)
+	}
+	skills = filteredSkills
+
+	if len(skills) == 0 {
+		logging.Debug("all pre-parsed skills were skipped as nested duplicates")
+		return result, nil
 	}
 
 	// Get target path based on scope

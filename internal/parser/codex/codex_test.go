@@ -112,6 +112,24 @@ instructions = "Global instructions"
 			},
 			want: 2,
 		},
+		"single flat legacy .md file": {
+			files: map[string]string{
+				"my-skill.md": `---
+name: my-skill
+description: A flat legacy skill
+---
+# My Skill
+
+Content here.`,
+			},
+			want: 1,
+		},
+		"flat .md with filename-derived name": {
+			files: map[string]string{
+				"quick-reference.md": "# Quick Reference\n\nUse this for fast lookup.",
+			},
+			want: 1,
+		},
 	}
 
 	for name, tt := range tests {
@@ -641,6 +659,184 @@ SKILL.md content.`
 	}
 	if !names["skillmd-only"] {
 		t.Error("missing skillmd-only skill")
+	}
+}
+
+func TestParser_Parse_FlatLegacyMd(t *testing.T) {
+	t.Run("flat .md coexists with SKILL.md", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Flat legacy .md at root
+		flatContent := `---
+name: flat-legacy
+description: Flat legacy skill
+---
+Flat content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "flat-legacy.md"), []byte(flatContent), 0o644); err != nil {
+			t.Fatalf("failed to write flat .md: %v", err)
+		}
+
+		// SKILL.md in subdir
+		skillDir := filepath.Join(tmpDir, "my-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill dir: %v", err)
+		}
+		skillMd := `---
+name: my-skill
+description: SKILL.md format
+---
+SKILL content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 2 {
+			t.Fatalf("expected 2 skills, got %d: %v", len(skills), skillNames(skills))
+		}
+
+		names := make(map[string]bool)
+		for _, s := range skills {
+			names[s.Name] = true
+		}
+		if !names["flat-legacy"] {
+			t.Error("missing flat-legacy skill")
+		}
+		if !names["my-skill"] {
+			t.Error("missing my-skill skill")
+		}
+	})
+
+	t.Run("flat .md inside skill dir is excluded", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		skillDir := filepath.Join(tmpDir, "garden")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill dir: %v", err)
+		}
+
+		// SKILL.md makes this a skill directory
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: garden\ndescription: Garden\n---\n"), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		// README.md inside skill dir should be excluded (reference file)
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "README.md"), []byte("# Garden\nReference only."), 0o644); err != nil {
+			t.Fatalf("failed to write README.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Only 1 skill (garden from SKILL.md), README.md should not be parsed
+		if len(skills) != 1 {
+			t.Fatalf("expected 1 skill, got %d: %v", len(skills), skillNames(skills))
+		}
+		if skills[0].Name != "garden" {
+			t.Errorf("skill.Name = %q, want garden", skills[0].Name)
+		}
+	})
+
+	t.Run("AGENTS.md and flat .md both parsed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte("# Agents instructions"), 0o644); err != nil {
+			t.Fatalf("failed to write AGENTS.md: %v", err)
+		}
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "custom.md"), []byte("---\nname: custom\ndescription: Custom flat\n---\nContent"), 0o644); err != nil {
+			t.Fatalf("failed to write custom.md: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		if len(skills) != 2 {
+			t.Fatalf("expected 2 skills, got %d: %v", len(skills), skillNames(skills))
+		}
+		names := make(map[string]bool)
+		for _, s := range skills {
+			names[s.Name] = true
+		}
+		if !names["agents"] {
+			t.Error("missing agents skill")
+		}
+		if !names["custom"] {
+			t.Error("missing custom skill")
+		}
+	})
+}
+
+func TestParser_parseFlatMdFile(t *testing.T) {
+	tests := map[string]struct {
+		content     string
+		filename    string
+		wantName    string
+		wantDesc    string
+		wantContent string
+	}{
+		"with frontmatter": {
+			content:     "---\nname: test-skill\ndescription: Test description\n---\n# Body\n\nContent.",
+			filename:    "arbitrary.md",
+			wantName:    "test-skill",
+			wantDesc:    "Test description",
+			wantContent: "# Body\n\nContent.",
+		},
+		"filename-derived name": {
+			content:     "# No frontmatter\n\nJust content.",
+			filename:    "quick-ref.md",
+			wantName:    "quick-ref",
+			wantDesc:    "",
+			wantContent: "# No frontmatter\n\nJust content.",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			fullPath := filepath.Join(tmpDir, tt.filename)
+			// #nosec G306 - test file permissions
+			if err := os.WriteFile(fullPath, []byte(tt.content), 0o644); err != nil {
+				t.Fatalf("failed to write file: %v", err)
+			}
+
+			p := New(tmpDir)
+			skill, err := p.parseFlatMdFile(fullPath)
+			if err != nil {
+				t.Fatalf("parseFlatMdFile() error = %v", err)
+			}
+
+			if skill.Name != tt.wantName {
+				t.Errorf("Name = %q, want %q", skill.Name, tt.wantName)
+			}
+			if skill.Description != tt.wantDesc {
+				t.Errorf("Description = %q, want %q", skill.Description, tt.wantDesc)
+			}
+			if skill.Content != tt.wantContent {
+				t.Errorf("Content = %q, want %q", skill.Content, tt.wantContent)
+			}
+			if skill.Platform != model.Codex {
+				t.Errorf("Platform = %v, want %v", skill.Platform, model.Codex)
+			}
+		})
 	}
 }
 

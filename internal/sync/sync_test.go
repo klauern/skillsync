@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/klauern/skillsync/internal/model"
+	skillparser "github.com/klauern/skillsync/internal/parser/skills"
 )
 
 func TestNew(t *testing.T) {
@@ -99,6 +100,134 @@ This is the skill content.
 	targetFile := filepath.Join(targetDir, "test-skill.md")
 	if _, err := os.Stat(targetFile); os.IsNotExist(err) {
 		t.Error("Target file was not created")
+	}
+}
+
+func TestSynchronizer_Sync_SkipsNestedSkillDuplicates(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	parentDir := filepath.Join(sourceDir, "cursor")
+	nestedDir := filepath.Join(parentDir, "skills", "cursor-hooks")
+	if err := os.MkdirAll(nestedDir, 0o750); err != nil {
+		t.Fatalf("failed to create nested skill directory: %v", err)
+	}
+
+	parentSkill := `---
+name: cursor
+description: parent skill
+---
+Parent content.`
+	if err := os.WriteFile(filepath.Join(parentDir, "SKILL.md"), []byte(parentSkill), 0o600); err != nil {
+		t.Fatalf("failed to write parent SKILL.md: %v", err)
+	}
+
+	nestedSkill := `---
+name: cursor-hooks
+description: nested skill
+---
+Nested content.`
+	if err := os.WriteFile(filepath.Join(nestedDir, "SKILL.md"), []byte(nestedSkill), 0o600); err != nil {
+		t.Fatalf("failed to write nested SKILL.md: %v", err)
+	}
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	}
+
+	result, err := s.Sync(model.ClaudeCode, model.Codex, opts)
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+
+	var nestedSkipped bool
+	for _, skill := range result.Skills {
+		if skill.Skill.Name == "cursor-hooks" && skill.Action == ActionSkipped {
+			nestedSkipped = true
+			break
+		}
+	}
+	if !nestedSkipped {
+		t.Fatalf("expected nested cursor-hooks skill to be skipped, got results: %+v", result.Skills)
+	}
+
+	copiedNestedPath := filepath.Join(targetDir, "cursor", "skills", "cursor-hooks", "SKILL.md")
+	if _, err := os.Stat(copiedNestedPath); err != nil {
+		t.Fatalf("expected nested skill to exist under parent copy, stat failed: %v", err)
+	}
+
+	duplicatedTopLevelPath := filepath.Join(targetDir, "cursor-hooks")
+	if _, err := os.Stat(duplicatedTopLevelPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no duplicated top-level cursor-hooks directory, got err=%v", err)
+	}
+}
+
+func TestSynchronizer_SyncWithSkills_SkipsNestedSkillDuplicates(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	parentDir := filepath.Join(sourceDir, "cursor")
+	nestedDir := filepath.Join(parentDir, "skills", "cursor-hooks")
+	if err := os.MkdirAll(nestedDir, 0o750); err != nil {
+		t.Fatalf("failed to create nested skill directory: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(parentDir, "SKILL.md"), []byte(`---
+name: cursor
+description: parent skill
+---
+Parent content.`), 0o600); err != nil {
+		t.Fatalf("failed to write parent SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(nestedDir, "SKILL.md"), []byte(`---
+name: cursor-hooks
+description: nested skill
+---
+Nested content.`), 0o600); err != nil {
+		t.Fatalf("failed to write nested SKILL.md: %v", err)
+	}
+
+	skills, err := skillparser.New(sourceDir, model.ClaudeCode).Parse()
+	if err != nil {
+		t.Fatalf("failed to parse skills: %v", err)
+	}
+	if len(skills) != 2 {
+		t.Fatalf("expected 2 parsed skills (parent + nested), got %d", len(skills))
+	}
+
+	result, err := s.SyncWithSkills(skills, model.Codex, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		TargetPath: targetDir,
+	})
+	if err != nil {
+		t.Fatalf("SyncWithSkills failed: %v", err)
+	}
+
+	var nestedSkipped bool
+	for _, skill := range result.Skills {
+		if skill.Skill.Name == "cursor-hooks" && skill.Action == ActionSkipped {
+			nestedSkipped = true
+			break
+		}
+	}
+	if !nestedSkipped {
+		t.Fatalf("expected nested cursor-hooks skill to be skipped, got results: %+v", result.Skills)
+	}
+
+	copiedNestedPath := filepath.Join(targetDir, "cursor", "skills", "cursor-hooks", "SKILL.md")
+	if _, err := os.Stat(copiedNestedPath); err != nil {
+		t.Fatalf("expected nested skill to exist under parent copy, stat failed: %v", err)
+	}
+
+	duplicatedTopLevelPath := filepath.Join(targetDir, "cursor-hooks")
+	if _, err := os.Stat(duplicatedTopLevelPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no duplicated top-level cursor-hooks directory, got err=%v", err)
 	}
 }
 

@@ -386,9 +386,9 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 	// Skill 1 info
 	b.WriteString(compareListStyles.SectionHdr.Render("Skill 1"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Name:        %s\n", c.Skill1.Name))
-	b.WriteString(fmt.Sprintf("  Platform:    %s\n", c.Skill1.Platform))
-	b.WriteString(fmt.Sprintf("  Scope:       %s\n", c.Skill1.DisplayScope()))
+	fmt.Fprintf(&b, "  Name:        %s\n", c.Skill1.Name)
+	fmt.Fprintf(&b, "  Platform:    %s\n", c.Skill1.Platform)
+	fmt.Fprintf(&b, "  Scope:       %s\n", c.Skill1.DisplayScope())
 	if c.Skill1.Description != "" {
 		b.WriteString(wrapLabeledText("  Description: ", c.Skill1.Description, contentWidth))
 		b.WriteString("\n")
@@ -398,9 +398,9 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 	// Skill 2 info
 	b.WriteString(compareListStyles.SectionHdr.Render("Skill 2"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Name:        %s\n", c.Skill2.Name))
-	b.WriteString(fmt.Sprintf("  Platform:    %s\n", c.Skill2.Platform))
-	b.WriteString(fmt.Sprintf("  Scope:       %s\n", c.Skill2.DisplayScope()))
+	fmt.Fprintf(&b, "  Name:        %s\n", c.Skill2.Name)
+	fmt.Fprintf(&b, "  Platform:    %s\n", c.Skill2.Platform)
+	fmt.Fprintf(&b, "  Scope:       %s\n", c.Skill2.DisplayScope())
 	if c.Skill2.Description != "" {
 		b.WriteString(wrapLabeledText("  Description: ", c.Skill2.Description, contentWidth))
 		b.WriteString("\n")
@@ -411,13 +411,13 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 	b.WriteString(compareListStyles.SectionHdr.Render("Similarity Scores"))
 	b.WriteString("\n")
 	if c.NameScore > 0 {
-		b.WriteString(fmt.Sprintf("  Name similarity:    %.1f%%\n", c.NameScore*100))
+		fmt.Fprintf(&b, "  Name similarity:    %.1f%%\n", c.NameScore*100)
 	}
 	if c.ContentScore > 0 {
-		b.WriteString(fmt.Sprintf("  Content similarity: %.1f%%\n", c.ContentScore*100))
+		fmt.Fprintf(&b, "  Content similarity: %.1f%%\n", c.ContentScore*100)
 	}
-	b.WriteString(fmt.Sprintf("  Lines added:        +%d\n", c.LinesAdded))
-	b.WriteString(fmt.Sprintf("  Lines removed:      -%d\n", c.LinesRemoved))
+	fmt.Fprintf(&b, "  Lines added:        +%d\n", c.LinesAdded)
+	fmt.Fprintf(&b, "  Lines removed:      -%d\n", c.LinesRemoved)
 	b.WriteString("\n")
 
 	// Diff hunks
@@ -458,8 +458,8 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 
 		srcLines := strings.Count(c.Skill1.Content, "\n") + 1
 		tgtLines := strings.Count(c.Skill2.Content, "\n") + 1
-		b.WriteString(fmt.Sprintf("  Skill 1: %d lines\n", srcLines))
-		b.WriteString(fmt.Sprintf("  Skill 2: %d lines\n", tgtLines))
+		fmt.Fprintf(&b, "  Skill 1: %d lines\n", srcLines)
+		fmt.Fprintf(&b, "  Skill 2: %d lines\n", tgtLines)
 	}
 
 	return b.String()

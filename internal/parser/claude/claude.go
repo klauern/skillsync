@@ -167,13 +167,11 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 	result := parser.SplitFrontmatter(content)
 
 	// Extract metadata from frontmatter
-	var name, description, trigger string
-	var tools []string
-	metadata := make(map[string]string)
-	skillType := model.SkillTypeSkill
+	fields := frontmatterFields{
+		skillType: model.SkillTypeSkill,
+		metadata:  make(map[string]string),
+	}
 	isCommandPath := isClaudeCommandFile(filePath)
-	hasExplicitName := false
-	commandMetadataHint := false
 
 	if result.HasFrontmatter {
 		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
@@ -181,84 +179,34 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
 		}
 
-		// Extract name
-		if nameVal, ok := fm["name"]; ok {
-			if nameStr, ok := nameVal.(string); ok {
-				name = nameStr
-				hasExplicitName = true
-			}
-		}
-
-		// Extract description
-		if descVal, ok := fm["description"]; ok {
-			if descStr, ok := descVal.(string); ok {
-				description = descStr
-			}
-		}
-
-		// Extract tool allowlist.
-		// Claude command files commonly use `allowed-tools`, while skills use `tools`.
-		tools = extractTools(fm, "tools")
-		if len(tools) == 0 {
-			tools = extractTools(fm, "allowed-tools")
-		}
-		if _, ok := fm["allowed-tools"]; ok {
-			commandMetadataHint = true
-		}
-		if _, ok := fm["argument-hint"]; ok {
-			commandMetadataHint = true
-		}
-		if _, ok := fm["model"]; ok {
-			commandMetadataHint = true
-		}
-
-		// Extract type and trigger (for command/prompt artifacts).
-		if typeStr := extractString(fm, "type"); typeStr != "" {
-			parsedType, err := model.ParseSkillType(typeStr)
-			if err != nil {
-				return model.Skill{}, fmt.Errorf("failed to parse type in %q: %w", filePath, err)
-			}
-			skillType = parsedType
-		}
-		trigger = extractString(fm, "trigger")
-		if trigger != "" {
-			commandMetadataHint = true
-		}
-
-		// Store all other frontmatter fields in metadata
-		for key, val := range fm {
-			if key != "name" && key != "description" && key != "tools" && key != "allowed-tools" && key != "type" && key != "trigger" {
-				if strVal, ok := val.(string); ok {
-					metadata[key] = strVal
-				} else {
-					metadata[key] = fmt.Sprintf("%v", val)
-				}
-			}
+		fields, err = extractFrontmatterFields(fm)
+		if err != nil {
+			return model.Skill{}, fmt.Errorf("failed to parse type in %q: %w", filePath, err)
 		}
 	}
 
 	// If no name in frontmatter, derive from filename
-	if name == "" {
+	if fields.name == "" {
 		base := filepath.Base(filePath)
-		name = base[:len(base)-len(filepath.Ext(base))]
+		fields.name = base[:len(base)-len(filepath.Ext(base))]
 	}
 
 	// Command files default to prompt type and filename-derived slash trigger.
-	commandLike := isCommandPath && (!hasExplicitName || commandMetadataHint || skillType == model.SkillTypePrompt)
+	commandLike := isCommandPath && (!fields.hasExplicitName || fields.commandMetadataHint || fields.skillType == model.SkillTypePrompt)
 	if commandLike {
-		if skillType == model.SkillTypeSkill {
-			skillType = model.SkillTypePrompt
+		if fields.skillType == model.SkillTypeSkill {
+			fields.skillType = model.SkillTypePrompt
 		}
-		if trigger == "" {
+		if fields.trigger == "" {
 			base := filepath.Base(filePath)
 			stem := base[:len(base)-len(filepath.Ext(base))]
-			trigger = "/" + stem
+			fields.trigger = "/" + stem
 		}
 	}
 
 	// Validate skill name
-	if err := parser.ValidateSkillName(name); err != nil {
-		return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
+	if err := parser.ValidateSkillName(fields.name); err != nil {
+		return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", fields.name, filePath, err)
 	}
 
 	// Get file modification time
@@ -272,16 +220,16 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 	// Build and return the skill
 	skill := model.Skill{
-		Name:        name,
-		Description: description,
+		Name:        fields.name,
+		Description: fields.description,
 		Platform:    p.Platform(),
 		Path:        filePath,
-		Tools:       tools,
-		Metadata:    metadata,
+		Tools:       fields.tools,
+		Metadata:    fields.metadata,
 		Content:     normalizedContent,
 		ModifiedAt:  fileInfo.ModTime(),
-		Type:        skillType,
-		Trigger:     trigger,
+		Type:        fields.skillType,
+		Trigger:     fields.trigger,
 	}
 
 	return skill, nil
@@ -290,6 +238,77 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 // Platform returns the platform identifier for Claude Code
 func (p *Parser) Platform() model.Platform {
 	return model.ClaudeCode
+}
+
+// frontmatterFields holds the extracted fields from a skill file's YAML frontmatter.
+type frontmatterFields struct {
+	name                string
+	description         string
+	tools               []string
+	trigger             string
+	skillType           model.SkillType
+	metadata            map[string]string
+	hasExplicitName     bool
+	commandMetadataHint bool
+}
+
+// extractFrontmatterFields parses all relevant fields from a frontmatter map.
+func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
+	f := frontmatterFields{
+		skillType: model.SkillTypeSkill,
+		metadata:  make(map[string]string),
+	}
+
+	// Extract name
+	if nameStr := extractString(fm, "name"); nameStr != "" {
+		f.name = nameStr
+		f.hasExplicitName = true
+	}
+
+	// Extract description
+	f.description = extractString(fm, "description")
+
+	// Extract tool allowlist.
+	// Claude command files commonly use `allowed-tools`, while skills use `tools`.
+	f.tools = extractTools(fm, "tools")
+	if len(f.tools) == 0 {
+		f.tools = extractTools(fm, "allowed-tools")
+	}
+	if _, ok := fm["allowed-tools"]; ok {
+		f.commandMetadataHint = true
+	}
+	if _, ok := fm["argument-hint"]; ok {
+		f.commandMetadataHint = true
+	}
+	if _, ok := fm["model"]; ok {
+		f.commandMetadataHint = true
+	}
+
+	// Extract type and trigger (for command/prompt artifacts).
+	if typeStr := extractString(fm, "type"); typeStr != "" {
+		parsedType, err := model.ParseSkillType(typeStr)
+		if err != nil {
+			return f, err
+		}
+		f.skillType = parsedType
+	}
+	f.trigger = extractString(fm, "trigger")
+	if f.trigger != "" {
+		f.commandMetadataHint = true
+	}
+
+	// Store all other frontmatter fields in metadata
+	for key, val := range fm {
+		if key != "name" && key != "description" && key != "tools" && key != "allowed-tools" && key != "type" && key != "trigger" {
+			if strVal, ok := val.(string); ok {
+				f.metadata[key] = strVal
+			} else {
+				f.metadata[key] = fmt.Sprintf("%v", val)
+			}
+		}
+	}
+
+	return f, nil
 }
 
 func extractString(fm map[string]any, key string) string {

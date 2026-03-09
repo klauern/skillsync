@@ -673,3 +673,201 @@ func TestCachePluginsParser_ParseWithPluginIndex_ScopePreserved(t *testing.T) {
 		t.Errorf("metadata install_scope = %q, want %q", skill.Metadata["install_scope"], "user")
 	}
 }
+
+func TestCachePluginsParser_DiscoverLowercaseSkill(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, "lowercase-plugin")
+	skillPath := filepath.Join(pluginDir, "skill.md")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(skillPath, []byte(`---
+name: lowercase-skill
+description: Discovered via skill.md
+---
+# Content
+`), 0o644); err != nil {
+		t.Fatalf("failed to write skill.md: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "lowercase-plugin@test",
+				PluginName:  "lowercase-plugin",
+				Marketplace: "test",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill from lowercase skill.md, got %d", len(skills))
+	}
+	if skills[0].Name != "lowercase-skill" {
+		t.Errorf("expected skill name 'lowercase-skill', got %q", skills[0].Name)
+	}
+}
+
+func TestCachePluginsParser_SkipsOrphanedPlugins(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, "orphaned-plugin")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+	orphanedMarker := filepath.Join(pluginDir, ".orphaned_at")
+	// #nosec G306 - test file
+	if err := os.WriteFile(orphanedMarker, []byte(""), 0o644); err != nil {
+		t.Fatalf("failed to write .orphaned_at: %v", err)
+	}
+	skillDir := filepath.Join(pluginDir, "skills", "some-skill")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Orphaned\nContent"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "orphaned-plugin@test",
+				PluginName:  "orphaned-plugin",
+				Marketplace: "test",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 0 {
+		t.Errorf("expected 0 skills from orphaned plugin, got %d", len(skills))
+	}
+}
+
+func TestCachePluginsParser_PrefersLatestPluginVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldDir := filepath.Join(tmpDir, "marketplace", "commits", "1.0.0")
+	newDir := filepath.Join(tmpDir, "marketplace", "commits", "1.2.0")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(filepath.Join(oldDir, "skill-old"), 0o755); err != nil {
+		t.Fatalf("failed to create old plugin dir: %v", err)
+	}
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(filepath.Join(newDir, "skill-new"), 0o755); err != nil {
+		t.Fatalf("failed to create new plugin dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(oldDir, "skill-old", "SKILL.md"), []byte("---\nname: skill-old\ndescription: old\n---\ncontent"), 0o644); err != nil {
+		t.Fatalf("failed to write old skill file: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(newDir, "skill-new", "SKILL.md"), []byte("---\nname: skill-new\ndescription: new\n---\ncontent"), 0o644); err != nil {
+		t.Fatalf("failed to write new skill file: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			oldDir: {
+				PluginKey:   "commits@marketplace",
+				PluginName:  "commits",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: oldDir,
+			},
+			newDir: {
+				PluginKey:   "commits@marketplace",
+				PluginName:  "commits",
+				Marketplace: "marketplace",
+				Version:     "1.2.0",
+				InstallPath: newDir,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill from latest plugin version, got %d", len(skills))
+	}
+	if skills[0].Name != "skill-new" {
+		t.Fatalf("expected latest version skill 'skill-new', got %q", skills[0].Name)
+	}
+}
+
+func TestCachePluginsParser_DeduplicatesCrossPlatformPluginEntries(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	realPluginDir := filepath.Join(tmpDir, "marketplace", "shared-plugin", "1.0.0")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(filepath.Join(realPluginDir, "shared-skill"), 0o755); err != nil {
+		t.Fatalf("failed to create real plugin dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(realPluginDir, "shared-skill", "SKILL.md"), []byte("---\nname: shared-skill\ndescription: shared\n---\ncontent"), 0o644); err != nil {
+		t.Fatalf("failed to write shared skill file: %v", err)
+	}
+
+	claudeInstallPath := filepath.Join(tmpDir, "marketplace", "shared-plugin", "1.0.0-claude")
+	cursorInstallPath := filepath.Join(tmpDir, "marketplace", "shared-plugin", "1.0.0-cursor")
+	if err := os.Symlink(realPluginDir, claudeInstallPath); err != nil {
+		t.Fatalf("failed to create claude symlink: %v", err)
+	}
+	if err := os.Symlink(realPluginDir, cursorInstallPath); err != nil {
+		t.Fatalf("failed to create cursor symlink: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			claudeInstallPath: {
+				PluginKey:   "shared-plugin@marketplace",
+				PluginName:  "shared-plugin",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: claudeInstallPath,
+			},
+			cursorInstallPath: {
+				PluginKey:   "shared-plugin@marketplace-cursor",
+				PluginName:  "shared-plugin",
+				Marketplace: "marketplace-cursor",
+				Version:     "1.0.0",
+				InstallPath: cursorInstallPath,
+			},
+		},
+	}
+
+	parser := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := parser.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 deduplicated skill across cross-platform plugin entries, got %d", len(skills))
+	}
+}

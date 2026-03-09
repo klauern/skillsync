@@ -140,11 +140,11 @@ Content`,
 				fullPath := filepath.Join(tmpDir, path)
 				dir := filepath.Dir(fullPath)
 				// #nosec G301 - test directory permissions
-				if err := os.MkdirAll(dir, 0o755); err != nil {
+				if err := os.MkdirAll(dir, 0o750); err != nil {
 					t.Fatalf("failed to create directory %q: %v", dir, err)
 				}
 				// #nosec G306 - test file permissions
-				if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+				if err := os.WriteFile(fullPath, []byte(content), 0o600); err != nil {
 					t.Fatalf("failed to write file %q: %v", fullPath, err)
 				}
 			}
@@ -175,6 +175,48 @@ func TestParser_Parse_NonexistentDirectory(t *testing.T) {
 	}
 }
 
+func TestParser_Parse_DeduplicatesSkillEntrypointVariants(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "dupe-skill")
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	upper := filepath.Join(skillDir, "SKILL.md")
+	lower := filepath.Join(skillDir, "skill.md")
+	if err := os.WriteFile(upper, []byte(`---
+name: preferred-upper
+description: Upper variant
+---
+Upper content`), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(lower, []byte(`---
+name: lower-variant
+description: Lower variant
+---
+Lower content`), 0o600); err != nil {
+		t.Fatalf("failed to write skill.md: %v", err)
+	}
+
+	upperInfo, upperErr := os.Stat(upper)
+	lowerInfo, lowerErr := os.Stat(lower)
+	if upperErr == nil && lowerErr == nil && os.SameFile(upperInfo, lowerInfo) {
+		t.Skip("filesystem is case-insensitive; cannot create distinct SKILL.md and skill.md")
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("expected one deduplicated skill, got %d", len(skills))
+	}
+	if skills[0].Name != "preferred-upper" {
+		t.Fatalf("expected canonical SKILL.md variant to win, got %q", skills[0].Name)
+	}
+}
+
 func TestParser_parseSkillFile_BasicFields(t *testing.T) {
 	tests := map[string]struct {
 		content     string
@@ -197,6 +239,30 @@ This is the content.`,
 			wantDesc:    "A full skill example",
 			wantTools:   []string{"Read", "Write", "Bash"},
 			wantContent: "# Full Skill\n\nThis is the content.",
+		},
+		"allowed-tools array fallback": {
+			content: `---
+name: allowlist-array
+description: Reads allowed-tools arrays
+allowed-tools: [Read, Write, Bash]
+---
+Array content.`,
+			wantName:    "allowlist-array",
+			wantDesc:    "Reads allowed-tools arrays",
+			wantTools:   []string{"Read", "Write", "Bash"},
+			wantContent: "Array content.",
+		},
+		"allowed-tools string fallback": {
+			content: `---
+name: allowlist-string
+description: Reads allowed-tools strings
+allowed-tools: Bash Read Glob
+---
+String content.`,
+			wantName:    "allowlist-string",
+			wantDesc:    "Reads allowed-tools strings",
+			wantTools:   []string{"Bash", "Read", "Glob"},
+			wantContent: "String content.",
 		},
 		"minimal frontmatter": {
 			content: `---
@@ -265,12 +331,12 @@ Content`,
 			tmpDir := t.TempDir()
 			skillDir := filepath.Join(tmpDir, "test-skill")
 			// #nosec G301 - test directory permissions
-			if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			if err := os.MkdirAll(skillDir, 0o750); err != nil {
 				t.Fatalf("failed to create skill directory: %v", err)
 			}
 			filePath := filepath.Join(skillDir, "SKILL.md")
 			// #nosec G306 - test file permissions
-			if err := os.WriteFile(filePath, []byte(tt.content), 0o644); err != nil {
+			if err := os.WriteFile(filePath, []byte(tt.content), 0o600); err != nil {
 				t.Fatalf("failed to write test file: %v", err)
 			}
 
@@ -416,12 +482,12 @@ Content`,
 			tmpDir := t.TempDir()
 			skillDir := filepath.Join(tmpDir, "test-skill")
 			// #nosec G301 - test directory permissions
-			if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			if err := os.MkdirAll(skillDir, 0o750); err != nil {
 				t.Fatalf("failed to create skill directory: %v", err)
 			}
 			filePath := filepath.Join(skillDir, "SKILL.md")
 			// #nosec G306 - test file permissions
-			if err := os.WriteFile(filePath, []byte(tt.content), 0o644); err != nil {
+			if err := os.WriteFile(filePath, []byte(tt.content), 0o600); err != nil {
 				t.Fatalf("failed to write test file: %v", err)
 			}
 
@@ -475,7 +541,7 @@ func TestParser_parseSkillFile_SkillDirectoryStructure(t *testing.T) {
 	}
 	for _, dir := range dirs {
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("failed to create directory %q: %v", dir, err)
 		}
 	}
@@ -487,7 +553,7 @@ description: Skill with directory structure
 ---
 Content here.`
 	// #nosec G306 - test file permissions
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600); err != nil {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
@@ -501,7 +567,7 @@ Content here.`
 	}
 	for path, content := range testFiles {
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("failed to write file %q: %v", path, err)
 		}
 	}
@@ -534,7 +600,7 @@ func TestParser_parseSkillFile_CombineFrontmatterAndDirectory(t *testing.T) {
 
 	// Create directories
 	// #nosec G301 - test directory permissions
-	if err := os.MkdirAll(filepath.Join(skillDir, "scripts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(skillDir, "scripts"), 0o750); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
 
@@ -547,13 +613,13 @@ scripts:
 ---
 Content here.`
 	// #nosec G306 - test file permissions
-	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600); err != nil {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
 	// Create script in directory
 	// #nosec G306 - test file permissions
-	if err := os.WriteFile(filepath.Join(skillDir, "scripts", "local.sh"), []byte("#!/bin/bash"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(skillDir, "scripts", "local.sh"), []byte("#!/bin/bash"), 0o600); err != nil {
 		t.Fatalf("failed to write script: %v", err)
 	}
 
@@ -566,6 +632,207 @@ Content here.`
 	// Should have both frontmatter-defined and directory-discovered scripts
 	if len(skill.Scripts) < 2 {
 		t.Errorf("Scripts count = %d, want at least 2 (frontmatter + directory)", len(skill.Scripts))
+	}
+}
+
+func TestParser_parseSkillFile_NestedSubdirsDiscovered(t *testing.T) {
+	// Verifies listFilesRecursive discovers nested files (e.g. references/docs/guide.md)
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "nested-skill")
+
+	dirs := []string{
+		skillDir,
+		filepath.Join(skillDir, "scripts"),
+		filepath.Join(skillDir, "references", "docs"),
+		filepath.Join(skillDir, "assets", "templates"),
+		filepath.Join(skillDir, "assets", "data"),
+	}
+	for _, dir := range dirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create directory %q: %v", dir, err)
+		}
+	}
+
+	skillContent := `---
+name: nested-skill
+description: Skill with nested subdir structure
+---
+Content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(skillDir, "scripts", "init.sh"):                 "#!/bin/bash",
+		filepath.Join(skillDir, "references", "docs", "guide.md"):     "# Guide",
+		filepath.Join(skillDir, "assets", "templates", "config.yaml"): "key: value",
+		filepath.Join(skillDir, "assets", "data", "schema.json"):      "{}",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skill, err := p.parseSkillFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	wantScripts := []string{"scripts/init.sh"}
+	wantReferences := []string{"references/docs/guide.md"}
+	wantAssets := []string{"assets/templates/config.yaml", "assets/data/schema.json"}
+
+	for _, want := range wantScripts {
+		if !contains(skill.Scripts, want) {
+			t.Errorf("Scripts missing %q, got %v", want, skill.Scripts)
+		}
+	}
+	for _, want := range wantReferences {
+		if !contains(skill.References, want) {
+			t.Errorf("References missing %q, got %v", want, skill.References)
+		}
+	}
+	for _, want := range wantAssets {
+		if !contains(skill.Assets, want) {
+			t.Errorf("Assets missing %q, got %v", want, skill.Assets)
+		}
+	}
+}
+
+func TestParser_parseSkillFile_TestdataFullAgentSkill(t *testing.T) {
+	// Integration test: parses real testdata fixture and verifies all subdirs discovered
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "skills", "claude", "full-agent-skill")
+	skillPath := filepath.Join(fixtureDir, "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Skipf("testdata fixture not found: %v", err)
+	}
+
+	p := New(filepath.Join("..", "..", "..", "testdata", "skills", "claude"), model.ClaudeCode)
+	skill, err := p.parseSkillFile(skillPath)
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	// scripts/
+	if !contains(skill.Scripts, "scripts/setup.sh") || !contains(skill.Scripts, "scripts/validate.sh") {
+		t.Errorf("Scripts missing setup.sh or validate.sh, got %v", skill.Scripts)
+	}
+	// references/ (nested docs/)
+	if !contains(skill.References, "references/docs/guide.md") {
+		t.Errorf("References missing references/docs/guide.md, got %v", skill.References)
+	}
+	// assets/ (nested templates/, data/)
+	if !contains(skill.Assets, "assets/templates/config.yaml") || !contains(skill.Assets, "assets/data/schema.json") {
+		t.Errorf("Assets missing nested files, got %v", skill.Assets)
+	}
+	// examples/, resources/, templates/, patterns/ → References
+	wantGenericRefs := []string{
+		"examples/quickstart.md",
+		"resources/data-source.txt",
+		"templates/prompt-template.md",
+		"patterns/naming.md",
+	}
+	for _, want := range wantGenericRefs {
+		if !contains(skill.References, want) {
+			t.Errorf("References missing %q (examples/resources/templates/patterns), got %v", want, skill.References)
+		}
+	}
+}
+
+func TestParser_parseSkillFile_TestdataCodexStructured(t *testing.T) {
+	// Integration test: parses codex-structured fixture (scripts, assets, templates, patterns)
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "skills", "codex", "codex-structured")
+	skillPath := filepath.Join(fixtureDir, "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Skipf("testdata fixture not found: %v", err)
+	}
+
+	p := New(filepath.Join("..", "..", "..", "testdata", "skills", "codex"), model.Codex)
+	skill, err := p.parseSkillFile(skillPath)
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	if !contains(skill.Scripts, "scripts/init.sh") {
+		t.Errorf("Scripts missing scripts/init.sh, got %v", skill.Scripts)
+	}
+	if !contains(skill.Assets, "assets/config.toml") {
+		t.Errorf("Assets missing assets/config.toml, got %v", skill.Assets)
+	}
+	// templates/ and patterns/ → References
+	if !contains(skill.References, "templates/command-template.md") || !contains(skill.References, "patterns/response-style.md") {
+		t.Errorf("References missing templates/patterns, got %v", skill.References)
+	}
+}
+
+func TestParser_parseSkillFile_DiscoversAdditionalSubdirsAsReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "rich-skill")
+
+	subdirs := []string{
+		"examples",
+		"resources",
+		"templates",
+		"patterns",
+	}
+	for _, subdir := range subdirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(filepath.Join(skillDir, subdir), 0o750); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+	}
+
+	skillContent := `---
+name: rich-skill
+description: Skill with additional supporting directories
+---
+Content here.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	testFiles := map[string]string{
+		filepath.Join(skillDir, "examples", "usage.md"):      "# Usage",
+		filepath.Join(skillDir, "resources", "dataset.txt"):  "data",
+		filepath.Join(skillDir, "templates", "sample.tmpl"):  "template",
+		filepath.Join(skillDir, "patterns", "workflow.md"):   "# Workflow",
+		filepath.Join(skillDir, "references", "ignored.md"):  "# Not created",
+		filepath.Join(skillDir, "assets", "also-ignored.md"): "# Not created",
+	}
+	for path, content := range testFiles {
+		parent := filepath.Dir(path)
+		if filepath.Base(parent) == "references" || filepath.Base(parent) == "assets" {
+			continue
+		}
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skill, err := p.parseSkillFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	wantRefs := []string{
+		filepath.ToSlash(filepath.Join("examples", "usage.md")),
+		filepath.ToSlash(filepath.Join("resources", "dataset.txt")),
+		filepath.ToSlash(filepath.Join("templates", "sample.tmpl")),
+		filepath.ToSlash(filepath.Join("patterns", "workflow.md")),
+	}
+
+	for _, want := range wantRefs {
+		if !contains(skill.References, want) {
+			t.Errorf("References missing %q, got %v", want, skill.References)
+		}
 	}
 }
 
@@ -582,12 +849,12 @@ Content`
 	tmpDir := t.TempDir()
 	skillDir := filepath.Join(tmpDir, "metadata-skill")
 	// #nosec G301 - test directory permissions
-	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
 	filePath := filepath.Join(skillDir, "SKILL.md")
 	// #nosec G306 - test file permissions
-	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -614,7 +881,7 @@ Content`
 
 	// Verify that standard fields are NOT in metadata
 	standardFields := []string{
-		"name", "description", "tools", "scope", "disable-model-invocation",
+		"name", "description", "tools", "allowed-tools", "scope", "disable-model-invocation",
 		"license", "compatibility", "scripts", "references", "assets",
 	}
 	for _, field := range standardFields {
@@ -628,7 +895,7 @@ func TestParseSkillFile_ConvenienceFunction(t *testing.T) {
 	tmpDir := t.TempDir()
 	skillDir := filepath.Join(tmpDir, "test-skill")
 	// #nosec G301 - test directory permissions
-	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
 
@@ -639,7 +906,7 @@ description: Test description
 Content`
 	filePath := filepath.Join(skillDir, "SKILL.md")
 	// #nosec G306 - test file permissions
-	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -663,6 +930,7 @@ func TestParseSkillContent(t *testing.T) {
 		wantName    string
 		wantDesc    string
 		wantLicense string
+		wantTools   []string
 		wantErr     bool
 	}{
 		"basic content": {
@@ -676,6 +944,18 @@ Body content`),
 			wantName:    "content-skill",
 			wantDesc:    "Parsed from content",
 			wantLicense: "MIT",
+		},
+		"allowed-tools in content": {
+			content: []byte(`---
+name: content-tools
+description: Parses allowed-tools too
+allowed-tools: Read, Write, Bash
+---
+Body content`),
+			name:      "fallback-name",
+			wantName:  "content-tools",
+			wantDesc:  "Parses allowed-tools too",
+			wantTools: []string{"Read", "Write", "Bash"},
 		},
 		"use provided name when not in frontmatter": {
 			content: []byte(`---
@@ -725,6 +1005,9 @@ Body`),
 			}
 			if skill.License != tt.wantLicense {
 				t.Errorf("License = %q, want %q", skill.License, tt.wantLicense)
+			}
+			if !equalSlices(skill.Tools, tt.wantTools) {
+				t.Errorf("Tools = %v, want %v", skill.Tools, tt.wantTools)
 			}
 		})
 	}
@@ -787,18 +1070,18 @@ func TestHasSkillDirectory(t *testing.T) {
 	// Create a valid skill directory
 	validDir := filepath.Join(tmpDir, "valid-skill")
 	// #nosec G301 - test directory permissions
-	if err := os.MkdirAll(validDir, 0o755); err != nil {
+	if err := os.MkdirAll(validDir, 0o750); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
 	// #nosec G306 - test file permissions
-	if err := os.WriteFile(filepath.Join(validDir, "SKILL.md"), []byte("content"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(validDir, "SKILL.md"), []byte("content"), 0o600); err != nil {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
 	// Create a directory without SKILL.md
 	invalidDir := filepath.Join(tmpDir, "invalid-skill")
 	// #nosec G301 - test directory permissions
-	if err := os.MkdirAll(invalidDir, 0o755); err != nil {
+	if err := os.MkdirAll(invalidDir, 0o750); err != nil {
 		t.Fatalf("failed to create directory: %v", err)
 	}
 
@@ -830,11 +1113,11 @@ func TestListSkillDirectories(t *testing.T) {
 	}
 	for _, dir := range skillDirs {
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("content"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("content"), 0o600); err != nil {
 			t.Fatalf("failed to write SKILL.md: %v", err)
 		}
 	}
@@ -862,7 +1145,7 @@ func TestGetSkillDirectoryContents(t *testing.T) {
 	}
 	for _, dir := range dirs {
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
 	}
@@ -876,7 +1159,7 @@ func TestGetSkillDirectoryContents(t *testing.T) {
 	}
 	for path, content := range files {
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
 	}
@@ -897,6 +1180,40 @@ func TestGetSkillDirectoryContents(t *testing.T) {
 	}
 	if len(contents.Assets) != 1 {
 		t.Errorf("Assets count = %d, want 1", len(contents.Assets))
+	}
+}
+
+func TestGetSkillDirectoryContents_RecursiveSubdirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "test-skill")
+	for _, dir := range []string{
+		filepath.Join(skillDir, "references", "docs"),
+		filepath.Join(skillDir, "assets", "templates"),
+		filepath.Join(skillDir, "scripts"),
+	} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create directory: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("content"), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "references", "docs", "guide.md"), []byte("guide"), 0o600); err != nil {
+		t.Fatalf("failed to write nested reference: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "assets", "templates", "config.yaml"), []byte("k: v"), 0o600); err != nil {
+		t.Fatalf("failed to write nested asset: %v", err)
+	}
+
+	contents, err := GetSkillDirectoryContents(skillDir)
+	if err != nil {
+		t.Fatalf("GetSkillDirectoryContents() error = %v", err)
+	}
+	if !contains(contents.References, filepath.ToSlash(filepath.Join("docs", "guide.md"))) {
+		t.Fatalf("expected recursive reference file, got %v", contents.References)
+	}
+	if !contains(contents.Assets, filepath.ToSlash(filepath.Join("templates", "config.yaml"))) {
+		t.Fatalf("expected recursive asset file, got %v", contents.Assets)
 	}
 }
 
@@ -961,6 +1278,15 @@ func equalSlices(a, b []string) bool {
 	return true
 }
 
+func contains(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
 // TestCaseInsensitiveSkillMd tests case-insensitive SKILL.md detection
 func TestCaseInsensitiveSkillMd(t *testing.T) {
 	t.Run("lowercase skill.md is discovered", func(t *testing.T) {
@@ -969,7 +1295,7 @@ func TestCaseInsensitiveSkillMd(t *testing.T) {
 		// Create a skill directory with lowercase skill.md
 		skillDir := filepath.Join(tmpDir, "lowercase-skill")
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		if err := os.MkdirAll(skillDir, 0o750); err != nil {
 			t.Fatalf("failed to create skill directory: %v", err)
 		}
 
@@ -979,7 +1305,7 @@ description: A skill with lowercase skill.md
 ---
 Content here.`
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte(skillMd), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte(skillMd), 0o600); err != nil {
 			t.Fatalf("failed to write skill.md: %v", err)
 		}
 
@@ -1002,13 +1328,13 @@ Content here.`
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "test-skill")
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		if err := os.MkdirAll(skillDir, 0o750); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
 
 		// Create lowercase skill.md
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("content"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("content"), 0o600); err != nil {
 			t.Fatalf("failed to write skill.md: %v", err)
 		}
 
@@ -1023,22 +1349,22 @@ Content here.`
 		// Create skill with lowercase
 		lowerDir := filepath.Join(tmpDir, "lower-skill")
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(lowerDir, 0o755); err != nil {
+		if err := os.MkdirAll(lowerDir, 0o750); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(filepath.Join(lowerDir, "skill.md"), []byte("content"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(lowerDir, "skill.md"), []byte("content"), 0o600); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
 
 		// Create skill with uppercase
 		upperDir := filepath.Join(tmpDir, "upper-skill")
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(upperDir, 0o755); err != nil {
+		if err := os.MkdirAll(upperDir, 0o750); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(filepath.Join(upperDir, "SKILL.md"), []byte("content"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(upperDir, "SKILL.md"), []byte("content"), 0o600); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
 
@@ -1056,13 +1382,13 @@ Content here.`
 		tmpDir := t.TempDir()
 		skillDir := filepath.Join(tmpDir, "test-skill")
 		// #nosec G301 - test directory permissions
-		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		if err := os.MkdirAll(skillDir, 0o750); err != nil {
 			t.Fatalf("failed to create directory: %v", err)
 		}
 
 		// Create lowercase skill.md
 		// #nosec G306 - test file permissions
-		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("content"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte("content"), 0o600); err != nil {
 			t.Fatalf("failed to write skill.md: %v", err)
 		}
 
@@ -1081,4 +1407,119 @@ Content here.`
 			}
 		}
 	})
+}
+
+func TestDetectSkillDirectoryStructure_CaseInsensitive(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "case-skill")
+
+	// Create capitalized subdirectories
+	dirs := []string{
+		skillDir,
+		filepath.Join(skillDir, "Scripts"),
+		filepath.Join(skillDir, "Assets"),
+	}
+	for _, dir := range dirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create directory %q: %v", dir, err)
+		}
+	}
+
+	skillContent := `---
+name: case-skill
+description: Skill with capitalized directory names
+---
+Content.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(skillDir, "Scripts", "setup.sh"):   "#!/bin/bash",
+		filepath.Join(skillDir, "Assets", "config.yaml"): "key: value",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	p := New(tmpDir, model.ClaudeCode)
+	skill, err := p.parseSkillFile(filepath.Join(skillDir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	// Scripts/ should be detected as scripts
+	foundScript := false
+	for _, s := range skill.Scripts {
+		if filepath.Base(s) == "setup.sh" {
+			foundScript = true
+			break
+		}
+	}
+	if !foundScript {
+		t.Errorf("Scripts not detected from capitalized 'Scripts/' dir, got: %v", skill.Scripts)
+	}
+
+	// Assets/ should be detected as assets
+	foundAsset := false
+	for _, a := range skill.Assets {
+		if filepath.Base(a) == "config.yaml" {
+			foundAsset = true
+			break
+		}
+	}
+	if !foundAsset {
+		t.Errorf("Assets not detected from capitalized 'Assets/' dir, got: %v", skill.Assets)
+	}
+}
+
+func TestGetSkillDirectoryContents_CaseInsensitive(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "case-contents-skill")
+
+	// Create capitalized subdirectories
+	dirs := []string{
+		skillDir,
+		filepath.Join(skillDir, "Scripts"),
+		filepath.Join(skillDir, "References"),
+	}
+	for _, dir := range dirs {
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create directory %q: %v", dir, err)
+		}
+	}
+
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# Skill"), 0o600); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(skillDir, "Scripts", "run.sh"):      "#!/bin/bash",
+		filepath.Join(skillDir, "References", "guide.md"): "# Guide",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("failed to write file %q: %v", path, err)
+		}
+	}
+
+	contents, err := GetSkillDirectoryContents(skillDir)
+	if err != nil {
+		t.Fatalf("GetSkillDirectoryContents() error = %v", err)
+	}
+
+	if len(contents.Scripts) != 1 {
+		t.Errorf("Scripts count = %d, want 1; got: %v", len(contents.Scripts), contents.Scripts)
+	}
+	if len(contents.References) != 1 {
+		t.Errorf("References count = %d, want 1; got: %v", len(contents.References), contents.References)
+	}
 }

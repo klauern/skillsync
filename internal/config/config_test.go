@@ -474,15 +474,21 @@ func TestDefaultSkillsPaths(t *testing.T) {
 		t.Errorf("expected fourth Claude Code path to be '~/.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[3])
 	}
 
-	// Check Cursor defaults
-	if len(cfg.Platforms.Cursor.SkillsPaths) != 2 {
-		t.Errorf("expected 2 Cursor skills paths, got %d", len(cfg.Platforms.Cursor.SkillsPaths))
+	// Check Cursor defaults (include commands for discoverability)
+	if len(cfg.Platforms.Cursor.SkillsPaths) != 4 {
+		t.Errorf("expected 4 Cursor skills paths, got %d", len(cfg.Platforms.Cursor.SkillsPaths))
 	}
-	if cfg.Platforms.Cursor.SkillsPaths[0] != ".cursor/skills" {
-		t.Errorf("expected first Cursor path to be '.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[0])
+	if cfg.Platforms.Cursor.SkillsPaths[0] != ".cursor/commands" {
+		t.Errorf("expected first Cursor path to be '.cursor/commands', got %q", cfg.Platforms.Cursor.SkillsPaths[0])
 	}
-	if cfg.Platforms.Cursor.SkillsPaths[1] != "~/.cursor/skills" {
-		t.Errorf("expected second Cursor path to be '~/.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[1])
+	if cfg.Platforms.Cursor.SkillsPaths[1] != ".cursor/skills" {
+		t.Errorf("expected second Cursor path to be '.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[1])
+	}
+	if cfg.Platforms.Cursor.SkillsPaths[2] != "~/.cursor/commands" {
+		t.Errorf("expected third Cursor path to be '~/.cursor/commands', got %q", cfg.Platforms.Cursor.SkillsPaths[2])
+	}
+	if cfg.Platforms.Cursor.SkillsPaths[3] != "~/.cursor/skills" {
+		t.Errorf("expected fourth Cursor path to be '~/.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[3])
 	}
 
 	// Check Codex defaults (3 paths: project, user, admin)
@@ -497,6 +503,29 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 	if cfg.Platforms.Codex.SkillsPaths[2] != "/etc/codex/skills" {
 		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
+	}
+}
+
+func TestDefaultCursorPathsIncludeCommands(t *testing.T) {
+	// Batch 1C: Cursor command artifacts must be discoverable by default
+	cfg := Default()
+	cursorPaths := cfg.Platforms.Cursor.SkillsPaths
+
+	hasProjectCommands := false
+	hasUserCommands := false
+	for _, p := range cursorPaths {
+		if p == ".cursor/commands" {
+			hasProjectCommands = true
+		}
+		if p == "~/.cursor/commands" {
+			hasUserCommands = true
+		}
+	}
+	if !hasProjectCommands {
+		t.Error("default Cursor paths must include .cursor/commands for project command discoverability")
+	}
+	if !hasUserCommands {
+		t.Error("default Cursor paths must include ~/.cursor/commands for user command discoverability")
 	}
 }
 

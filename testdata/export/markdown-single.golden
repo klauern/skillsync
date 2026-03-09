@@ -9,6 +9,14 @@ Total: 1 skill(s)
 | Property | Value |
 |----------|-------|
 | Platform | codex |
+| Type | prompt |
+| Trigger | /markdown-skill |
+| Scope | repo |
+| License | MIT |
+| Compatibility | codex: >=1.0.0 |
+| Scripts | scripts/setup.sh |
+| References | references/guide.md |
+| Assets | assets/config.yaml |
 | Path | `markdown-skill.md` |
 | Tools | read, write, edit |
 | Modified | 2024-06-15 10:30:00 |

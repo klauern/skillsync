@@ -510,9 +510,9 @@ func (m ConflictListModel) buildDetailContent() string {
 	// Conflict summary
 	b.WriteString(conflictStyles.SectionTitle.Render("Conflict Details"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Skill: %s\n", c.SkillName))
-	b.WriteString(fmt.Sprintf("  Type:  %s\n", c.Type))
-	b.WriteString(fmt.Sprintf("  %s\n", c.DiffSummary()))
+	fmt.Fprintf(&b, "  Skill: %s\n", c.SkillName)
+	fmt.Fprintf(&b, "  Type:  %s\n", c.Type)
+	fmt.Fprintf(&b, "  %s\n", c.DiffSummary())
 
 	// Current resolution
 	if res, ok := m.resolutions[c.SkillName]; ok {

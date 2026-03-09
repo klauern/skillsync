@@ -221,6 +221,56 @@ func TestLoadPluginIndex_NonexistentFile(t *testing.T) {
 	}
 }
 
+func TestLoadPluginIndex_PrefersLatestVersionPerPlugin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	pluginsDir := filepath.Join(home, ".claude", "plugins")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		t.Fatalf("failed to create plugins dir: %v", err)
+	}
+
+	manifest := `{
+  "version": 1,
+  "plugins": {
+    "commits@klauern-skills": [
+      {
+        "scope": "user",
+        "installPath": "/tmp/cache/klauern-skills/commits/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2024-01-01T00:00:00Z",
+        "lastUpdated": "2024-01-01T00:00:00Z"
+      },
+      {
+        "scope": "user",
+        "installPath": "/tmp/cache/klauern-skills/commits/1.2.0",
+        "version": "1.2.0",
+        "installedAt": "2024-01-02T00:00:00Z",
+        "lastUpdated": "2024-01-02T00:00:00Z"
+      }
+    ]
+  }
+}`
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(pluginsDir, "installed_plugins.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("failed to write installed_plugins.json: %v", err)
+	}
+
+	index := LoadPluginIndex()
+	if index == nil {
+		t.Fatal("expected non-nil plugin index")
+	}
+
+	entries := index.entriesForParsing()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 latest entry for parsing, got %d", len(entries))
+	}
+	if entries[0].Version != "1.2.0" {
+		t.Fatalf("expected latest version 1.2.0, got %q", entries[0].Version)
+	}
+}
+
 func TestDetectPluginSource_CacheSymlink(t *testing.T) {
 	// Create a mock plugin cache structure
 	tmpDir := t.TempDir()
@@ -479,5 +529,98 @@ func TestPluginIndexEntry_ScopeAndEnabled(t *testing.T) {
 	entry.Scope = "project"
 	if entry.Scope != "project" {
 		t.Errorf("Scope = %q, want %q", entry.Scope, "project")
+	}
+}
+
+func TestIsVersionNewer(t *testing.T) {
+	tests := map[string]struct {
+		candidate string
+		current   string
+		want      bool
+	}{
+		"higher patch": {
+			candidate: "1.0.1",
+			current:   "1.0.0",
+			want:      true,
+		},
+		"lower patch": {
+			candidate: "1.0.0",
+			current:   "1.0.1",
+			want:      false,
+		},
+		"release over prerelease": {
+			candidate: "1.2.0",
+			current:   "1.2.0-beta",
+			want:      true,
+		},
+		"prerelease under release": {
+			candidate: "1.2.0-beta",
+			current:   "1.2.0",
+			want:      false,
+		},
+		"lexical fallback for non-semver": {
+			candidate: "zeta",
+			current:   "alpha",
+			want:      true,
+		},
+		"semver preferred over non-semver": {
+			candidate: "1.0.0",
+			current:   "abc",
+			want:      true,
+		},
+		"non-semver not preferred over semver": {
+			candidate: "abc",
+			current:   "1.0.0",
+			want:      false,
+		},
+		"numeric prerelease: beta.10 > beta.2": {
+			candidate: "1.0.0-beta.10",
+			current:   "1.0.0-beta.2",
+			want:      true,
+		},
+		"numeric prerelease: beta.2 < beta.10": {
+			candidate: "1.0.0-beta.2",
+			current:   "1.0.0-beta.10",
+			want:      false,
+		},
+		"numeric vs alpha prerelease: numeric lower precedence": {
+			candidate: "1.0.0-1",
+			current:   "1.0.0-alpha",
+			want:      false,
+		},
+		"alpha vs numeric prerelease: alpha higher precedence": {
+			candidate: "1.0.0-alpha",
+			current:   "1.0.0-1",
+			want:      true,
+		},
+		"more prerelease identifiers win": {
+			candidate: "1.0.0-alpha.1.2",
+			current:   "1.0.0-alpha.1",
+			want:      true,
+		},
+		"build metadata ignored: same version": {
+			candidate: "1.0.0+build.1",
+			current:   "1.0.0+build.2",
+			want:      false,
+		},
+		"build metadata stripped: higher patch wins": {
+			candidate: "1.0.1+build",
+			current:   "1.0.0+build",
+			want:      true,
+		},
+		"prerelease with build metadata": {
+			candidate: "1.0.0-beta+build",
+			current:   "1.0.0-alpha+build",
+			want:      true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := isVersionNewer(tt.candidate, tt.current)
+			if got != tt.want {
+				t.Fatalf("isVersionNewer(%q, %q) = %v, want %v", tt.candidate, tt.current, got, tt.want)
+			}
+		})
 	}
 }

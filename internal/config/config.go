@@ -86,8 +86,10 @@ func Default() *Config {
 			},
 			Cursor: PlatformConfig{
 				SkillsPaths: []string{
-					".cursor/skills",   // Project (relative)
-					"~/.cursor/skills", // User (absolute)
+					".cursor/commands",   // Project slash commands (relative)
+					".cursor/skills",     // Project skills (relative)
+					"~/.cursor/commands", // User slash commands (absolute)
+					"~/.cursor/skills",   // User skills (absolute)
 				},
 			},
 			Codex: PlatformConfig{

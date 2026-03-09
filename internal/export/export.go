@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -122,23 +123,41 @@ func (e *Exporter) filterByPlatform(skills []model.Skill) []model.Skill {
 
 // exportSkill is an internal representation for export.
 type exportSkill struct {
-	Name        string            `json:"name" yaml:"name"`
-	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Platform    string            `json:"platform" yaml:"platform"`
-	Path        string            `json:"path,omitempty" yaml:"path,omitempty"`
-	Tools       []string          `json:"tools,omitempty" yaml:"tools,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
-	Content     string            `json:"content" yaml:"content"`
-	ModifiedAt  string            `json:"modified_at,omitempty" yaml:"modified_at,omitempty"`
+	Name                   string            `json:"name" yaml:"name"`
+	Description            string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Platform               string            `json:"platform" yaml:"platform"`
+	Path                   string            `json:"path,omitempty" yaml:"path,omitempty"`
+	Tools                  []string          `json:"tools,omitempty" yaml:"tools,omitempty"`
+	Metadata               map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	Content                string            `json:"content" yaml:"content"`
+	ModifiedAt             string            `json:"modified_at,omitempty" yaml:"modified_at,omitempty"`
+	Type                   string            `json:"type,omitempty" yaml:"type,omitempty"`
+	Trigger                string            `json:"trigger,omitempty" yaml:"trigger,omitempty"`
+	Scope                  string            `json:"scope,omitempty" yaml:"scope,omitempty"`
+	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty" yaml:"disable_model_invocation,omitempty"`
+	License                string            `json:"license,omitempty" yaml:"license,omitempty"`
+	Compatibility          map[string]string `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
+	Scripts                []string          `json:"scripts,omitempty" yaml:"scripts,omitempty"`
+	References             []string          `json:"references,omitempty" yaml:"references,omitempty"`
+	Assets                 []string          `json:"assets,omitempty" yaml:"assets,omitempty"`
 }
 
 // toExportSkill converts a model.Skill to exportSkill.
 func (e *Exporter) toExportSkill(skill model.Skill) exportSkill {
 	es := exportSkill{
-		Name:        skill.Name,
-		Description: skill.Description,
-		Platform:    string(skill.Platform),
-		Content:     skill.Content,
+		Name:                   skill.Name,
+		Description:            skill.Description,
+		Platform:               string(skill.Platform),
+		Content:                skill.Content,
+		Type:                   string(skill.Type),
+		Trigger:                skill.Trigger,
+		Scope:                  string(skill.Scope),
+		DisableModelInvocation: skill.DisableModelInvocation,
+		License:                skill.License,
+		Compatibility:          skill.Compatibility,
+		Scripts:                skill.Scripts,
+		References:             skill.References,
+		Assets:                 skill.Assets,
 	}
 
 	if e.opts.IncludeMetadata {
@@ -190,7 +209,7 @@ func (e *Exporter) exportMarkdown(skills []model.Skill, w io.Writer) error {
 	var sb strings.Builder
 
 	sb.WriteString("# Exported Skills\n\n")
-	sb.WriteString(fmt.Sprintf("Total: %d skill(s)\n\n", len(skills)))
+	_, _ = fmt.Fprintf(&sb, "Total: %d skill(s)\n\n", len(skills))
 
 	for i, skill := range skills {
 		if i > 0 {
@@ -208,27 +227,64 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 	var sb strings.Builder
 
 	// Title
-	sb.WriteString(fmt.Sprintf("## %s\n\n", skill.Name))
+	_, _ = fmt.Fprintf(&sb, "## %s\n\n", skill.Name)
 
 	// Description
 	if skill.Description != "" {
-		sb.WriteString(fmt.Sprintf("*%s*\n\n", skill.Description))
+		_, _ = fmt.Fprintf(&sb, "*%s*\n\n", skill.Description)
 	}
 
 	// Metadata table
 	sb.WriteString("| Property | Value |\n")
 	sb.WriteString("|----------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Platform | %s |\n", skill.Platform))
+	fmt.Fprintf(&sb, "| Platform | %s |\n", skill.Platform)
+
+	if skill.Type != "" {
+		fmt.Fprintf(&sb, "| Type | %s |\n", skill.Type)
+	}
+	if skill.Trigger != "" {
+		fmt.Fprintf(&sb, "| Trigger | %s |\n", skill.Trigger)
+	}
+	if skill.Scope != "" {
+		fmt.Fprintf(&sb, "| Scope | %s |\n", skill.Scope)
+	}
+	if skill.DisableModelInvocation {
+		sb.WriteString("| Disable Model Invocation | true |\n")
+	}
+	if skill.License != "" {
+		fmt.Fprintf(&sb, "| License | %s |\n", skill.License)
+	}
+	if len(skill.Compatibility) > 0 {
+		keys := make([]string, 0, len(skill.Compatibility))
+		for k := range skill.Compatibility {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var parts []string
+		for _, k := range keys {
+			parts = append(parts, k+": "+skill.Compatibility[k])
+		}
+		fmt.Fprintf(&sb, "| Compatibility | %s |\n", strings.Join(parts, ", "))
+	}
+	if len(skill.Scripts) > 0 {
+		fmt.Fprintf(&sb, "| Scripts | %s |\n", strings.Join(skill.Scripts, ", "))
+	}
+	if len(skill.References) > 0 {
+		fmt.Fprintf(&sb, "| References | %s |\n", strings.Join(skill.References, ", "))
+	}
+	if len(skill.Assets) > 0 {
+		fmt.Fprintf(&sb, "| Assets | %s |\n", strings.Join(skill.Assets, ", "))
+	}
 
 	if e.opts.IncludeMetadata {
 		if skill.Path != "" {
-			sb.WriteString(fmt.Sprintf("| Path | `%s` |\n", skill.Path))
+			fmt.Fprintf(&sb, "| Path | `%s` |\n", skill.Path)
 		}
 		if len(skill.Tools) > 0 {
-			sb.WriteString(fmt.Sprintf("| Tools | %s |\n", strings.Join(skill.Tools, ", ")))
+			fmt.Fprintf(&sb, "| Tools | %s |\n", strings.Join(skill.Tools, ", "))
 		}
 		if !skill.ModifiedAt.IsZero() {
-			sb.WriteString(fmt.Sprintf("| Modified | %s |\n", skill.ModifiedAt.Format("2006-01-02 15:04:05")))
+			fmt.Fprintf(&sb, "| Modified | %s |\n", skill.ModifiedAt.Format("2006-01-02 15:04:05"))
 		}
 	}
 

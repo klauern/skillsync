@@ -691,18 +691,18 @@ func (m DeleteListModel) buildDetailContent(width int) string {
 
 	b.WriteString(deleteListStyles.DetailTitle.Render("Skill"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%sName: %s\n", indent, skill.Name))
-	b.WriteString(fmt.Sprintf("%sPlatform: %s\n", indent, skill.Platform))
-	b.WriteString(fmt.Sprintf("%sScope: %s\n", indent, skill.DisplayScope()))
+	fmt.Fprintf(&b, "%sName: %s\n", indent, skill.Name)
+	fmt.Fprintf(&b, "%sPlatform: %s\n", indent, skill.Platform)
+	fmt.Fprintf(&b, "%sScope: %s\n", indent, skill.DisplayScope())
 	if skill.Path != "" {
-		b.WriteString(fmt.Sprintf("%sPath: %s\n", indent, skill.Path))
+		fmt.Fprintf(&b, "%sPath: %s\n", indent, skill.Path)
 	}
 
 	marked := "no"
 	if m.selected[deleteSkillKey(skill)] {
 		marked = "yes"
 	}
-	b.WriteString(fmt.Sprintf("%sMarked for deletion: %s\n", indent, marked))
+	fmt.Fprintf(&b, "%sMarked for deletion: %s\n", indent, marked)
 
 	b.WriteString("\n")
 	b.WriteString(deleteListStyles.DetailTitle.Render("Description"))
