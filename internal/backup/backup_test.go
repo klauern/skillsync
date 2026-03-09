@@ -676,6 +676,54 @@ func TestDirectory_DeduplicatesSkillEntrypointVariants(t *testing.T) {
 	}
 }
 
+func TestRestoreBackup_FileWithZipExtension(t *testing.T) {
+	// Regression test: a plain file with a .zip extension must be restored as a
+	// single file, not treated as a directory archive.
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	// Create a plain text file whose name ends in .zip
+	zipNamedFile := filepath.Join(tempHome, "notanarchive.zip")
+	content := "this is plain text, not a zip archive"
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(zipNamedFile, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to create .zip-named file: %v", err)
+	}
+
+	metadata, err := CreateBackup(zipNamedFile, Options{Platform: "claude-code"})
+	if err != nil {
+		t.Fatalf("CreateBackup failed: %v", err)
+	}
+
+	// Backup type must be recorded as "file", not "dir-zip"
+	if got := metadata.Metadata["backup_format"]; got != "file" {
+		t.Errorf("expected backup_format=file, got %q", got)
+	}
+
+	restoreFile := filepath.Join(tempHome, "restored.zip")
+	if err := RestoreBackup(metadata.ID, restoreFile); err != nil {
+		t.Fatalf("RestoreBackup failed: %v", err)
+	}
+
+	// Must be restored as a plain file with original content
+	// #nosec G304 - restoreFile is test-controlled
+	got, err := os.ReadFile(restoreFile)
+	if err != nil {
+		t.Fatalf("failed to read restored file: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("restored content mismatch: got %q want %q", string(got), content)
+	}
+	// Must be a regular file, not a directory
+	info, err := os.Stat(restoreFile)
+	if err != nil {
+		t.Fatalf("failed to stat restored file: %v", err)
+	}
+	if info.IsDir() {
+		t.Error("restored path is a directory; expected a regular file")
+	}
+}
+
 func TestGetStats(t *testing.T) {
 	// Setup temp environment
 	tempHome := util.CreateTempDir(t)
