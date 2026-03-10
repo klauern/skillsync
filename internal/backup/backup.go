@@ -126,6 +126,7 @@ func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 	backupPath := filepath.Join(platformDir, backupFilename)
 
 	// Write backup file
+	// #nosec G703 - backupPath is constructed internally from timestamp, hash, and extension
 	if err := os.WriteFile(backupPath, content, BackupFilePerm); err != nil {
 		return nil, fmt.Errorf("failed to write backup file: %w", err)
 	}
@@ -204,6 +205,7 @@ func RestoreBackup(backupID string, targetPath string) error {
 	}
 
 	// Write target file
+	// #nosec G703 - targetPath is the user-requested restore destination
 	if err := os.WriteFile(targetPath, content, BackupFilePerm); err != nil {
 		return fmt.Errorf("failed to write target file: %w", err)
 	}
@@ -241,7 +243,7 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 			return fmt.Errorf("failed to add %q to archive: %w", path, err)
 		}
 
-		// #nosec G304 - path comes from filepath.Walk under trusted sourcePath
+		// #nosec G304 G122 - path comes from filepath.Walk under trusted sourcePath; symlink TOCTOU not applicable here
 		file, err := os.Open(path)
 		if err != nil {
 			return fmt.Errorf("failed to open %q for archive: %w", path, err)

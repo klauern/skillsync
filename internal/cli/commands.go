@@ -3775,7 +3775,7 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 		}
 
 		// Write to target
-		// #nosec G306 - skill files should be readable
+		// #nosec G306 G703 - skill files should be readable; targetPath comes from getSkillPathForScope (controlled internal function)
 		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: failed to write to target: %v", skill.Name, err))
 			continue
