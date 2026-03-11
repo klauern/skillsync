@@ -44,3 +44,7 @@ internal/e2e/.codex/
 
 # CLI test fixtures - ignore synced content
 internal/cli/.codex/skills/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db

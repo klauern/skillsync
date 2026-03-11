@@ -391,7 +391,7 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 		}
 
 		// Write to target
-		// #nosec G306 - skill files should be readable
+		// #nosec G306 G703 - skill files should be readable; targetPath is derived from controlled scope resolution
 		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
 			return fmt.Errorf("failed to write skill to target: %w", err)
 		}
