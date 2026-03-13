@@ -81,6 +81,7 @@ func CleanupBackups(opts CleanupOptions) ([]string, error) {
 	now := time.Now()
 
 	for _, group := range groups {
+		groupStart := len(toDelete) // track where this group's entries begin
 		keepCount := 0
 		for idx, backup := range group.backups {
 			shouldDelete := false
@@ -104,10 +105,11 @@ func CleanupBackups(opts CleanupOptions) ([]string, error) {
 			}
 		}
 
-		// If KeepAtLeastOne is true and we're deleting everything, keep the newest
-		if opts.KeepAtLeastOne && keepCount == 0 && len(toDelete) > 0 {
-			// Remove the first item from toDelete (newest backup)
-			toDelete = toDelete[1:]
+		// If KeepAtLeastOne is true and we're deleting everything, keep the newest.
+		// Use groupStart to target the first entry for this group (newest backup, since
+		// backups are sorted newest-first), not an entry from a previous group.
+		if opts.KeepAtLeastOne && keepCount == 0 && len(toDelete) > groupStart {
+			toDelete = append(toDelete[:groupStart], toDelete[groupStart+1:]...)
 		}
 	}
 
