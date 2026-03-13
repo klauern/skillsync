@@ -217,6 +217,96 @@ func TestCleanupBackups_KeepAtLeastOne_AllWouldBeDeleted(t *testing.T) {
 	util.AssertEqual(t, len(remaining), 1)
 }
 
+func TestCleanupBackups_KeepAtLeastOne_MultipleGroups(t *testing.T) {
+	// Regression test: KeepAtLeastOne must preserve the newest backup within each
+	// group, not accidentally remove an entry belonging to a different group.
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	index, err := LoadIndex()
+	if err != nil {
+		t.Fatalf("LoadIndex failed: %v", err)
+	}
+
+	backupDir := filepath.Join(tempHome, "backups")
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		t.Fatalf("failed to create backup dir: %v", err)
+	}
+
+	now := time.Now()
+
+	// Two separate source paths (groups), each with 2 old backups.
+	// All backups exceed the age limit so keepCount==0 for every group.
+	// KeepAtLeastOne must retain the newest backup *per group*.
+	groups := []struct {
+		sourcePath string
+		ids        []string
+		ages       []time.Duration // oldest-to-newest order for readability
+	}{
+		{
+			sourcePath: "/test/file1.md",
+			ids:        []string{"g1-old", "g1-new"},
+			ages:       []time.Duration{48 * time.Hour, 10 * time.Hour},
+		},
+		{
+			sourcePath: "/test/file2.md",
+			ids:        []string{"g2-old", "g2-new"},
+			ages:       []time.Duration{72 * time.Hour, 12 * time.Hour},
+		},
+	}
+
+	for _, g := range groups {
+		for i, id := range g.ids {
+			backup := Metadata{
+				ID:         id,
+				Platform:   "claude-code",
+				SourcePath: g.sourcePath,
+				CreatedAt:  now.Add(-g.ages[i]),
+				BackupPath: filepath.Join(backupDir, id+".md"),
+			}
+			if err := os.WriteFile(backup.BackupPath, []byte("content"), 0o600); err != nil {
+				t.Fatalf("failed to create backup file: %v", err)
+			}
+			if err := index.AddBackup(backup); err != nil {
+				t.Fatalf("AddBackup failed: %v", err)
+			}
+		}
+	}
+
+	cleanupOpts := CleanupOptions{
+		MaxAge:         1 * time.Hour, // all backups are older than 1h
+		MaxBackups:     0,
+		KeepAtLeastOne: true,
+		Platform:       "claude-code",
+	}
+
+	deleted, err := CleanupBackups(cleanupOpts)
+	if err != nil {
+		t.Fatalf("CleanupBackups failed: %v", err)
+	}
+
+	// 2 groups × (2 backups − 1 kept) = 2 deleted
+	util.AssertEqual(t, len(deleted), 2)
+
+	// The two newest (one per group) must survive.
+	remaining, err := ListBackups("claude-code")
+	if err != nil {
+		t.Fatalf("ListBackups failed: %v", err)
+	}
+	util.AssertEqual(t, len(remaining), 2)
+
+	survivorIDs := make(map[string]bool)
+	for _, b := range remaining {
+		survivorIDs[b.ID] = true
+	}
+	if !survivorIDs["g1-new"] {
+		t.Errorf("expected g1-new to survive as the newest in group 1")
+	}
+	if !survivorIDs["g2-new"] {
+		t.Errorf("expected g2-new to survive as the newest in group 2")
+	}
+}
+
 func TestCleanupBackups_KeepAtLeastOne_Disabled(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)
