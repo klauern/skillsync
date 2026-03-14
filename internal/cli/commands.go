@@ -1959,8 +1959,13 @@ func checkWritePermission(path string) error {
 	if err != nil {
 		return fmt.Errorf("cannot write to directory: %w", err)
 	}
-	_ = f.Close()
-	_ = os.Remove(testFile)
+	if err := f.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return fmt.Errorf("failed to close write-test file: %w", err)
+	}
+	if err := os.Remove(testFile); err != nil {
+		return fmt.Errorf("failed to remove write-test file: %w", err)
+	}
 	return nil
 }
 

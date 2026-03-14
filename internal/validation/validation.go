@@ -364,10 +364,21 @@ func validateWritePermission(platform model.Platform) error {
 			Err:     err,
 		}
 	}
-	_ = f.Close()
-
-	// Clean up test file
-	_ = os.Remove(testFile)
+	if err := f.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return &Error{
+			Field:   "write permission",
+			Message: fmt.Sprintf("failed to close write-test file: %s", testFile),
+			Err:     err,
+		}
+	}
+	if err := os.Remove(testFile); err != nil {
+		return &Error{
+			Field:   "write permission",
+			Message: fmt.Sprintf("failed to remove write-test file: %s", testFile),
+			Err:     err,
+		}
+	}
 
 	return nil
 }
