@@ -303,11 +303,11 @@ func validateFileExtension(skill model.Skill) error {
 			}
 		}
 	case model.Codex:
-		// Codex typically uses .json
-		if ext != ".json" {
+		// Codex parser produces .md files (AGENTS.md, SKILL.md, *.md) and .toml (config.toml)
+		if ext != ".md" && ext != ".toml" {
 			return &Error{
 				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .json)", ext),
+				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
 	}
