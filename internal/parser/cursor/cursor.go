@@ -238,7 +238,7 @@ func (p *Parser) Platform() model.Platform {
 func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
 	dir := filepath.Dir(filePath)
 	// Walk up the directory tree to check if any parent is a skill directory
-	for dir != "/" && dir != "." && dir != "" {
+	for dir != "." && dir != "" {
 		if skillDirs[dir] {
 			return true
 		}
