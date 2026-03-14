@@ -23,6 +23,7 @@ import (
 	"github.com/klauern/skillsync/internal/cache"
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/export"
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
@@ -501,7 +502,9 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 	// Only do this for local discovery (not when fetching from a specific repo)
 	if repoURL == "" {
 		cacheSkills, err := discoverClaudePluginCacheSkills(skills)
-		if err == nil {
+		if err != nil {
+			logging.Warn("failed to discover Claude plugin cache skills", logging.Err(err))
+		} else {
 			skills = append(skills, cacheSkills...)
 		}
 	}
@@ -1750,6 +1753,7 @@ func parsePlatformSkillsFromPaths(
 		pathParser := parserFactory(path)
 		skills, err := pathParser.Parse()
 		if err != nil {
+			logging.Warn("failed to parse skills", logging.Err(err), logging.Path(path))
 			continue
 		}
 
