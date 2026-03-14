@@ -206,22 +206,20 @@ func TestConfigEditCommand(t *testing.T) {
 			setup: func(t *testing.T) {
 				tempDir := t.TempDir()
 				t.Setenv("HOME", tempDir)
-				t.Setenv("EDITOR", "vim")
+				t.Setenv("EDITOR", "echo")
 			},
-			args:       []string{"skillsync", "config", "edit"},
-			wantErr:    false,
-			wantOutput: "Run:",
+			args:    []string{"skillsync", "config", "edit"},
+			wantErr: false,
 		},
 		"edit with VISUAL set": {
 			setup: func(t *testing.T) {
 				tempDir := t.TempDir()
 				t.Setenv("HOME", tempDir)
 				t.Setenv("EDITOR", "")
-				t.Setenv("VISUAL", "code")
+				t.Setenv("VISUAL", "echo")
 			},
-			args:       []string{"skillsync", "config", "edit"},
-			wantErr:    false,
-			wantOutput: "Run:",
+			args:    []string{"skillsync", "config", "edit"},
+			wantErr: false,
 		},
 		"edit without editor set": {
 			setup: func(t *testing.T) {

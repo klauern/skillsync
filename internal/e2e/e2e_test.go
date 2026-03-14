@@ -244,36 +244,34 @@ func TestConfigEditNoEditorError(t *testing.T) {
 func TestConfigEditWithEditor(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	// Set EDITOR environment variable
-	h.SetEnv("EDITOR", "vim")
+	// Use "echo" as a portable no-op editor that exits immediately
+	h.SetEnv("EDITOR", "echo")
 
 	result := h.Run("config", "edit")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "Opening")
-	e2e.AssertOutputContains(t, result, "vim")
-	e2e.AssertOutputContains(t, result, "Run:")
 }
 
 // TestConfigEditWithVisual verifies edit works with VISUAL set.
 func TestConfigEditWithVisual(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	// Set VISUAL environment variable (EDITOR not set)
+	// Use "echo" as a portable no-op editor that exits immediately
 	h.SetEnv("EDITOR", "")
-	h.SetEnv("VISUAL", "code")
+	h.SetEnv("VISUAL", "echo")
 
 	result := h.Run("config", "edit")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertOutputContains(t, result, "code")
+	e2e.AssertOutputContains(t, result, "Opening")
 }
 
 // TestConfigEditCreatesDefaultIfMissing verifies edit creates config if missing.
 func TestConfigEditCreatesDefaultIfMissing(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	h.SetEnv("EDITOR", "vim")
+	h.SetEnv("EDITOR", "echo")
 
 	result := h.Run("config", "edit")
 
@@ -295,7 +293,7 @@ func TestConfigEditExistingFile(t *testing.T) {
 	e2e.AssertSuccess(t, initResult)
 
 	// Then edit (should not say "creating")
-	h.SetEnv("EDITOR", "vim")
+	h.SetEnv("EDITOR", "echo")
 	result := h.Run("config", "edit")
 
 	e2e.AssertSuccess(t, result)

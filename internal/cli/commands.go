@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -225,12 +226,15 @@ func editConfig() error {
 	}
 
 	fmt.Printf("Opening %s in %s...\n", configPath, editor)
-	fmt.Println("Note: After editing, run 'skillsync config show' to verify your changes.")
 
-	// We don't actually exec here - just show the command to run
-	// This is safer and more portable
-	fmt.Printf("\nRun: %s %s\n", editor, configPath)
-	return nil
+	// Editor may include arguments (e.g. EDITOR="code --wait")
+	editorArgs := strings.Fields(editor)
+	// #nosec G204 G702 - editor binary is intentionally user-controlled via $EDITOR/$VISUAL
+	cmd := exec.Command(editorArgs[0], append(editorArgs[1:], configPath)...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func discoveryCommand() *cli.Command {
