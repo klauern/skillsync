@@ -229,7 +229,7 @@ func editConfig() error {
 
 	// Editor may include arguments (e.g. EDITOR="code --wait")
 	editorArgs := strings.Fields(editor)
-	// #nosec G204 - editor binary is user-controlled via $EDITOR/$VISUAL
+	// #nosec G204 G702 - editor binary is intentionally user-controlled via $EDITOR/$VISUAL
 	cmd := exec.Command(editorArgs[0], append(editorArgs[1:], configPath)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
