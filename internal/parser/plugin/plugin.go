@@ -361,10 +361,29 @@ func (p *Parser) scanForPlugins(basePath string) ([]model.Skill, error) {
 	return skills, nil
 }
 
+// validateRepoURL checks that url is a safe git remote URL.
+// It must start with https://, git@, or ssh:// and must not start with a dash
+// (which git could interpret as a flag).
+func validateRepoURL(url string) error {
+	if strings.HasPrefix(url, "-") {
+		return fmt.Errorf("invalid repo URL %q: must not start with a dash", url)
+	}
+	if strings.HasPrefix(url, "https://") ||
+		strings.HasPrefix(url, "git@") ||
+		strings.HasPrefix(url, "ssh://") {
+		return nil
+	}
+	return fmt.Errorf("invalid repo URL %q: must start with https://, git@, or ssh://", url)
+}
+
 // ensureRepo ensures the repository is cloned and up to date
 func (p *Parser) ensureRepo() (string, error) {
 	if p.repoURL == "" {
 		return p.basePath, nil
+	}
+
+	if err := validateRepoURL(p.repoURL); err != nil {
+		return "", err
 	}
 
 	// Create plugins directory if needed
@@ -400,7 +419,7 @@ func (p *Parser) ensureRepo() (string, error) {
 
 // gitClone clones a Git repository
 func (p *Parser) gitClone(url, dest string) error {
-	// #nosec G204 - url and dest are from trusted configuration
+	// #nosec G204 - url is validated by validateRepoURL before reaching here
 	cmd := exec.Command("git", "clone", "--depth", "1", url, dest)
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
