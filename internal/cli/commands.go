@@ -763,7 +763,7 @@ func colorPlatform(platform string, width int) string {
 	// Use consistent width formatting with colors
 	formatted := fmt.Sprintf("%-*s", width, platform)
 	switch platform {
-	case "claudecode":
+	case "claude-code":
 		return ui.Info(formatted)
 	case "cursor":
 		return ui.Success(formatted)

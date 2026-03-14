@@ -786,9 +786,9 @@ func TestColorPlatform(t *testing.T) {
 		platform string
 		contains string
 	}{
-		"claudecode platform": {
-			platform: "claudecode",
-			contains: "claudecode",
+		"claude-code platform": {
+			platform: "claude-code",
+			contains: "claude-code",
 		},
 		"cursor platform": {
 			platform: "cursor",
