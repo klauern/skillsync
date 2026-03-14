@@ -153,15 +153,27 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "Codex .json",
+			name:     "Codex .md (AGENTS.md / SKILL.md)",
 			platform: model.Codex,
-			path:     "/skills/test.json",
+			path:     "/skills/AGENTS.md",
 			wantErr:  false,
 		},
 		{
-			name:     "Codex invalid extension",
+			name:     "Codex .md flat skill",
 			platform: model.Codex,
 			path:     "/skills/test.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Codex .toml (config.toml)",
+			platform: model.Codex,
+			path:     "/skills/config.toml",
+			wantErr:  false,
+		},
+		{
+			name:     "Codex invalid extension .json",
+			platform: model.Codex,
+			path:     "/skills/test.json",
 			wantErr:  true,
 		},
 	}
