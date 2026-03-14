@@ -5,6 +5,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -363,17 +364,29 @@ func (p *Parser) scanForPlugins(basePath string) ([]model.Skill, error) {
 
 // validateRepoURL checks that url is a safe git remote URL.
 // It must start with https://, git@, or ssh:// and must not start with a dash
-// (which git could interpret as a flag).
+// (which git could interpret as a flag). https:// and ssh:// URLs must also
+// have a non-empty host and repository path.
 func validateRepoURL(url string) error {
 	if strings.HasPrefix(url, "-") {
-		return fmt.Errorf("invalid repo URL %q: must not start with a dash", url)
+		return fmt.Errorf("invalid repo URL: must not start with a dash")
 	}
-	if strings.HasPrefix(url, "https://") ||
-		strings.HasPrefix(url, "git@") ||
-		strings.HasPrefix(url, "ssh://") {
+	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "ssh://") {
+		u, err := neturl.Parse(url)
+		if err != nil || u.Host == "" || strings.Trim(u.Path, "/") == "" {
+			return fmt.Errorf("invalid repo URL: missing host or repository path")
+		}
 		return nil
 	}
-	return fmt.Errorf("invalid repo URL %q: must start with https://, git@, or ssh://", url)
+	if strings.HasPrefix(url, "git@") {
+		// git@host:owner/repo(.git)?
+		rest := strings.TrimPrefix(url, "git@")
+		parts := strings.SplitN(rest, ":", 2)
+		if len(parts) != 2 || parts[0] == "" || strings.Trim(parts[1], "/") == "" {
+			return fmt.Errorf("invalid repo URL: expected git@host:owner/repo")
+		}
+		return nil
+	}
+	return fmt.Errorf("invalid repo URL: must start with https://, git@, or ssh://")
 }
 
 // ensureRepo ensures the repository is cloned and up to date
