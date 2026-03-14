@@ -11,9 +11,15 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 )
 
-// HomeDir returns the user's home directory
+// HomeDir returns the user's home directory.
+// It panics with a descriptive message if the home directory cannot be
+// determined (e.g. in containers or environments without HOME set), so that
+// callers get a clear error instead of silently receiving an empty path.
 func HomeDir() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		panic("skillsync: cannot determine user home directory: " + err.Error())
+	}
 	return home
 }
 
