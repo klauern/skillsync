@@ -6,11 +6,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/klauern/skillsync/internal/backup"
+	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -1567,13 +1569,7 @@ This is a user skill.
 
 			// Verify all returned skills have expected scopes
 			for _, skill := range skills {
-				found := false
-				for _, wantScope := range tt.wantScopes {
-					if skill.Scope == wantScope {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(tt.wantScopes, skill.Scope)
 				if !found && len(tt.wantScopes) > 0 {
 					t.Errorf("skill %q has scope %q, want one of %v", skill.Name, skill.Scope, tt.wantScopes)
 				}
@@ -1590,6 +1586,99 @@ This is a user skill.
 				}
 			}
 		})
+	}
+}
+
+func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	workingDir := filepath.Join(repoRoot, "nested")
+	if err := os.MkdirAll(workingDir, 0o750); err != nil {
+		t.Fatalf("failed to create working dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o750); err != nil {
+		t.Fatalf("failed to create repo root: %v", err)
+	}
+
+	projectRelative := filepath.Join(repoRoot, ".pi", "project-relative")
+	projectAbsolute := filepath.Join(repoRoot, "project-absolute")
+	userRelative := filepath.Join(home, ".config", "pi", "user-relative")
+	userAbsolute := filepath.Join(home, "user-absolute")
+	for _, dir := range []string{projectRelative, projectAbsolute, userRelative, userAbsolute} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatalf("failed to create %s: %v", dir, err)
+		}
+	}
+
+	projectSettings := filepath.Join(repoRoot, ".pi", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(projectSettings), 0o750); err != nil {
+		t.Fatalf("failed to create project settings dir: %v", err)
+	}
+	projectJSON := `{"skillsDirectories":["project-relative","` + filepath.ToSlash(projectAbsolute) + `"]}`
+	if err := os.WriteFile(projectSettings, []byte(projectJSON), 0o600); err != nil {
+		t.Fatalf("failed to write project settings: %v", err)
+	}
+
+	userSettings := filepath.Join(home, ".config", "pi", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(userSettings), 0o750); err != nil {
+		t.Fatalf("failed to create user settings dir: %v", err)
+	}
+	userJSON := `{"skillsDirectories":["user-relative","` + filepath.ToSlash(userAbsolute) + `"]}`
+	if err := os.WriteFile(userSettings, []byte(userJSON), 0o600); err != nil {
+		t.Fatalf("failed to write user settings: %v", err)
+	}
+
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(workingDir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origWd)
+	})
+
+	cfg := config.Default()
+	paths, gotRepoRoot, err := platformSkillsPaths(cfg, model.PiAgent)
+	if err != nil {
+		t.Fatalf("platformSkillsPaths() error = %v", err)
+	}
+
+	wantRepoRoot, err := filepath.EvalSymlinks(repoRoot)
+	if err != nil {
+		wantRepoRoot = filepath.Clean(repoRoot)
+	}
+	gotRepoRoot, err = filepath.EvalSymlinks(gotRepoRoot)
+	if err != nil {
+		gotRepoRoot = filepath.Clean(gotRepoRoot)
+	}
+
+	if gotRepoRoot != wantRepoRoot {
+		t.Fatalf("repoRoot = %q, want %q", gotRepoRoot, wantRepoRoot)
+	}
+
+	wantPaths := []string{
+		filepath.Join(workingDir, ".agents", "skills"),
+		filepath.Join(repoRoot, ".agents", "skills"),
+		projectRelative,
+		projectAbsolute,
+		filepath.Join(home, ".agents", "skills"),
+		userRelative,
+		userAbsolute,
+	}
+	if len(paths) != len(wantPaths) {
+		t.Fatalf("platformSkillsPaths() returned %d paths, want %d: %v", len(paths), len(wantPaths), paths)
+	}
+	for i, want := range wantPaths {
+		gotPath := strings.TrimPrefix(filepath.Clean(paths[i]), "/private")
+		wantPath := strings.TrimPrefix(filepath.Clean(want), "/private")
+
+		if gotPath != wantPath {
+			t.Fatalf("path %d = %q, want %q", i, gotPath, wantPath)
+		}
 	}
 }
 

@@ -145,6 +145,32 @@ platforms:
           - "$1 .. $9"
           - "$NAME (named placeholders)"
 
+  pi_agent:
+    name: Pi Agent
+    config_dir: .pi
+    global_dir: ~/.config/pi
+    artifact_types:
+      skill:
+        location:
+          - ".agents/skills/*/SKILL.md"
+          - "~/.agents/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+            description: "Unique skill identifier."
+          description:
+            type: string
+            required: true
+            description: "Describes when the skill should be used."
+      config:
+        location:
+          - ".pi/settings.json"
+          - "~/.config/pi/settings.json"
+        format: json
+        instruction_fields:
+          - skillsDirectories
+
   copilot:
     name: GitHub Copilot (VS Code)
     config_dir: .github

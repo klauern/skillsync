@@ -26,8 +26,7 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
-	"github.com/klauern/skillsync/internal/parser/codex"
-	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/piagent"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
@@ -195,6 +194,7 @@ func showConfigPaths() error {
 	fmt.Printf("  Claude Code:     %v\n", cfg.Platforms.ClaudeCode.SkillsPaths)
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
+	fmt.Printf("  Pi Agent:        %v\n", cfg.Platforms.PiAgent.SkillsPaths)
 
 	fmt.Println("\nData paths:")
 	fmt.Printf("  Backups:         %s\n", util.SkillsyncBackupsPath())
@@ -250,7 +250,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex
+   Supported platforms: claude-code, cursor, codex, pi-agent
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -262,7 +262,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -314,7 +314,7 @@ func discoveryCommand() *cli.Command {
 			// Parse scope filter
 			var scopeFilter []model.SkillScope
 			if scopeStr != "" && scopeStr != "all" {
-				for _, s := range strings.Split(scopeStr, ",") {
+				for s := range strings.SplitSeq(scopeStr, ",") {
 					scope, err := model.ParseScope(strings.TrimSpace(s))
 					if err != nil {
 						return fmt.Errorf("invalid scope: %w", err)
@@ -398,7 +398,7 @@ func parseTypeFilter(typeStr string) ([]model.SkillType, error) {
 	}
 
 	var typeFilter []model.SkillType
-	for _, t := range strings.Split(typeStr, ",") {
+	for t := range strings.SplitSeq(typeStr, ",") {
 		skillType, err := model.ParseSkillType(strings.TrimSpace(t))
 		if err != nil {
 			return nil, err
@@ -687,10 +687,7 @@ func calculateColumnWidths(skills []model.Skill, termWidth int) columnWidths {
 	// Allocate remaining space to description (minimum 20)
 	// 6 accounts for spacing between columns (2 spaces each gap × 3 gaps)
 	used := name + platform + source + 6
-	desc := termWidth - used
-	if desc < 20 {
-		desc = 20
-	}
+	desc := max(termWidth-used, 20)
 
 	return columnWidths{
 		name:     name,
@@ -866,7 +863,7 @@ func syncCommand() *cli.Command {
 		UsageText: "skillsync sync [options] <source> <target>",
 		Description: `Synchronize skills between AI coding platforms.
 
-   Supported platforms: claudecode, cursor, codex
+   Supported platforms: claudecode, cursor, codex, pi-agent
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -924,7 +921,7 @@ func deleteCommand() *cli.Command {
 		UsageText: "skillsync delete [options] <source> <target>",
 		Description: `Delete skills from the target platform that also exist in the source.
 
-   Supported platforms: claudecode, cursor, codex
+   Supported platforms: claudecode, cursor, codex, pi-agent
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -1585,7 +1582,7 @@ func parseScopeFilter(scopeStr string) ([]model.SkillScope, error) {
 	}
 
 	var scopeFilter []model.SkillScope
-	for _, s := range strings.Split(scopeStr, ",") {
+	for s := range strings.SplitSeq(scopeStr, ",") {
 		scope, err := model.ParseScope(strings.TrimSpace(s))
 		if err != nil {
 			return nil, fmt.Errorf("invalid scope: %w", err)
@@ -1603,26 +1600,7 @@ func parseScopeFilter(scopeStr string) ([]model.SkillScope, error) {
 // parsePlatformSkills parses skills from the given platform using env-var-respecting paths.
 // This is used by the sync command when no specific scopes are requested.
 func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
-	// Get path from validation which respects env vars
-	basePath, err := validation.GetPlatformPath(platform)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get platform path for %s: %w", platform, err)
-	}
-
-	// Create a direct parser for this path
-	var parser interface{ Parse() ([]model.Skill, error) }
-	switch platform {
-	case model.ClaudeCode:
-		parser = claude.New(basePath)
-	case model.Cursor:
-		parser = cursor.New(basePath)
-	case model.Codex:
-		parser = codex.New(basePath)
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", platform)
-	}
-
-	return parser.Parse()
+	return parsePlatformSkillsWithScope(platform, nil, false)
 }
 
 // parsePlatformSkillsWithScope parses skills from the given platform with optional scope filtering.
@@ -1669,8 +1647,38 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
 			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
+	case model.PiAgent:
+		rawPaths = cfg.Platforms.PiAgent.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.PiAgent.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.PiAgent.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
 	default:
 		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	if platform == model.PiAgent {
+		discoveredPaths, err := piagent.DiscoverSearchPaths(cwd)
+		if err != nil {
+			return nil, repoRoot, err
+		}
+
+		paths := make([]string, 0, len(discoveredPaths)+len(rawPaths))
+		seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
+		for _, sp := range discoveredPaths {
+			if !seen[sp.Path] {
+				paths = append(paths, sp.Path)
+				seen[sp.Path] = true
+			}
+		}
+
+		for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
+			if !seen[p] {
+				paths = append(paths, p)
+				seen[p] = true
+			}
+		}
+
+		return paths, repoRoot, nil
 	}
 
 	paths := resolveSkillsPaths(rawPaths, cwd, repoRoot)
@@ -2038,7 +2046,7 @@ func exportCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2208,7 +2216,7 @@ func backupCreateCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to back up (claude-code, cursor, codex, all)",
+				Usage:   "Platform to back up (claude-code, cursor, codex, pi-agent, all)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -2289,7 +2297,7 @@ func backupListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2508,7 +2516,7 @@ func backupDeleteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
@@ -2568,7 +2576,7 @@ func backupVerifyCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {

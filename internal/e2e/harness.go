@@ -63,9 +63,11 @@ func NewHarness(t *testing.T) *Harness {
 	h.SetEnv("SKILLSYNC_CLAUDE_CODE_PATH", homeDir+"/.claude/commands")
 	h.SetEnv("SKILLSYNC_CURSOR_PATH", homeDir+"/.cursor/rules")
 	h.SetEnv("SKILLSYNC_CODEX_PATH", homeDir+"/.codex")
+	h.SetEnv("SKILLSYNC_PI_AGENT_PATH", homeDir+"/.agents/skills")
 	h.SetEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", homeDir+"/.claude/commands")
 	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
 	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
+	h.SetEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", homeDir+"/.agents/skills")
 
 	return h
 }

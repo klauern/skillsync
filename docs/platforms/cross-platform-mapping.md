@@ -1,19 +1,19 @@
 # Cross-Platform Mapping
 
-> Unified reference for concept mapping and conversion rules across all 5 supported platforms.
+> Unified reference for concept mapping and conversion rules across all 6 documented platforms.
 
 ## Concept Mapping
 
 What each platform calls equivalent concepts:
 
-| Concept | Claude Code | Codex | Copilot (VS Code) | Cursor | Gemini CLI |
-|---|---|---|---|---|---|
-| Always-on instructions | `CLAUDE.md` | `AGENTS.md` | `.github/copilot-instructions.md` | Rules (`alwaysApply: true`) | `GEMINI.md` |
-| Reusable skills | `.claude/skills/*/SKILL.md` | `.codex/skills/*/SKILL.md` | `.github/agents/*.agent.md` | `.cursor/skills/*/SKILL.md` | `.gemini/skills/*/SKILL.md` |
-| Slash commands | `.claude/commands/*.md` | `~/.codex/prompts/*.md` (deprecated) | `.github/prompts/*.prompt.md` | `.cursor/commands/` + modes | `.gemini/commands/*.toml` |
-| Pattern-based rules | -- | -- | `*.instructions.md` (`applyTo`) | Rules (`globs`) | -- |
-| Agent definitions | `.claude/agents/*.md` | -- | `.github/agents/*.agent.md` | Modes (`modes.json`) | `.gemini/agents/*.md` |
-| MCP config | `.claude/settings.json` | `config.toml` (`mcp_servers`) | `.vscode/mcp.json` | Mode/settings | `settings.json` (`mcpServers`) |
+| Concept | Claude Code | Codex | Copilot (VS Code) | Cursor | Gemini CLI | Pi Agent |
+|---|---|---|---|---|---|---|
+| Always-on instructions | `CLAUDE.md` | `AGENTS.md` | `.github/copilot-instructions.md` | Rules (`alwaysApply: true`) | `GEMINI.md` | -- |
+| Reusable skills | `.claude/skills/*/SKILL.md` | `.codex/skills/*/SKILL.md` | `.github/agents/*.agent.md` | `.cursor/skills/*/SKILL.md` | `.gemini/skills/*/SKILL.md` | `.agents/skills/*/SKILL.md` |
+| Slash commands | `.claude/commands/*.md` | `~/.codex/prompts/*.md` (deprecated) | `.github/prompts/*.prompt.md` | `.cursor/commands/` + modes | `.gemini/commands/*.toml` | -- |
+| Pattern-based rules | -- | -- | `*.instructions.md` (`applyTo`) | Rules (`globs`) | -- | -- |
+| Agent definitions | `.claude/agents/*.md` | -- | `.github/agents/*.agent.md` | Modes (`modes.json`) | `.gemini/agents/*.md` | -- |
+| MCP config | `.claude/settings.json` | `config.toml` (`mcp_servers`) | `.vscode/mcp.json` | Mode/settings | `settings.json` (`mcpServers`) | `.pi/settings.json` |
 
 ## Artifact Type Equivalences
 
@@ -42,6 +42,7 @@ Modular instruction packages that the AI can invoke based on task relevance.
 | Copilot | `.github/agents/*.agent.md` | `name`, `description`, `tools`, `model`, `agents`, `argument-hint`, `user-invokable`, `disable-model-invocation`, `target`, `handoffs`, `mcp-servers` | User (`@name`) or automatic |
 | Cursor | `.cursor/skills/*/SKILL.md` | `name`, `description`, `tools` | Automatic (Agent Skills Standard) |
 | Gemini | `.gemini/skills/*/SKILL.md` | `name`, `description` | Progressive disclosure (consent-gated) |
+| Pi Agent | `.agents/skills/*/SKILL.md` plus `skillsDirectories` in Pi settings | `name`, `description` | Automatic |
 
 ### Slash Commands / Prompts
 
@@ -93,7 +94,7 @@ Field-by-field comparison showing which platform supports which fields.
 
 ## Path Convention Reference
 
-Default paths side-by-side for all 5 platforms.
+Default paths side-by-side for all 6 documented platforms.
 
 ### Project-Level Paths
 

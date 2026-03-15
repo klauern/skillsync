@@ -9,6 +9,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/piagent"
 )
 
 // ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
@@ -32,6 +33,13 @@ func CodexParserFactory() ParserFactory {
 	}
 }
 
+// PiAgentParserFactory returns a ParserFactory for Pi Agent.
+func PiAgentParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return piagent.New(basePath)
+	}
+}
+
 // ParserFactoryFor returns the appropriate ParserFactory for a platform.
 func ParserFactoryFor(platform model.Platform) ParserFactory {
 	switch platform {
@@ -41,6 +49,8 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 		return CursorParserFactory()
 	case model.Codex:
 		return CodexParserFactory()
+	case model.PiAgent:
+		return PiAgentParserFactory()
 	default:
 		// Return a factory that creates Claude parsers as a fallback
 		return ClaudeCodeParserFactory()
@@ -55,18 +65,34 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 		return nil, err
 	}
 
-	return New(Config{
+	cfg := Config{
 		Platform:      platform,
 		WorkingDir:    cwd,
 		ParserFactory: ParserFactoryFor(platform),
-	}), nil
+	}
+	if platform == model.PiAgent {
+		searchPaths, err := piagent.DiscoverSearchPaths(cwd)
+		if err != nil {
+			return nil, err
+		}
+		cfg.SearchPaths = searchPaths
+	}
+
+	return New(cfg), nil
 }
 
 // NewForPlatformWithDir creates a TieredParser for the given platform and working directory.
 func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
-	return New(Config{
+	cfg := Config{
 		Platform:      platform,
 		WorkingDir:    workingDir,
 		ParserFactory: ParserFactoryFor(platform),
-	})
+	}
+	if platform == model.PiAgent {
+		searchPaths, err := piagent.DiscoverSearchPaths(workingDir)
+		if err == nil {
+			cfg.SearchPaths = searchPaths
+		}
+	}
+	return New(cfg)
 }

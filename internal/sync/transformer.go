@@ -71,6 +71,8 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 		case model.Codex:
 			// Codex discovery is SKILL.md-centric; store prompts as SKILL artifacts.
 			return filepath.Join(skill.Name, "SKILL.md")
+		case model.PiAgent:
+			return filepath.Join(skill.Name, "SKILL.md")
 		case model.Cursor:
 			// Cursor prompt artifacts are markdown-based; keep simple filename layout.
 			return skill.Name + ".md"
@@ -84,6 +86,8 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 	if isSkillFile(baseName) && skill.Name != "" {
 		switch target {
 		case model.Codex:
+			return filepath.Join(skill.Name, "SKILL.md")
+		case model.PiAgent:
 			return filepath.Join(skill.Name, "SKILL.md")
 		case model.Cursor:
 			return skill.Name + ".md"
@@ -112,6 +116,8 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 			return "AGENTS.md"
 		}
 		return nameWithoutExt + ".md"
+	case model.PiAgent:
+		return filepath.Join(skill.Name, "SKILL.md")
 	default:
 		return baseName
 	}
@@ -203,6 +209,9 @@ func isSkillFile(path string) bool {
 
 func shouldIncludeFrontmatter(target model.Platform, targetPath string) bool {
 	if target == model.Codex {
+		return isSkillFile(targetPath)
+	}
+	if target == model.PiAgent {
 		return isSkillFile(targetPath)
 	}
 	return true

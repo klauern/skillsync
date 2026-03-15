@@ -1137,6 +1137,50 @@ func TestSyncClaudeCodeToCodex(t *testing.T) {
 	}
 }
 
+// TestSyncClaudeCodeToPiAgent verifies sync from Claude Code to Pi Agent.
+func TestSyncClaudeCodeToPiAgent(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture.WriteSkill("pi-test.md", "pi-test", "To Pi Agent", "# Pi Test\n\nContent for Pi.")
+
+	piFixture := h.PiAgentFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "pi-agent")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, piFixture.Path("pi-test/SKILL.md"))
+}
+
+// TestSyncPiAgentToCursor verifies sync from Pi Agent to Cursor.
+func TestSyncPiAgentToCursor(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	piFixture := h.PiAgentFixture()
+	piFixture.WriteSkill("pi-to-cursor/SKILL.md", "pi-to-cursor", "Pi to Cursor", "# Pi To Cursor\n\nContent for Cursor.")
+
+	cursorFixture := h.CursorFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-agent", "cursor")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, cursorFixture.Path("pi-to-cursor/SKILL.md"))
+}
+
+// TestDiscoverPiAgent verifies Pi Agent skills can be discovered directly.
+func TestDiscoverPiAgent(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	piFixture := h.PiAgentFixture()
+	piFixture.WriteSkill("discoverable/SKILL.md", "discoverable", "Pi discovery", "# Discoverable\n")
+
+	result := h.Run("discover", "--platform", "pi-agent", "--format", "json")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, `"platform": "pi-agent"`)
+	e2e.AssertOutputContains(t, result, `"name": "discoverable"`)
+}
+
 // TestDiscoverClaudeCommandArtifactsAsPrompts verifies command-style files are
 // discovered as prompt artifacts.
 func TestDiscoverClaudeCommandArtifactsAsPrompts(t *testing.T) {

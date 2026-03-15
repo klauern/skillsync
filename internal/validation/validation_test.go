@@ -176,6 +176,12 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			path:     "/skills/test.json",
 			wantErr:  true,
 		},
+		{
+			name:     "Pi Agent .md",
+			platform: model.PiAgent,
+			path:     "/skills/SKILL.md",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {

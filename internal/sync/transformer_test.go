@@ -97,6 +97,13 @@ func TestTransformer_TransformPath(t *testing.T) {
 			target:     model.Codex,
 			expected:   "review/SKILL.md",
 		},
+		{
+			name:       "skill directory to pi agent",
+			sourcePath: "/source/my-skill/SKILL.md",
+			skillName:  "my-skill",
+			target:     model.PiAgent,
+			expected:   "my-skill/SKILL.md",
+		},
 	}
 
 	for _, tt := range tests {
@@ -154,6 +161,31 @@ func TestTransformer_TransformContent_CodexSkillFile(t *testing.T) {
 
 	if !strings.HasPrefix(content, "---\n") {
 		t.Error("Codex SKILL.md content should include frontmatter")
+	}
+	if !strings.Contains(content, "name: test-skill") {
+		t.Error("Frontmatter should include name")
+	}
+	if !strings.Contains(content, "description: test description") {
+		t.Error("Frontmatter should include description")
+	}
+}
+
+func TestTransformer_TransformContent_PiAgentSkillFile(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "test-skill",
+		Description: "test description",
+		Content:     "Main content",
+	}
+
+	content, err := tr.transformContent(skill, model.PiAgent, "test-skill/SKILL.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if !strings.HasPrefix(content, "---\n") {
+		t.Error("Pi Agent SKILL.md content should include frontmatter")
 	}
 	if !strings.Contains(content, "name: test-skill") {
 		t.Error("Frontmatter should include name")

@@ -34,6 +34,7 @@ type PlatformsConfig struct {
 	ClaudeCode PlatformConfig `yaml:"claude_code"`
 	Cursor     PlatformConfig `yaml:"cursor"`
 	Codex      PlatformConfig `yaml:"codex"`
+	PiAgent    PlatformConfig `yaml:"pi_agent"`
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -97,6 +98,12 @@ func Default() *Config {
 					".codex/skills",     // Project (relative)
 					"~/.codex/skills",   // User (absolute)
 					"/etc/codex/skills", // Admin (system-wide)
+				},
+			},
+			PiAgent: PlatformConfig{
+				SkillsPaths: []string{
+					".agents/skills",   // Project (relative)
+					"~/.agents/skills", // User (absolute)
 				},
 			},
 		},
@@ -238,6 +245,9 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_CODEX_SKILLS_PATHS"); v != "" {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
+	if v := os.Getenv("SKILLSYNC_PI_AGENT_SKILLS_PATHS"); v != "" {
+		c.Platforms.PiAgent.SkillsPaths = splitPaths(v)
+	}
 
 	// Deprecated: single path environment variables (for backward compatibility)
 	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
@@ -248,6 +258,9 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := os.Getenv("SKILLSYNC_CODEX_PATH"); v != "" {
 		c.Platforms.Codex.SkillsPath = v
+	}
+	if v := os.Getenv("SKILLSYNC_PI_AGENT_PATH"); v != "" {
+		c.Platforms.PiAgent.SkillsPath = v
 	}
 
 	// Similarity settings

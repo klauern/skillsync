@@ -193,10 +193,7 @@ func wrapLabeledText(label, value string, width int) string {
 	}
 
 	labelWidth := runewidth.StringWidth(label)
-	available := width - labelWidth
-	if available < 1 {
-		available = 1
-	}
+	available := max(width-labelWidth, 1)
 
 	lines := wrapTextLines(value, available)
 	if len(lines) == 0 {

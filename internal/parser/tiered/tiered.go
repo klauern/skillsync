@@ -21,6 +21,7 @@ type Parser struct {
 	platform      model.Platform
 	pathConfig    util.TieredPathConfig
 	parserFactory ParserFactory
+	searchPaths   []util.ScopedPath
 }
 
 // Config holds configuration for creating a TieredParser.
@@ -37,6 +38,8 @@ type Config struct {
 	SystemPath string
 	// ParserFactory creates platform-specific parsers
 	ParserFactory ParserFactory
+	// SearchPaths optionally overrides default scope resolution.
+	SearchPaths []util.ScopedPath
 }
 
 // New creates a new TieredParser with the given configuration.
@@ -51,13 +54,17 @@ func New(cfg Config) *Parser {
 			SystemPath: cfg.SystemPath,
 		},
 		parserFactory: cfg.ParserFactory,
+		searchPaths:   cfg.SearchPaths,
 	}
 }
 
 // Parse discovers and parses skills from all configured locations.
 // Skills are merged with precedence-based deduplication.
 func (p *Parser) Parse() ([]model.Skill, error) {
-	searchPaths := util.GetAllSearchPaths(p.pathConfig)
+	searchPaths := p.searchPaths
+	if len(searchPaths) == 0 {
+		searchPaths = util.GetAllSearchPaths(p.pathConfig)
+	}
 
 	// Collect skills from all paths, tracking seen names for deduplication
 	skillsByName := make(map[string]model.Skill)
@@ -130,7 +137,10 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 // ParseWithScopeFilter parses skills but only from the specified scopes.
 func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill, error) {
-	searchPaths := util.GetAllSearchPaths(p.pathConfig)
+	searchPaths := p.searchPaths
+	if len(searchPaths) == 0 {
+		searchPaths = util.GetAllSearchPaths(p.pathConfig)
+	}
 
 	// Build scope filter set
 	scopeSet := make(map[model.SkillScope]bool)
@@ -186,6 +196,47 @@ func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill,
 
 // ParseFromScope parses skills from only a single scope.
 func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
+	if len(p.searchPaths) > 0 {
+		var scopePaths []string
+		for _, sp := range p.searchPaths {
+			if sp.Scope == scope {
+				scopePaths = append(scopePaths, sp.Path)
+			}
+		}
+		if len(scopePaths) == 0 {
+			return []model.Skill{}, nil
+		}
+
+		var allSkills []model.Skill
+		seen := make(map[string]bool)
+		for _, path := range scopePaths {
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				continue
+			}
+
+			pathParser := p.parserFactory(path)
+			skills, err := pathParser.Parse()
+			if err != nil {
+				logging.Warn("tiered lookup: failed to parse path",
+					logging.Platform(string(p.platform)),
+					logging.Path(path),
+					logging.Err(err),
+				)
+				continue
+			}
+
+			for _, skill := range skills {
+				skill.Scope = scope
+				if !seen[skill.Name] {
+					seen[skill.Name] = true
+					allSkills = append(allSkills, skill)
+				}
+			}
+		}
+
+		return allSkills, nil
+	}
+
 	paths := util.GetTieredPaths(p.pathConfig)
 	scopePaths, ok := paths[scope]
 	if !ok || len(scopePaths) == 0 {
@@ -236,6 +287,9 @@ func (p *Parser) DefaultPath() string {
 
 // GetSearchPaths returns the configured search paths in precedence order.
 func (p *Parser) GetSearchPaths() []util.ScopedPath {
+	if len(p.searchPaths) > 0 {
+		return append([]util.ScopedPath(nil), p.searchPaths...)
+	}
 	return util.GetAllSearchPaths(p.pathConfig)
 }
 

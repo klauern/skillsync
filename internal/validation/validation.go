@@ -310,6 +310,13 @@ func validateFileExtension(skill model.Skill) error {
 				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
+	case model.PiAgent:
+		if ext != ".md" {
+			return &Error{
+				Field:   fmt.Sprintf("skill %q", skill.Name),
+				Message: fmt.Sprintf("invalid file extension %q for Pi Agent skill (expected .md)", ext),
+			}
+		}
 	}
 
 	return nil
@@ -509,6 +516,11 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.PiAgent:
+		if envPath := os.Getenv("SKILLSYNC_PI_AGENT_PATH"); envPath != "" {
+			return envPath, nil
+		}
+		return util.PiAgentSkillsPath(), nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}
