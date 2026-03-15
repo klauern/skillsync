@@ -3,6 +3,7 @@ package skills
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -1279,12 +1280,7 @@ func equalSlices(a, b []string) bool {
 }
 
 func contains(items []string, target string) bool {
-	for _, item := range items {
-		if item == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(items, target)
 }
 
 // TestCaseInsensitiveSkillMd tests case-insensitive SKILL.md detection

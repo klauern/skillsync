@@ -121,12 +121,12 @@ func extractFrontmatter(content []byte, delimiter []byte) FrontmatterResult {
 }
 
 // ParseYAMLFrontmatter parses YAML frontmatter into a map.
-func ParseYAMLFrontmatter(frontmatter []byte) (map[string]interface{}, error) {
+func ParseYAMLFrontmatter(frontmatter []byte) (map[string]any, error) {
 	if len(frontmatter) == 0 {
-		return make(map[string]interface{}), nil
+		return make(map[string]any), nil
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := yaml.Unmarshal(frontmatter, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML frontmatter: %w", err)
 	}

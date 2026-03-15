@@ -206,7 +206,7 @@ description: A skill with lots of content
 
 `
 	// Add repeated sections to make it large
-	for i := 0; i < 500; i++ {
+	for i := range 500 {
 		content += `## Section ` + string(rune('A'+i%26)) + `
 
 This is paragraph number ` + string(rune('0'+i%10)) + `. It contains multiple lines

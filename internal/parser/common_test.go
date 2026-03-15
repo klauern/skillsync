@@ -101,12 +101,12 @@ name: test
 func TestParseYAMLFrontmatter(t *testing.T) {
 	tests := map[string]struct {
 		input   string
-		want    map[string]interface{}
+		want    map[string]any
 		wantErr bool
 	}{
 		"valid yaml": {
 			input: "name: test-skill\ndescription: A test",
-			want: map[string]interface{}{
+			want: map[string]any{
 				"name":        "test-skill",
 				"description": "A test",
 			},
@@ -114,15 +114,15 @@ func TestParseYAMLFrontmatter(t *testing.T) {
 		},
 		"yaml with array": {
 			input: "name: skill\ntools:\n  - Read\n  - Write",
-			want: map[string]interface{}{
+			want: map[string]any{
 				"name":  "skill",
-				"tools": []interface{}{"Read", "Write"},
+				"tools": []any{"Read", "Write"},
 			},
 			wantErr: false,
 		},
 		"empty yaml": {
 			input:   "",
-			want:    map[string]interface{}{},
+			want:    map[string]any{},
 			wantErr: false,
 		},
 		"invalid yaml": {

@@ -256,7 +256,7 @@ func (p *Parser) parseSkillFile(filePath string, pluginManifest *Manifest, repoN
 
 		// Extract tools array
 		if toolsVal, ok := fm["tools"]; ok {
-			if toolsSlice, ok := toolsVal.([]interface{}); ok {
+			if toolsSlice, ok := toolsVal.([]any); ok {
 				tools = make([]string, 0, len(toolsSlice))
 				for _, tool := range toolsSlice {
 					if toolStr, ok := tool.(string); ok {
@@ -377,9 +377,9 @@ func validateRepoURL(url string) error {
 		}
 		return nil
 	}
-	if strings.HasPrefix(url, "git@") {
+	if after, ok := strings.CutPrefix(url, "git@"); ok {
 		// git@host:owner/repo(.git)?
-		rest := strings.TrimPrefix(url, "git@")
+		rest := after
 		parts := strings.SplitN(rest, ":", 2)
 		if len(parts) != 2 || parts[0] == "" || strings.Trim(parts[1], "/") == "" {
 			return fmt.Errorf("invalid repo URL: expected git@host:owner/repo")

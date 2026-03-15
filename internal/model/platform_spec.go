@@ -70,8 +70,8 @@ func ParsePlatformSpec(s string) (PlatformSpec, error) {
 	}
 
 	// Split by comma for multiple scopes
-	scopeParts := strings.Split(scopeStr, ",")
-	for _, sp := range scopeParts {
+	scopeParts := strings.SplitSeq(scopeStr, ",")
+	for sp := range scopeParts {
 		sp = strings.TrimSpace(sp)
 		if sp == "" {
 			continue
