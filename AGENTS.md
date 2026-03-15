@@ -4,7 +4,7 @@
 
 Sync AI coding skills (Claude Code, Cursor, Codex) across platforms and projects.
 
-**Tech Stack**: Go 1.25.4, urfave/cli v3
+**Tech Stack**: Go 1.25.8, urfave/cli v3
 **Architecture**: CLI entry in `cmd/skillsync`, core packages in `internal/` (see `docs/architecture.md`)
 
 ## Why It Exists

@@ -877,3 +877,52 @@ func TestParser_Parse_FallbackToScanWhenMarketplaceEmpty(t *testing.T) {
 		t.Errorf("skill.Name = %q, want %q", skills[0].Name, "scanned-skill")
 	}
 }
+
+func TestValidateRepoURL(t *testing.T) {
+	tests := map[string]struct {
+		url     string
+		wantErr bool
+	}{
+		"https URL":                     {url: "https://github.com/user/repo", wantErr: false},
+		"https URL with .git":           {url: "https://github.com/user/repo.git", wantErr: false},
+		"git@ SSH URL":                  {url: "git@github.com:user/repo.git", wantErr: false},
+		"git@ SSH URL no .git":          {url: "git@github.com:user/repo", wantErr: false},
+		"ssh:// URL":                    {url: "ssh://git@github.com/user/repo.git", wantErr: false},
+		"leading dash (flag injection)": {url: "--upload-pack=malicious", wantErr: true},
+		"single dash":                   {url: "-v", wantErr: true},
+		"http (not https)":              {url: "http://github.com/user/repo", wantErr: true},
+		"https:// no host":              {url: "https://", wantErr: true},
+		"git@ no repo":                  {url: "git@github.com:", wantErr: true},
+		"file:// protocol":              {url: "file:///tmp/repo", wantErr: true},
+		"bare name (no protocol)":       {url: "myrepo", wantErr: true},
+		"ftp URL":                       {url: "ftp://example.com/repo", wantErr: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := validateRepoURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateRepoURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParser_ensureRepo_InvalidURL(t *testing.T) {
+	tmpDir := t.TempDir()
+	nonExistentBase := filepath.Join(tmpDir, "plugins")
+
+	p := &Parser{
+		basePath: nonExistentBase,
+		repoURL:  "--upload-pack=malicious",
+	}
+
+	_, err := p.ensureRepo()
+	if err == nil {
+		t.Error("ensureRepo() expected error for invalid URL, got nil")
+	}
+	// Validation must fire before any filesystem writes
+	if _, statErr := os.Stat(nonExistentBase); !os.IsNotExist(statErr) {
+		t.Errorf("expected no directory creation for invalid URL, got statErr=%v", statErr)
+	}
+}

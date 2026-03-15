@@ -463,7 +463,7 @@ func (p *Parser) parseFlatMdFile(filePath string) (model.Skill, error) {
 // isInsideSkillDir checks if a file path is inside any of the skill directories.
 func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
 	dir := filepath.Dir(filePath)
-	for dir != "/" && dir != "." && dir != "" {
+	for dir != "." && dir != "" {
 		if skillDirs[dir] {
 			return true
 		}

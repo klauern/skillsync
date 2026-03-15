@@ -303,11 +303,11 @@ func validateFileExtension(skill model.Skill) error {
 			}
 		}
 	case model.Codex:
-		// Codex typically uses .json
-		if ext != ".json" {
+		// Codex parser produces .md files (AGENTS.md, SKILL.md, *.md) and .toml (config.toml)
+		if ext != ".md" && ext != ".toml" {
 			return &Error{
 				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .json)", ext),
+				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
 	}
@@ -364,10 +364,21 @@ func validateWritePermission(platform model.Platform) error {
 			Err:     err,
 		}
 	}
-	_ = f.Close()
-
-	// Clean up test file
-	_ = os.Remove(testFile)
+	if err := f.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return &Error{
+			Field:   "write permission",
+			Message: fmt.Sprintf("failed to close write-test file: %s", testFile),
+			Err:     err,
+		}
+	}
+	if err := os.Remove(testFile); err != nil {
+		return &Error{
+			Field:   "write permission",
+			Message: fmt.Sprintf("failed to remove write-test file: %s", testFile),
+			Err:     err,
+		}
+	}
 
 	return nil
 }

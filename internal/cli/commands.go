@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"github.com/klauern/skillsync/internal/cache"
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/export"
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
@@ -225,12 +227,15 @@ func editConfig() error {
 	}
 
 	fmt.Printf("Opening %s in %s...\n", configPath, editor)
-	fmt.Println("Note: After editing, run 'skillsync config show' to verify your changes.")
 
-	// We don't actually exec here - just show the command to run
-	// This is safer and more portable
-	fmt.Printf("\nRun: %s %s\n", editor, configPath)
-	return nil
+	// Editor may include arguments (e.g. EDITOR="code --wait")
+	editorArgs := strings.Fields(editor)
+	// #nosec G204 G702 - editor binary is intentionally user-controlled via $EDITOR/$VISUAL
+	cmd := exec.Command(editorArgs[0], append(editorArgs[1:], configPath)...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func discoveryCommand() *cli.Command {
@@ -497,7 +502,9 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 	// Only do this for local discovery (not when fetching from a specific repo)
 	if repoURL == "" {
 		cacheSkills, err := discoverClaudePluginCacheSkills(skills)
-		if err == nil {
+		if err != nil {
+			logging.Warn("failed to discover Claude plugin cache skills", logging.Err(err))
+		} else {
 			skills = append(skills, cacheSkills...)
 		}
 	}
@@ -759,7 +766,7 @@ func colorPlatform(platform string, width int) string {
 	// Use consistent width formatting with colors
 	formatted := fmt.Sprintf("%-*s", width, platform)
 	switch platform {
-	case "claudecode":
+	case "claude-code":
 		return ui.Info(formatted)
 	case "cursor":
 		return ui.Success(formatted)
@@ -1746,6 +1753,7 @@ func parsePlatformSkillsFromPaths(
 		pathParser := parserFactory(path)
 		skills, err := pathParser.Parse()
 		if err != nil {
+			logging.Warn("failed to parse skills", logging.Err(err), logging.Path(path))
 			continue
 		}
 
@@ -1951,8 +1959,13 @@ func checkWritePermission(path string) error {
 	if err != nil {
 		return fmt.Errorf("cannot write to directory: %w", err)
 	}
-	_ = f.Close()
-	_ = os.Remove(testFile)
+	if err := f.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return fmt.Errorf("failed to close write-test file: %w", err)
+	}
+	if err := os.Remove(testFile); err != nil {
+		return fmt.Errorf("failed to remove write-test file: %w", err)
+	}
 	return nil
 }
 
