@@ -187,6 +187,62 @@ func TestCreateBackup_SkillFileBacksUpDirectory(t *testing.T) {
 	}
 }
 
+func TestCreateBackup_SkipsBrokenSymlinkTargets(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "broken-skill")
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create skill dirs: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(sourceDir, "SKILL.md"):               "# Broken link skill\n\ncontent",
+		filepath.Join(sourceDir, "references", "guide.md"): "# guide",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write test file %q: %v", path, err)
+		}
+	}
+
+	brokenTarget := filepath.Join(sourceDir, "references", "missing.md")
+	if err := os.Symlink(filepath.Join(sourceDir, "does-not-exist.md"), brokenTarget); err != nil {
+		t.Skipf("symlinks not supported in test environment: %v", err)
+	}
+
+	metadata, err := CreateBackup(filepath.Join(sourceDir, "SKILL.md"), Options{Platform: "cursor"})
+	if err != nil {
+		t.Fatalf("CreateBackup failed for directory with broken symlink: %v", err)
+	}
+
+	archiveBytes, err := os.ReadFile(metadata.BackupPath)
+	if err != nil {
+		t.Fatalf("failed to read backup archive: %v", err)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
+	if err != nil {
+		t.Fatalf("failed to read zip archive: %v", err)
+	}
+
+	entries := make(map[string]bool)
+	for _, file := range reader.File {
+		entries[file.Name] = true
+	}
+
+	if !entries["SKILL.md"] {
+		t.Error("expected SKILL.md to be archived")
+	}
+	if !entries[filepath.ToSlash(filepath.Join("references", "guide.md"))] {
+		t.Error("expected guide.md to be archived")
+	}
+	if entries[filepath.ToSlash(filepath.Join("references", "missing.md"))] {
+		t.Error("did not expect broken symlink target to be archived")
+	}
+}
+
 func TestRestoreBackup_LegacyFileBackup(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)
