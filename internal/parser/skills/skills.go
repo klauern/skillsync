@@ -170,14 +170,27 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		}
 	}
 
-	// If no name in frontmatter, derive from parent directory name
+	// If no name in frontmatter, derive from parent directory name.
 	if skill.Name == "" {
 		skill.Name = deriveNameFromPath(filePath)
 	}
 
 	// Validate skill name
 	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", skill.Name, filePath, err)
+		// Codex skills often use human-readable frontmatter names, but the
+		// directory basename is the canonical identifier for discovery/sync.
+		// Fall back to the directory name when it is valid so discover stays quiet.
+		if p.platform == model.Codex {
+			fallback := deriveNameFromPath(filePath)
+			if fallback != skill.Name {
+				if fallbackErr := parser.ValidateSkillName(fallback); fallbackErr == nil {
+					skill.Name = fallback
+				}
+			}
+		}
+		if err := parser.ValidateSkillName(skill.Name); err != nil {
+			return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", skill.Name, filePath, err)
+		}
 	}
 
 	// Detect skill directory structure

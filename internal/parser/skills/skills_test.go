@@ -385,6 +385,39 @@ Content`,
 	}
 }
 
+func TestParser_parseSkillFile_CodexFallsBackToDirectoryName(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "agent-development")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	filePath := filepath.Join(skillDir, "SKILL.md")
+	content := `---
+name: Agent Development
+description: Codex skill with a display name
+---
+Content`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	p := New(tmpDir, model.Codex)
+	skill, err := p.parseSkillFile(filePath)
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	if skill.Name != "agent-development" {
+		t.Fatalf("Name = %q, want %q", skill.Name, "agent-development")
+	}
+	if skill.Description != "Codex skill with a display name" {
+		t.Fatalf("Description = %q, want %q", skill.Description, "Codex skill with a display name")
+	}
+}
+
 func TestParser_parseSkillFile_AgentSkillsStandardFields(t *testing.T) {
 	tests := map[string]struct {
 		content                    string
