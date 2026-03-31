@@ -120,7 +120,8 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 
 - Architecture overview: `docs/architecture.md`
 - Sync strategies: `docs/strategies.md`
-- Skill format research: `docs/skill-formats-research.md`
+- Portability assessment: `docs/platforms/portability-assessment.md`
+- Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
 
 ## Development
 
