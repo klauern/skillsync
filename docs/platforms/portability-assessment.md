@@ -4,10 +4,12 @@ This note summarizes what is genuinely portable between Claude Code and Codex CL
 
 It is intentionally narrower than `docs/platforms/cross-platform-mapping.md`. The goal here is not to restate every file location, but to answer a practical question: **which artifact types can move across these two CLIs without changing behavior?**
 
+The machine-readable companion is `docs/platforms/schema.yaml`. This note explains the portability tradeoffs in prose; the schema carries the structured artifact inventory and should stay aligned with this assessment.
+
 ## Executive Summary
 
 - `SKILL.md` skills are the most portable artifact type. The Agent Skills Standard is shared, and both products use `name`, `description`, markdown body content, and supporting directories in broadly similar ways.
-- Commands/prompts are only partially portable. Claude Code has first-class slash-command files; Codex CLI’s documented surface is skills + `AGENTS.md` instructions, and this repo currently treats Codex prompt files as deprecated and unsupported.
+- Commands/prompts are only partially portable. Claude Code has first-class slash-command files; Codex CLI’s documented surface is skills + `AGENTS.md` instructions, and this repo treats Codex prompt files as deprecated compatibility content rather than a behavior-preserving target.
 - Subagents/agents are not portable in a 1:1 way. Claude Code has explicit `.claude/agents/*.md` files; Codex CLI has `AGENTS.md` instruction chaining, not a matching subagent file model.
 - Always-on instructions are conceptually similar but semantically different. `CLAUDE.md` and `AGENTS.md` can both carry persistent project guidance, but they load differently and should not be treated as interchangeable.
 - Claude plugin-installed skills are Claude-specific provenance. Their content can be copied, but the plugin install context does not transfer.
@@ -127,7 +129,7 @@ These features are not safely portable:
 
 These are the main gaps I see after comparing the repo docs with the current product surfaces:
 
-1. The portability story is spread across several docs. This new file helps, but the repo still lacks a single canonical "what is portable / what is not" reference.
+1. The portability story is spread across several docs. `docs/platforms/schema.yaml` is the structured source of truth, but it still needs to stay in lockstep with this narrative assessment.
 2. `docs/platforms/codex.md` still centers deprecated prompt files, but it should more explicitly distinguish:
    - what Codex CLI officially supports today,
    - what this repo parses today,
@@ -143,6 +145,7 @@ If this repo is trying to model portability honestly, it should treat the three 
 - **Skills**: portable by default, with a well-defined common subset.
 - **Commands/prompts**: portable only as content, not as behavior.
 - **Agents/subagents**: not directly portable; flatten or redesign them.
+- **Schema snapshot**: `docs/platforms/schema.yaml` should remain synchronized with the narrative docs so the portability story can be checked mechanically later.
 
 That framing matches the current code better than a simple "everything syncs everywhere" story.
 

@@ -10,8 +10,9 @@ and instructions (`CLAUDE.md` memory files). Skills follow the
 [Agent Skills Standard](https://agentskills.io/home) and are the primary extensibility mechanism.
 
 Custom slash commands have been merged into skills. A file at `.claude/commands/review.md` and a
-skill at `.claude/skills/review/SKILL.md` both create `/review` and work the same way. Legacy
-`.claude/commands/` files continue to work, but skills are the recommended format going forward.
+skill at `.claude/skills/review/SKILL.md` can both expose `/review`, but they do not behave the
+same way. Legacy `.claude/commands/` files remain a compatibility layer, while skills are the
+canonical format going forward.
 
 ## Directory Structure
 
