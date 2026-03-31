@@ -194,6 +194,12 @@ If this repo is trying to model portability honestly, it should treat the three 
 
 That framing matches the current code better than a simple "everything syncs everywhere" story.
 
+## Revalidation Workflow
+
+Run `just portability-check` after editing this assessment, the portability snapshot, or the
+Claude/Codex platform reference docs. The check is intentionally narrow: it flags drift in the
+portable/non-portable claims, not every possible documentation typo.
+
 ## Sources
 
 - [Agent Skills overview](https://agentskills.io/home)

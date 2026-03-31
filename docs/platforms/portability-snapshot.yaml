@@ -163,10 +163,10 @@ lossy_field_mappings:
 
 nonportable_behaviors:
   - Claude subagents
-  - Codex prompt file behavior
-  - Slash trigger semantics
-  - Runtime tool-permission policy
-  - Plugin provenance and install context
+  - Codex prompt files
+  - Slash-trigger behavior
+  - Session-specific tool permission policy
+  - Plugin install context
 
 source_refs:
   - docs/platforms/claude.md

@@ -76,6 +76,10 @@ clean:
 [group("quality"), doc("Run all quality checks")]
 audit: tidy fmt vet lint test
 
+[group("quality"), doc("Check portability docs against the structured snapshot")]
+portability-check:
+  go test ./internal/validation -run TestPortabilitySnapshotFreshness -count=1
+
 [group("build"), doc("Build and run the binary")]
 run: build
   ./{{BUILD_DIR}}/{{BINARY_NAME}}
