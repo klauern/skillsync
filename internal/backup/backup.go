@@ -50,7 +50,7 @@ func isSkillEntrypoint(name string) bool {
 // resolveSourcePath returns the path to backup. When given a skill entrypoint
 // file (SKILL.md), resolves to its parent directory so the full skill folder is backed up.
 func resolveSourcePath(sourcePath string) (string, error) {
-	info, err := os.Stat(sourcePath)
+	info, err := os.Lstat(sourcePath)
 	if err != nil {
 		return "", err
 	}
@@ -221,6 +221,13 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 
 	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				logging.Warn("skipping missing path while archiving directory",
+					logging.Path(path),
+					logging.Err(walkErr),
+				)
+				return nil
+			}
 			return walkErr
 		}
 		if info.IsDir() {
