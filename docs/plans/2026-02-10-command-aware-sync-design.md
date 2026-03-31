@@ -179,7 +179,7 @@ Warnings must include source path and target artifact path.
 
 - AC1 (model + architecture docs):
   - This design defines model semantics and precedence.
-  - `docs/architecture.md` updated with command-aware extension.
+  - `docs/architecture.md` updated with transport-layer prompt support.
 - AC2 (CLI behavior):
   - `sync/delete --type` and `--include-prompts` behavior specified.
 - AC3 (compat/migration):

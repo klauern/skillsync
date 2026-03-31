@@ -264,7 +264,7 @@ Additional coverage via inline test cases in `internal/parser/cursor/cursor_test
 - **No per-command tool field**: unlike Claude's `allowed-tools`, individual command files cannot
   restrict tool access.
 - **Mode metadata not file-based**: `modes.json` is a single JSON file rather than per-mode
-  markdown files, making it harder to map from individual Claude/Codex command artifacts.
+  markdown files, making it harder to map from individual Claude/Codex prompt artifacts.
 - **`.mdc` format**: the legacy `.mdc` extension is functionally identical to `.md` with YAML
   frontmatter, but is specific to Cursor and not recognized by other platforms.
 - **Team/Enterprise rules**: team-level rules (Team/Enterprise plans) are not parsed by SkillSync
