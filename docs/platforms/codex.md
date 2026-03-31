@@ -241,6 +241,6 @@ The parser does **not** currently handle:
 - OpenAI Codex Skills docs: https://developers.openai.com/codex/skills/ (accessed 2026-02-22)
 - OpenAI Codex AGENTS.md guide: https://developers.openai.com/codex/guides/agents-md (accessed 2026-02-22)
 - OpenAI Codex config reference: https://developers.openai.com/codex/config-reference (accessed 2026-02-22)
-- SkillSync research: `docs/research-codex-prompts-commands.md` (2026-02-09, superseded by this document)
-- SkillSync cross-platform research: `docs/skill-formats-research.md` (superseded by `docs/platforms/`)
+- SkillSync portability assessment: `docs/platforms/portability-assessment.md`
+- SkillSync cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
 - Parser source: `internal/parser/codex/codex.go`, `internal/parser/skills/skills.go`

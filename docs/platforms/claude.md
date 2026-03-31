@@ -7,7 +7,7 @@
 Claude Code is Anthropic's agentic CLI tool for software engineering. It uses a `.claude/` directory
 ecosystem to store skills (reusable agent instructions), commands (legacy slash-command prompts),
 and instructions (`CLAUDE.md` memory files). Skills follow the
-[Agent Skills Standard](https://agentskills.io) and are the primary extensibility mechanism.
+[Agent Skills Standard](https://agentskills.io/home) and are the primary extensibility mechanism.
 
 Custom slash commands have been merged into skills. A file at `.claude/commands/review.md` and a
 skill at `.claude/skills/review/SKILL.md` both create `/review` and work the same way. Legacy
@@ -345,9 +345,9 @@ Legacy format fixtures are in `testdata/skills/legacy/`:
 
 - [Claude Code Skills documentation](https://code.claude.com/docs/en/skills) -- retrieved 2026-02-22
 - [Claude Code Slash Commands documentation](https://code.claude.com/docs/en/slash-commands) -- retrieved 2026-02-22
-- [Agent Skills Standard](https://agentskills.io) -- open standard for portable AI agent skills
-- `docs/research-claude-commands.md` -- internal research notes, 2026-02-09 (superseded by this document)
-- `docs/skill-formats-research.md` -- cross-platform skill format research (superseded by `docs/platforms/`)
+- [Agent Skills Standard](https://agentskills.io/home) -- open standard for portable AI agent skills
+- `docs/platforms/portability-assessment.md` -- focused Claude/Codex portability assessment
+- `docs/platforms/cross-platform-mapping.md` -- broad cross-platform reference
 - `internal/parser/claude/claude.go` -- SkillSync Claude parser implementation
 - `internal/parser/skills/skills.go` -- shared SKILL.md parser
 - `internal/parser/claude/pluginindex.go` -- plugin symlink detection
