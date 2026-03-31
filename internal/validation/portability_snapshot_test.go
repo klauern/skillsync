@@ -10,7 +10,7 @@ import (
 )
 
 type portabilitySnapshot struct {
-	Version int `yaml:"version"`
+	Version       int `yaml:"version"`
 	GeneratedFrom struct {
 		Narrative  string `yaml:"narrative"`
 		Structured string `yaml:"structured"`
@@ -21,7 +21,7 @@ type portabilitySnapshot struct {
 		SupportedPlatforms []string `yaml:"supported_platforms"`
 		Notes              []string `yaml:"notes"`
 	} `yaml:"artifact_portability"`
-	Precedence map[string][]string `yaml:"precedence"`
+	Precedence         map[string][]string `yaml:"precedence"`
 	LossyFieldMappings []struct {
 		Field         string   `yaml:"field"`
 		SupportedBy   []string `yaml:"supported_by"`
