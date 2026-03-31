@@ -180,26 +180,26 @@ By default, this:
 - Creates a backup before syncing
 - Uses the "overwrite" strategy (source replaces target)
 - Syncs to the user scope on the target platform
-- Includes `skill` artifacts only (prompts/commands are opt-in)
+- Includes `skill` artifacts only (prompt artifacts are opt-in)
 
-### Command/Prompt Artifacts
+### Prompt Artifacts
 
-Discovery supports both skills and prompt/command artifacts. Sync and delete are
+Discovery supports both skills and prompt artifacts. Sync and delete are
 skill-only by default for safety.
 
 ```bash
-# Discover prompts/commands only
+# Discover prompts only
 skillsync discover --type prompt
 
-# Sync both skills and prompts/commands
+# Sync both skills and prompts
 skillsync sync --include-prompts claude-code codex
 
-# Sync prompts/commands only
+# Sync prompts only
 skillsync sync --type prompt claude-code cursor
 ```
 
 Compatibility caveats:
-- Claude command slash-trigger behavior may not map one-to-one to Codex/Cursor.
+- Claude slash-trigger behavior may not map one-to-one to Codex/Cursor.
 - Some fields (for example `argument-hint`) are preserved as metadata on
   non-Claude targets.
 
