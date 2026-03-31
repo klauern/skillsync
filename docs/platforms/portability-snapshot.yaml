@@ -1,0 +1,175 @@
+# SkillSync Portability Snapshot
+#
+# Machine-readable companion to docs/platforms/portability-assessment.md.
+# This file is intentionally conservative: it captures the portability claims
+# that the narrative docs make today so future checks can compare them
+# mechanically.
+
+version: 1
+generated_from:
+  narrative: docs/platforms/portability-assessment.md
+  structured: docs/platforms/schema.yaml
+
+artifact_portability:
+  skill:
+    portability: high
+    description: Core reusable SKILL.md content.
+    supported_platforms:
+      - claude
+      - codex
+      - copilot
+      - cursor
+      - gemini
+    notes:
+      - Shared skill bodies are the strongest cross-platform unit.
+      - Platform-specific metadata lowers fidelity but usually preserves intent.
+  command:
+    portability: low
+    description: Slash commands and prompt artifacts.
+    supported_platforms:
+      - claude
+      - copilot
+      - cursor
+      - gemini
+    notes:
+      - Codex prompt files are compatibility content only in this repo.
+      - Slash triggers and argument interpolation are not behaviorally portable.
+  agent:
+    portability: none
+    description: Claude subagents and other agent-definition artifacts.
+    supported_platforms:
+      - claude
+      - copilot
+      - gemini
+    notes:
+      - Claude subagents do not map 1:1 to Codex AGENTS.md instructions.
+      - Flatten or re-author agent behavior when targeting Codex.
+  instructions:
+    portability: medium
+    description: Always-on instruction files.
+    supported_platforms:
+      - claude
+      - codex
+      - copilot
+      - cursor
+      - gemini
+    notes:
+      - Similar intent, different loading and precedence models.
+      - Instruction files should usually be re-authored, not copied verbatim.
+
+precedence:
+  claude:
+    - enterprise
+    - personal
+    - project
+  codex:
+    - project
+    - user
+    - admin
+  copilot:
+    - personal
+    - repository
+    - organization
+  cursor:
+    - project
+    - global
+  gemini:
+    - workspace
+    - user
+    - extension
+
+lossy_field_mappings:
+  - field: argument-hint
+    supported_by:
+      - claude
+      - copilot
+    unsupported_by:
+      - codex
+      - cursor
+      - gemini
+    behavior: preserve as metadata only
+  - field: allowed-tools
+    supported_by:
+      - claude
+      - codex
+      - copilot
+      - cursor
+    unsupported_by:
+      - gemini
+    behavior: preserve as intent, not identical enforcement
+  - field: model
+    supported_by:
+      - claude
+      - copilot
+    unsupported_by:
+      - codex
+      - cursor
+      - gemini
+    behavior: preserve as metadata only
+  - field: disable-model-invocation
+    supported_by:
+      - claude
+      - copilot
+    unsupported_by:
+      - codex
+      - cursor
+      - gemini
+    behavior: preserve as metadata only
+  - field: user-invocable
+    supported_by:
+      - claude
+      - copilot
+    unsupported_by:
+      - codex
+      - cursor
+      - gemini
+    behavior: preserve as metadata only
+  - field: context
+    supported_by:
+      - claude
+    unsupported_by:
+      - codex
+      - copilot
+      - cursor
+      - gemini
+    behavior: Claude-specific subagent forking; no cross-platform equivalent
+  - field: hooks
+    supported_by:
+      - claude
+    unsupported_by:
+      - codex
+      - copilot
+      - cursor
+      - gemini
+    behavior: Claude-specific lifecycle hooks; do not treat as portable
+  - field: applyTo
+    supported_by:
+      - copilot
+    unsupported_by:
+      - claude
+      - codex
+      - cursor
+      - gemini
+    behavior: no native portable equivalent
+  - field: globs
+    supported_by:
+      - cursor
+    unsupported_by:
+      - claude
+      - codex
+      - copilot
+      - gemini
+    behavior: no native portable equivalent
+
+nonportable_behaviors:
+  - Claude subagents
+  - Codex prompt file behavior
+  - Slash trigger semantics
+  - Runtime tool-permission policy
+  - Plugin provenance and install context
+
+source_refs:
+  - docs/platforms/claude.md
+  - docs/platforms/codex.md
+  - docs/platforms/cross-platform-mapping.md
+  - docs/platforms/portability-assessment.md
