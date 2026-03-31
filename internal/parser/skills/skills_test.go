@@ -960,6 +960,7 @@ func TestParseSkillContent(t *testing.T) {
 	tests := map[string]struct {
 		content     []byte
 		name        string
+		platform    model.Platform
 		wantName    string
 		wantDesc    string
 		wantLicense string
@@ -974,6 +975,7 @@ license: MIT
 ---
 Body content`),
 			name:        "fallback-name",
+			platform:    model.ClaudeCode,
 			wantName:    "content-skill",
 			wantDesc:    "Parsed from content",
 			wantLicense: "MIT",
@@ -986,6 +988,7 @@ allowed-tools: Read, Write, Bash
 ---
 Body content`),
 			name:      "fallback-name",
+			platform:  model.ClaudeCode,
 			wantName:  "content-tools",
 			wantDesc:  "Parses allowed-tools too",
 			wantTools: []string{"Read", "Write", "Bash"},
@@ -996,6 +999,7 @@ description: No name in frontmatter
 ---
 Body`),
 			name:     "provided-name",
+			platform: model.ClaudeCode,
 			wantName: "provided-name",
 			wantDesc: "No name in frontmatter",
 		},
@@ -1004,8 +1008,9 @@ Body`),
 description: No name
 ---
 Body`),
-			name:    "",
-			wantErr: true,
+			name:     "",
+			platform: model.ClaudeCode,
+			wantErr:  true,
 		},
 		"invalid name fails": {
 			content: []byte(`---
@@ -1013,14 +1018,26 @@ name: invalid name spaces
 description: Test
 ---
 Body`),
-			name:    "fallback",
-			wantErr: true,
+			name:     "fallback",
+			platform: model.ClaudeCode,
+			wantErr:  true,
+		},
+		"codex falls back to provided canonical name": {
+			content: []byte(`---
+name: Agent Development
+description: Human-readable Codex display name
+---
+Body`),
+			name:     "agent-development",
+			platform: model.Codex,
+			wantName: "agent-development",
+			wantDesc: "Human-readable Codex display name",
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			skill, err := ParseSkillContent(tt.content, tt.name, model.ClaudeCode)
+			skill, err := ParseSkillContent(tt.content, tt.name, tt.platform)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ParseSkillContent() error = %v, wantErr %v", err, tt.wantErr)

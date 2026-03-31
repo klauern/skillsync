@@ -535,7 +535,17 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 		return model.Skill{}, fmt.Errorf("skill name is required")
 	}
 	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		return model.Skill{}, fmt.Errorf("invalid skill name %q: %w", skill.Name, err)
+		// Keep Codex content parsing aligned with file-backed SKILL.md parsing:
+		// the provided name is the canonical identifier even when frontmatter
+		// carries a human-readable display name.
+		if platform == model.Codex && name != "" && name != skill.Name {
+			if fallbackErr := parser.ValidateSkillName(name); fallbackErr == nil {
+				skill.Name = name
+			}
+		}
+		if err := parser.ValidateSkillName(skill.Name); err != nil {
+			return model.Skill{}, fmt.Errorf("invalid skill name %q: %w", skill.Name, err)
+		}
 	}
 
 	// Normalize content

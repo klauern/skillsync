@@ -2,6 +2,7 @@ package parser_test
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/klauern/skillsync/internal/parser/claude"
@@ -35,7 +36,7 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 				skills, err := codex.New(filepath.Join(fixtureRoot, "codex")).Parse()
 				return len(skills), err
 			},
-			want: 5,
+			want: 6,
 		},
 	}
 
@@ -49,5 +50,23 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 				t.Fatalf("discovered %d skills, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCodexFixturesIncludeHumanReadableNameSkill(t *testing.T) {
+	fixtureRoot := filepath.Join("..", "..", "testdata", "skills", "codex")
+
+	skills, err := codex.New(fixtureRoot).Parse()
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+
+	names := make([]string, 0, len(skills))
+	for _, skill := range skills {
+		names = append(names, skill.Name)
+	}
+
+	if !slices.Contains(names, "agent-development") {
+		t.Fatalf("expected parsed Codex fixtures to include %q, got %v", "agent-development", names)
 	}
 }

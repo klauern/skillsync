@@ -662,6 +662,39 @@ SKILL.md content.`
 	}
 }
 
+func TestParser_Parse_CodexSkillHumanReadableFrontmatterName(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	skillDir := filepath.Join(tmpDir, "agent-development")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	content := `---
+name: Agent Development
+description: Human-readable Codex name
+---
+Use this skill for building agents.`
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d: %v", len(skills), skillNames(skills))
+	}
+	if skills[0].Name != "agent-development" {
+		t.Fatalf("Name = %q, want %q", skills[0].Name, "agent-development")
+	}
+	if skills[0].Description != "Human-readable Codex name" {
+		t.Fatalf("Description = %q, want %q", skills[0].Description, "Human-readable Codex name")
+	}
+}
+
 func TestParser_Parse_FlatLegacyMd(t *testing.T) {
 	t.Run("flat .md coexists with SKILL.md", func(t *testing.T) {
 		tmpDir := t.TempDir()
