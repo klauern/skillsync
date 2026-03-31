@@ -34,7 +34,8 @@ type Skill struct {
 	Content     string            `json:"content"`
 	ModifiedAt  time.Time         `json:"modified_at"`
 
-	// Type indicates whether this is a regular skill or a slash command/prompt.
+	// Type indicates whether this is a regular skill or a slash command/prompt
+	// transport artifact. It does not imply a separate Codex runtime model.
 	// Defaults to SkillTypeSkill if not specified.
 	Type SkillType `json:"type,omitempty"`
 

@@ -10,6 +10,15 @@ Skills follow the Agent Skills Standard (`SKILL.md` in a named subdirectory),
 while broader instructions are delivered through hierarchical `AGENTS.md` files
 and `config.toml` settings.
 
+SkillSync treats Codex command-like and agent-like surfaces as transport
+metadata, not as first-class Codex runtime artifacts. In practice that means:
+
+- command-like content is represented with `Type=prompt` when it is synced at
+  all
+- agent-like controls stay in `Metadata` or are flattened into normal skill or
+  instruction content
+- `AGENTS.md` remains an instruction chain, not a subagent definition model
+
 Codex selects skills implicitly based on task relevance -- the `description`
 frontmatter field drives matching. Codex also has a **custom prompts** system
 at `~/.codex/prompts/*.md` (invoked as `/prompts:<name>`), but this feature is
@@ -136,6 +145,10 @@ Custom prompts are user-scoped markdown files invoked as `/prompts:<name>` from
 the slash menu. This feature is **deprecated**; OpenAI recommends using Skills
 instead.
 
+SkillSync documents this surface for compatibility only. It does not imply a
+Codex-native command model equivalent to Claude slash commands, and it does not
+introduce a separate first-class agent artifact type.
+
 #### Frontmatter Schema
 
 | Field | Type | Required | Description |
@@ -218,6 +231,7 @@ skill share the same name, the `SKILL.md` version wins.
 
 The parser does **not** currently handle:
 - `~/.codex/prompts/` directory
+- any first-class `command` or `agent` runtime model
 - `agents/openai.yaml` platform metadata files
 - `AGENTS.override.md` variant
 

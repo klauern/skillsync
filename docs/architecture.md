@@ -45,16 +45,20 @@ See `docs/platforms/` for per-platform format references and `docs/platforms/cro
 3. Sync applies strategy to merge skills
 4. Export writes to target format
 
-## Command-Aware Extension
+## Transport-Layer Prompt Support
 
 Command/prompt artifacts are represented in the same unified `model.Skill`
 structure using:
 
 - `Type`: `skill` or `prompt`
-- `Trigger`: optional slash trigger (for example `/review`) when source platform
-  exposes one
+- `Trigger`: optional slash trigger when the source platform exposes one
 - `Metadata`: passthrough for platform-specific fields that are not universally
   portable
+
+This is a transport model, not a claim of runtime parity. SkillSync does not
+introduce separate first-class `command` or `agent` entities for Codex, and it
+does not imply that Codex can reproduce Claude command triggers or subagent
+behavior natively.
 
 ### Discovery
 

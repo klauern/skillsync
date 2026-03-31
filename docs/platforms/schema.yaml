@@ -91,6 +91,9 @@ platforms:
     name: Codex (OpenAI CLI)
     config_dir: .codex
     global_dir: ~/.codex
+    unsupported_artifact_surfaces:
+      - command
+      - agent
     artifact_types:
       skill:
         location:
@@ -133,6 +136,9 @@ platforms:
         location:
           - "~/.codex/prompts/*.md"
         # User-scoped only; invoked as /prompts:<name> in the slash command menu (deprecated)
+        notes:
+          - Compatibility-only surface; SkillSync does not treat this as a first-class Codex runtime model.
+          - The current parser does not read this path by default.
         frontmatter:
           description:
             type: string

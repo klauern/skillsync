@@ -12,6 +12,7 @@ The machine-readable companions are `docs/platforms/schema.yaml` and `docs/platf
 - Portability in this repo is mostly about carrying content and intent across tools. It is not, by itself, a guarantee that the destination CLI will preserve the source CLI's invocation, loading, or enforcement behavior.
 - Commands/prompts are only partially portable. Claude Code has first-class slash-command files; Codex CLI’s documented surface is skills + `AGENTS.md` instructions, and this repo treats Codex prompt files as deprecated compatibility content rather than a behavior-preserving target.
 - Subagents/agents are not portable in a 1:1 way. Claude Code has explicit `.claude/agents/*.md` files; Codex CLI has `AGENTS.md` instruction chaining, not a matching subagent file model.
+- The unified `model.Skill` type is intentionally transport-first. Command-like content can ride along as `Type=prompt`, but that does not create a native Codex command or agent runtime.
 - Always-on instructions are conceptually similar but semantically different. `CLAUDE.md` and `AGENTS.md` can both carry persistent project guidance, but they load differently and should not be treated as interchangeable.
 - Claude plugin-installed skills are Claude-specific provenance. Their content can be copied, but the plugin install context does not transfer.
 - The structured portability snapshot records these claims explicitly so they can be checked mechanically later instead of being inferred only from prose.
@@ -70,6 +71,7 @@ That distinction explains why a synced artifact can still be useful even when it
 - Claude-specific controls such as `disable-model-invocation` or `user-invocable` do not become native Codex skill controls.
 - Claude subagent routing via `context: fork` and `agent` can survive as metadata, but it does not create a Codex subagent runtime.
 - Claude `hooks` and dynamic context injection remain Claude runtime features even if the raw text is preserved.
+- The shared model does not add a separate command or agent top-level type; it keeps prompt/trigger metadata inside `model.Skill` for lossy transport.
 
 So SkillSync should describe many conversions as **content-preserving but behavior-changing** rather than as full portability.
 

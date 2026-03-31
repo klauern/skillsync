@@ -32,6 +32,7 @@ artifact_portability:
       - cursor
       - gemini
     notes:
+      - SkillSync keeps this in `model.Skill` as transport metadata rather than a separate Codex runtime model.
       - Codex prompt files are compatibility content only in this repo.
       - Slash triggers and argument interpolation are not behaviorally portable.
   agent:
@@ -42,6 +43,7 @@ artifact_portability:
       - copilot
       - gemini
     notes:
+      - SkillSync does not define a first-class Codex agent artifact.
       - Claude subagents do not map 1:1 to Codex AGENTS.md instructions.
       - Flatten or re-author agent behavior when targeting Codex.
   instructions:
