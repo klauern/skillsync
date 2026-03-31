@@ -187,6 +187,112 @@ func TestCreateBackup_SkillFileBacksUpDirectory(t *testing.T) {
 	}
 }
 
+func TestCreateBackup_SkipsBrokenSymlinkTargets(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "broken-skill")
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create skill dirs: %v", err)
+	}
+
+	files := map[string]string{
+		filepath.Join(sourceDir, "SKILL.md"):               "# Broken link skill\n\ncontent",
+		filepath.Join(sourceDir, "references", "guide.md"): "# guide",
+	}
+	for path, content := range files {
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write test file %q: %v", path, err)
+		}
+	}
+
+	brokenTarget := filepath.Join(sourceDir, "references", "missing.md")
+	if err := os.Symlink(filepath.Join(sourceDir, "does-not-exist.md"), brokenTarget); err != nil {
+		t.Skipf("symlinks not supported in test environment: %v", err)
+	}
+
+	metadata, err := CreateBackup(filepath.Join(sourceDir, "SKILL.md"), Options{Platform: "cursor"})
+	if err != nil {
+		t.Fatalf("CreateBackup failed for directory with broken symlink: %v", err)
+	}
+
+	archiveBytes, err := os.ReadFile(metadata.BackupPath)
+	if err != nil {
+		t.Fatalf("failed to read backup archive: %v", err)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
+	if err != nil {
+		t.Fatalf("failed to read zip archive: %v", err)
+	}
+
+	entries := make(map[string]bool)
+	for _, file := range reader.File {
+		entries[file.Name] = true
+	}
+
+	if !entries["SKILL.md"] {
+		t.Error("expected SKILL.md to be archived")
+	}
+	if !entries[filepath.ToSlash(filepath.Join("references", "guide.md"))] {
+		t.Error("expected guide.md to be archived")
+	}
+	if entries[filepath.ToSlash(filepath.Join("references", "missing.md"))] {
+		t.Error("did not expect broken symlink target to be archived")
+	}
+}
+
+func TestCreateBackup_BrokenSkillEntrypointSymlinkFallsBackToDirectory(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "entrypoint-skill")
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create skill dirs: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(sourceDir, "references", "guide.md"), []byte("# guide"), 0o644); err != nil {
+		t.Fatalf("failed to write guide file: %v", err)
+	}
+
+	// Make the entrypoint itself a broken symlink. The backup should still
+	// archive the containing directory and skip the missing symlink target.
+	if err := os.Symlink(filepath.Join(sourceDir, "missing-skill.md"), filepath.Join(sourceDir, "SKILL.md")); err != nil {
+		t.Skipf("symlinks not supported in test environment: %v", err)
+	}
+
+	metadata, err := CreateBackup(filepath.Join(sourceDir, "SKILL.md"), Options{Platform: "cursor"})
+	if err != nil {
+		t.Fatalf("CreateBackup failed for broken entrypoint symlink: %v", err)
+	}
+	if metadata.SourcePath != sourceDir {
+		t.Fatalf("expected backup source path %q, got %q", sourceDir, metadata.SourcePath)
+	}
+
+	archiveBytes, err := os.ReadFile(metadata.BackupPath)
+	if err != nil {
+		t.Fatalf("failed to read backup archive: %v", err)
+	}
+
+	reader, err := zip.NewReader(bytes.NewReader(archiveBytes), int64(len(archiveBytes)))
+	if err != nil {
+		t.Fatalf("failed to read zip archive: %v", err)
+	}
+
+	entries := make(map[string]bool)
+	for _, file := range reader.File {
+		entries[file.Name] = true
+	}
+
+	if !entries[filepath.ToSlash(filepath.Join("references", "guide.md"))] {
+		t.Error("expected guide.md to be archived")
+	}
+	if entries["SKILL.md"] {
+		t.Error("did not expect a broken SKILL.md symlink target to be archived")
+	}
+}
+
 func TestRestoreBackup_LegacyFileBackup(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)
