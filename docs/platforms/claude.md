@@ -9,6 +9,10 @@ ecosystem to store skills (reusable agent instructions), commands (legacy slash-
 and instructions (`CLAUDE.md` memory files). Skills follow the
 [Agent Skills Standard](https://agentskills.io/home) and are the primary extensibility mechanism.
 
+Several Claude skill frontmatter fields describe runtime behavior that does not port cleanly to
+Codex CLI. Treat `context: fork`, `agent`, `hooks`, `disable-model-invocation`, `user-invocable`,
+and `model` as Claude-native controls unless a Codex-native reimplementation is explicitly added.
+
 Custom slash commands have been merged into skills. A file at `.claude/commands/review.md` and a
 skill at `.claude/skills/review/SKILL.md` can both expose `/review`, but they do not behave the
 same way. Legacy `.claude/commands/` files remain a compatibility layer, while skills are the
@@ -72,16 +76,34 @@ All fields are optional. Only `description` is recommended.
 | `name`                     | `string`   | No          | Display name and `/slash-command` trigger. If omitted, uses the directory name. Lowercase letters, numbers, and hyphens only (max 64 characters). |
 | `description`              | `string`   | Recommended | What the skill does and when to use it. Claude uses this to decide when to apply the skill automatically. If omitted, uses the first paragraph of markdown content. |
 | `argument-hint`            | `string`   | No          | Hint shown during autocomplete to indicate expected arguments (e.g., `[issue-number]`, `[filename] [format]`). |
-| `disable-model-invocation` | `bool`     | No          | Set to `true` to prevent Claude from automatically loading this skill. User must invoke manually with `/name`. Default: `false`. |
-| `user-invocable`           | `bool`     | No          | Set to `false` to hide from the `/` menu. Use for background knowledge that only Claude should invoke. Default: `true`. |
+| `disable-model-invocation` | `bool`     | No          | Claude-native runtime control to prevent automatic loading. Preserve as metadata when translating to other CLIs. Default: `false`. |
+| `user-invocable`           | `bool`     | No          | Claude-native runtime control for `/` menu visibility. Preserve as metadata when translating to other CLIs. Default: `true`. |
 | `allowed-tools`            | `string \| string[]` | No | Comma-separated list or array of tools Claude can use without permission when this skill is active (e.g., `Read, Grep, Glob`). Accepts tool patterns like `Bash(gh *)`. |
-| `model`                    | `string`   | No          | Model to use when this skill is active. |
-| `context`                  | `string`   | No          | Set to `fork` to run in a forked subagent context. |
-| `agent`                    | `string`   | No          | Which subagent type to use when `context: fork` is set. Options: `Explore`, `Plan`, `general-purpose`, or custom agent names from `.claude/agents/`. |
-| `hooks`                    | `object`   | No          | Hooks scoped to this skill's lifecycle. |
+| `model`                    | `string`   | No          | Claude model override for this skill. Preserve as metadata when translating to other CLIs. |
+| `context`                  | `string`   | No          | Claude-specific subagent context. Set to `fork` to run in a forked subagent context; Codex CLI has no equivalent. |
+| `agent`                    | `string`   | No          | Claude-specific subagent selector when `context: fork` is set. Options: `Explore`, `Plan`, `general-purpose`, or custom agent names from `.claude/agents/`. |
+| `hooks`                    | `object`   | No          | Claude-specific hooks scoped to this skill's lifecycle. Not portable as runtime behavior. |
 | `type`                     | `string`   | No          | SkillSync extension: `skill` (default) or `prompt` for slash-command semantics. |
 | `trigger`                  | `string`   | No          | SkillSync extension: explicit slash trigger (e.g., `/my-command`). |
 | `scope`                    | `string`   | No          | SkillSync extension: `user`, `repo`, `system`, `plugin`, etc. |
+
+#### Codex Portability Notes
+
+The common Claude-to-Codex portable subset is smaller than the full Claude
+schema:
+
+- Usually portable as native skill content: `name`, `description`, markdown
+  body content, and supporting directories.
+- Usually portable only as intent/metadata: `allowed-tools`.
+- Claude-specific runtime controls with no native Codex skill equivalent:
+  `disable-model-invocation`, `user-invocable`, `model`, `context`, `agent`,
+  and `hooks`.
+- SkillSync extension fields such as `type`, `trigger`, and `scope` are
+  transport metadata in this repo. They do not mean Codex will reproduce
+  Claude slash-command, invocation, or scope behavior.
+
+When these Claude-only fields move to Codex, treat them as lossy compatibility
+data or re-author them as Codex-native instructions.
 
 #### Invocation Control Matrix
 
@@ -153,7 +175,21 @@ They create slash commands and continue to work, but skills are the recommended 
 | `model`          | `string`   | No        | Model override for this command. |
 
 Commands also support the same frontmatter fields as skills (`disable-model-invocation`,
-`user-invocable`, `context`, `agent`, `hooks`).
+`user-invocable`, `context`, `agent`, `hooks`), but those fields should be read as Claude runtime
+controls rather than portable Codex behavior.
+
+#### Codex Portability Notes
+
+Claude commands are portable mainly as prompt **content**. They are not
+portable as equivalent runtime objects:
+
+- The filename-derived slash trigger does not become a first-class Codex skill
+  capability.
+- `argument-hint`, `model`, `disable-model-invocation`, `user-invocable`,
+  `context`, `agent`, and `hooks` do not map to native Codex per-skill command
+  behavior.
+- When SkillSync maps Claude commands into Codex skill output, the result is a
+  lossy content transformation rather than a behavior-preserving conversion.
 
 #### Name Derivation
 
@@ -203,6 +239,17 @@ precedence:
 
 Claude Code also discovers `CLAUDE.md` files from `--add-dir` directories when the
 `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` environment variable is set.
+
+#### Codex Portability Notes
+
+`CLAUDE.md` content can often be reused in `AGENTS.md`, but the loading model is
+different:
+
+- Claude merges memory from multiple `CLAUDE.md` locations.
+- Codex concatenates `AGENTS.md` files from root to cwd.
+- Codex can also inject instruction text from `config.toml`.
+
+The prose may be portable while the prompt-construction behavior is not.
 
 ## Scope Levels
 
@@ -341,6 +388,9 @@ Legacy format fixtures are in `testdata/skills/legacy/`:
   description loading.
 - **`hooks` field parsing**: The `hooks` frontmatter field is stored as metadata but not
   structurally parsed.
+- **Codex portability of Claude-only controls**: `disable-model-invocation`,
+  `user-invocable`, `model`, `context: fork`, `agent`, and `hooks` should be
+  documented and treated as lossy when Claude content is synced to Codex CLI.
 
 ## Sources
 

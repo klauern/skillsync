@@ -4,15 +4,17 @@ This note summarizes what is genuinely portable between Claude Code and Codex CL
 
 It is intentionally narrower than `docs/platforms/cross-platform-mapping.md`. The goal here is not to restate every file location, but to answer a practical question: **which artifact types can move across these two CLIs without changing behavior?**
 
-The machine-readable companion is `docs/platforms/schema.yaml`. This note explains the portability tradeoffs in prose; the schema carries the structured artifact inventory and should stay aligned with this assessment.
+The machine-readable companions are `docs/platforms/schema.yaml` and `docs/platforms/portability-snapshot.yaml`. This note explains the portability tradeoffs in prose; the schema carries the structured artifact inventory, and the snapshot carries the structured portability claims that should stay aligned with this assessment.
 
 ## Executive Summary
 
 - `SKILL.md` skills are the most portable artifact type. The Agent Skills Standard is shared, and both products use `name`, `description`, markdown body content, and supporting directories in broadly similar ways.
+- Portability in this repo is mostly about carrying content and intent across tools. It is not, by itself, a guarantee that the destination CLI will preserve the source CLI's invocation, loading, or enforcement behavior.
 - Commands/prompts are only partially portable. Claude Code has first-class slash-command files; Codex CLI’s documented surface is skills + `AGENTS.md` instructions, and this repo treats Codex prompt files as deprecated compatibility content rather than a behavior-preserving target.
 - Subagents/agents are not portable in a 1:1 way. Claude Code has explicit `.claude/agents/*.md` files; Codex CLI has `AGENTS.md` instruction chaining, not a matching subagent file model.
 - Always-on instructions are conceptually similar but semantically different. `CLAUDE.md` and `AGENTS.md` can both carry persistent project guidance, but they load differently and should not be treated as interchangeable.
 - Claude plugin-installed skills are Claude-specific provenance. Their content can be copied, but the plugin install context does not transfer.
+- The structured portability snapshot records these claims explicitly so they can be checked mechanically later instead of being inferred only from prose.
 
 ## Artifact Portability Matrix
 
@@ -55,6 +57,22 @@ These fields are still useful when moving a skill across the two CLIs, even if t
 
 Those fields are mostly safe as transport metadata.
 
+### 3. Portable content vs. non-portable behavior
+
+The most important distinction in this assessment is the difference between:
+
+- **portable content**: markdown instructions, supporting directories, and a small shared frontmatter subset
+- **non-portable behavior**: when an artifact appears in the UI, how it is invoked, how it participates in prompt construction, and which runtime controls the CLI enforces
+
+That distinction explains why a synced artifact can still be useful even when it is lossy:
+
+- Claude skill instructions can move to Codex as skill content and remain actionable.
+- Claude-specific controls such as `disable-model-invocation` or `user-invocable` do not become native Codex skill controls.
+- Claude subagent routing via `context: fork` and `agent` can survive as metadata, but it does not create a Codex subagent runtime.
+- Claude `hooks` and dynamic context injection remain Claude runtime features even if the raw text is preserved.
+
+So SkillSync should describe many conversions as **content-preserving but behavior-changing** rather than as full portability.
+
 ## What Is Only Partially Portable
 
 ### 1. Command and prompt artifacts
@@ -71,6 +89,8 @@ The big loss points are:
 - argument interpolation semantics
 - model override semantics
 - tool permissions that differ by platform
+- invocation gating such as `disable-model-invocation` and `user-invocable`
+- Claude-only subagent routing such as `context: fork` and `agent`
 
 So the right mental model is: **content may transfer, behavior does not.**
 
@@ -86,6 +106,14 @@ Differences that matter:
 
 This means an instruction file can be ported, but it should usually be **re-authored** rather than blindly copied.
 
+At the prose level, `CLAUDE.md` content can often be reused in `AGENTS.md`. At the behavior level, the two files remain different:
+
+- `CLAUDE.md` participates in Claude's memory-loading rules.
+- `AGENTS.md` participates in Codex's root-to-cwd concatenation chain.
+- Codex can also inject instructions from `config.toml`, which has no direct `CLAUDE.md` equivalent.
+
+The text may transfer, but the surrounding prompt-construction semantics do not.
+
 ### 3. Tool restriction metadata
 
 `allowed-tools` exists in both ecosystems, but the surrounding execution model differs:
@@ -94,6 +122,19 @@ This means an instruction file can be ported, but it should usually be **re-auth
 - Codex CLI uses skill matching plus config/session behavior instead of Claude’s exact command/file model.
 
 This makes tool lists portable as intent, not as identical enforcement.
+
+### 4. Claude-only execution controls
+
+Several Claude frontmatter fields are useful metadata when translating content, but they are not portable behaviors:
+
+- `context: fork`
+- `agent`
+- `hooks`
+- `disable-model-invocation`
+- `user-invocable`
+- `model`
+
+When content moves to Codex CLI, these fields should be preserved as metadata or re-authored as Codex-native instructions, not treated as equivalent runtime controls.
 
 ## What Is Not Portable
 
@@ -124,12 +165,15 @@ These features are not safely portable:
 - session-specific tool permission policy
 - plugin-specific installation precedence
 - subagent delegation semantics
+- Claude skill visibility and invocation gating
+- Claude per-skill hook lifecycle behavior
+- Claude per-skill model override behavior
 
 ## Gaps In This Repository
 
 These are the main gaps I see after comparing the repo docs with the current product surfaces:
 
-1. The portability story is spread across several docs. `docs/platforms/schema.yaml` is the structured source of truth, but it still needs to stay in lockstep with this narrative assessment.
+1. The portability story is spread across several docs. `docs/platforms/schema.yaml` is the structured artifact inventory, while `docs/platforms/portability-snapshot.yaml` is the structured portability claim set. Both need to stay in lockstep with this narrative assessment.
 2. `docs/platforms/codex.md` still centers deprecated prompt files, but it should more explicitly distinguish:
    - what Codex CLI officially supports today,
    - what this repo parses today,
@@ -143,9 +187,10 @@ These are the main gaps I see after comparing the repo docs with the current pro
 If this repo is trying to model portability honestly, it should treat the three artifact layers like this:
 
 - **Skills**: portable by default, with a well-defined common subset.
+- Common subset: `name`, `description`, markdown body, and supporting directories. Claude-only runtime fields should be treated as metadata, not as parity guarantees.
 - **Commands/prompts**: portable only as content, not as behavior.
 - **Agents/subagents**: not directly portable; flatten or redesign them.
-- **Schema snapshot**: `docs/platforms/schema.yaml` should remain synchronized with the narrative docs so the portability story can be checked mechanically later.
+- **Structured snapshot**: `docs/platforms/schema.yaml` and `docs/platforms/portability-snapshot.yaml` should remain synchronized with the narrative docs so the portability story can be checked mechanically later.
 
 That framing matches the current code better than a simple "everything syncs everywhere" story.
 
