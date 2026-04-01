@@ -10,7 +10,7 @@ import (
 )
 
 type portabilitySnapshot struct {
-	Version int `yaml:"version"`
+	Version       int `yaml:"version"`
 	GeneratedFrom struct {
 		Narrative  string `yaml:"narrative"`
 		Structured string `yaml:"structured"`
@@ -21,7 +21,7 @@ type portabilitySnapshot struct {
 		SupportedPlatforms []string `yaml:"supported_platforms"`
 		Notes              []string `yaml:"notes"`
 	} `yaml:"artifact_portability"`
-	Precedence map[string][]string `yaml:"precedence"`
+	Precedence         map[string][]string `yaml:"precedence"`
 	LossyFieldMappings []struct {
 		Field         string   `yaml:"field"`
 		SupportedBy   []string `yaml:"supported_by"`
@@ -82,6 +82,7 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 		"copilot": {"personal", "repository", "organization"},
 		"cursor":  {"project", "global"},
 		"gemini":  {"workspace", "user", "extension"},
+		"pidev":   {"user", "project"},
 	}
 	if len(snapshot.Precedence) != len(wantPrecedence) {
 		t.Fatalf("precedence entries = %d, want %d", len(snapshot.Precedence), len(wantPrecedence))
@@ -138,6 +139,7 @@ func findRepoRoot(t *testing.T) string {
 func readFile(t *testing.T, path string) []byte {
 	t.Helper()
 
+	// #nosec G304 -- test helper reads only repo-controlled documentation paths.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
