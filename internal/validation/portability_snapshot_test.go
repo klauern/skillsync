@@ -139,6 +139,7 @@ func findRepoRoot(t *testing.T) string {
 func readFile(t *testing.T, path string) []byte {
 	t.Helper()
 
+	// #nosec G304 -- test helper reads only repo-controlled documentation paths.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
