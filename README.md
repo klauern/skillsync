@@ -124,6 +124,7 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 - Sync strategies: `docs/strategies.md`
 - Portability assessment: `docs/platforms/portability-assessment.md`
 - Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
+- Pi.dev platform reference: `docs/platforms/pidev.md`
 
 ## Development
 

@@ -82,6 +82,7 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 		"copilot": {"personal", "repository", "organization"},
 		"cursor":  {"project", "global"},
 		"gemini":  {"workspace", "user", "extension"},
+		"pidev":   {"user", "project"},
 	}
 	if len(snapshot.Precedence) != len(wantPrecedence) {
 		t.Fatalf("precedence entries = %d, want %d", len(snapshot.Precedence), len(wantPrecedence))
