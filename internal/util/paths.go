@@ -49,6 +49,16 @@ func CodexSkillsPath() string {
 	return filepath.Join(HomeDir(), ".codex", "skills")
 }
 
+// PiDevProjectSkillsPath returns the Pi.dev skills directory for a project.
+func PiDevProjectSkillsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".pi", "skills")
+}
+
+// PiDevSkillsPath returns the default Pi.dev skills directory (user-level).
+func PiDevSkillsPath() string {
+	return filepath.Join(HomeDir(), ".pi", "agent", "skills")
+}
+
 // SkillsyncConfigPath returns the skillsync configuration directory
 // Supports SKILLSYNC_HOME environment variable override
 func SkillsyncConfigPath() string {
@@ -198,6 +208,8 @@ func platformDirName(p model.Platform) string {
 		return ".cursor"
 	case model.Codex:
 		return ".codex"
+	case model.PiDev:
+		return ".pi"
 	default:
 		return "." + strings.ToLower(string(p))
 	}
@@ -205,6 +217,9 @@ func platformDirName(p model.Platform) string {
 
 // PlatformSkillsPath returns the user-level skills path for a platform.
 func PlatformSkillsPath(p model.Platform) string {
+	if p == model.PiDev {
+		return PiDevSkillsPath()
+	}
 	return filepath.Join(HomeDir(), platformDirName(p), "skills")
 }
 

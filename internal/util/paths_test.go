@@ -72,6 +72,22 @@ func TestCodexSkillsPath(t *testing.T) {
 	}
 }
 
+func TestPiDevProjectSkillsPath(t *testing.T) {
+	projectDir := "/test/project"
+	expected := "/test/project/.pi/skills"
+	if got := PiDevProjectSkillsPath(projectDir); got != expected {
+		t.Errorf("PiDevProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
+	}
+}
+
+func TestPiDevSkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	if got := PiDevSkillsPath(); got != expected {
+		t.Errorf("PiDevSkillsPath() = %q, want %q", got, expected)
+	}
+}
+
 func TestGetRepoRoot(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -173,6 +189,15 @@ func TestGetTieredPaths(t *testing.T) {
 			checkScope: model.ScopeSystem,
 			wantPaths:  true,
 		},
+		{
+			name: "pi.dev with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.PiDev,
+			},
+			checkScope: model.ScopeRepo,
+			wantPaths:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -241,6 +266,7 @@ func TestPlatformDirName(t *testing.T) {
 		{model.ClaudeCode, ".claude"},
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
+		{model.PiDev, ".pi"},
 	}
 
 	for _, tt := range tests {
@@ -263,6 +289,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 
 	for _, tt := range tests {

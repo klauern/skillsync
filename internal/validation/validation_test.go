@@ -176,6 +176,18 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			path:     "/skills/test.json",
 			wantErr:  true,
 		},
+		{
+			name:     "Pi.dev .md",
+			platform: model.PiDev,
+			path:     "/skills/SKILL.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Pi.dev invalid extension .json",
+			platform: model.PiDev,
+			path:     "/skills/test.json",
+			wantErr:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -448,6 +460,11 @@ func TestGetPlatformPath(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "Pi.dev",
+			platform: model.PiDev,
+			wantErr:  false,
+		},
+		{
 			name:     "Invalid platform",
 			platform: model.Platform("invalid"),
 			wantErr:  true,
@@ -482,6 +499,23 @@ func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
 	expected := filepath.Join(home, ".codex", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_PiDevDefaultsToUserSkills(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_PI_DEV_PATH", "")
+	t.Setenv("SKILLSYNC_PIDEV_PATH", "")
+
+	got, err := GetPlatformPath(model.PiDev)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
 	}
 }
 

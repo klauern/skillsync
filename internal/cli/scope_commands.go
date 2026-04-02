@@ -39,7 +39,7 @@ func promoteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to promote from (claude-code, cursor, codex)",
+				Usage:   "Platform to promote from (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:  "from",
@@ -102,7 +102,7 @@ func demoteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to demote from (claude-code, cursor, codex)",
+				Usage:   "Platform to demote from (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:  "from",
@@ -182,7 +182,7 @@ func scopeListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.BoolFlag{
 				Name:  "all",
@@ -231,7 +231,7 @@ func scopePruneCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to prune (claude-code, cursor, codex). Required.",
+				Usage:   "Platform to prune (claude-code, cursor, codex, pi.dev). Required.",
 			},
 			&cli.StringFlag{
 				Name:  "scope",

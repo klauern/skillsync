@@ -102,6 +102,12 @@ func TestEnvironmentOverrides(t *testing.T) {
 			envValue: "/custom/claude/path",
 			check:    func(c *Config) bool { return c.Platforms.ClaudeCode.SkillsPath == "/custom/claude/path" },
 		},
+		{
+			name:     "pi.dev path alias",
+			envKey:   "SKILLSYNC_PIDEV_PATH",
+			envValue: "/custom/pi/path",
+			check:    func(c *Config) bool { return c.Platforms.PiDev.SkillsPath == "/custom/pi/path" },
+		},
 	}
 
 	for _, tt := range tests {
@@ -438,6 +444,16 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 					c.Platforms.Codex.SkillsPaths[1] == "/opt/codex/skills"
 			},
 		},
+		{
+			name:     "pi.dev skills paths",
+			envKey:   "SKILLSYNC_PI_DEV_SKILLS_PATHS",
+			envValue: ".pi/skills:~/.pi/agent/skills",
+			check: func(c *Config) bool {
+				return len(c.Platforms.PiDev.SkillsPaths) == 2 &&
+					c.Platforms.PiDev.SkillsPaths[0] == ".pi/skills" &&
+					c.Platforms.PiDev.SkillsPaths[1] == "~/.pi/agent/skills"
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -503,6 +519,16 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 	if cfg.Platforms.Codex.SkillsPaths[2] != "/etc/codex/skills" {
 		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
+	}
+
+	if len(cfg.Platforms.PiDev.SkillsPaths) != 2 {
+		t.Errorf("expected 2 Pi.dev skills paths, got %d", len(cfg.Platforms.PiDev.SkillsPaths))
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[0] != ".pi/skills" {
+		t.Errorf("expected first Pi.dev path to be '.pi/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[0])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[1] != "~/.pi/agent/skills" {
+		t.Errorf("expected second Pi.dev path to be '~/.pi/agent/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[1])
 	}
 }
 

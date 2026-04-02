@@ -10,6 +10,7 @@ func TestPlatformValidation(t *testing.T) {
 		"claude code valid": {platform: ClaudeCode, valid: true},
 		"cursor valid":      {platform: Cursor, valid: true},
 		"codex valid":       {platform: Codex, valid: true},
+		"pi.dev valid":      {platform: PiDev, valid: true},
 		"empty invalid":     {platform: "", valid: false},
 		"unknown invalid":   {platform: "unknown", valid: false},
 	}
@@ -28,8 +29,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 3 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 3", len(platforms))
+	if len(platforms) != 4 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 4", len(platforms))
 	}
 
 	for _, p := range platforms {
@@ -47,6 +48,7 @@ func TestPlatformShort(t *testing.T) {
 		"claude code": {platform: ClaudeCode, want: "cc"},
 		"cursor":      {platform: Cursor, want: "cur"},
 		"codex":       {platform: Codex, want: "cdx"},
+		"pi.dev":      {platform: PiDev, want: "pi"},
 		"unknown":     {platform: "unknown", want: "unknown"},
 	}
 
@@ -69,6 +71,7 @@ func TestPlatformConfigDir(t *testing.T) {
 		"claude code":     {platform: ClaudeCode, want: "claude"},
 		"cursor":          {platform: Cursor, want: "cursor"},
 		"codex":           {platform: Codex, want: "codex"},
+		"pi.dev":          {platform: PiDev, want: "pi"},
 		"unknown returns": {platform: "unknown", want: "unknown"},
 		"empty":           {platform: "", want: ""},
 	}
@@ -95,6 +98,10 @@ func TestParsePlatform(t *testing.T) {
 		"claude shorthand":      {input: "claude", want: ClaudeCode, wantErr: false},
 		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
+		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
+		"pi shorthand":          {input: "pi", want: PiDev, wantErr: false},
+		"pi-dev alias":          {input: "pi-dev", want: PiDev, wantErr: false},
+		"pidev alias":           {input: "pidev", want: PiDev, wantErr: false},
 		"uppercase normalized":  {input: "CURSOR", want: Cursor, wantErr: false},
 		"mixed case":            {input: "ClaudeCode", want: ClaudeCode, wantErr: false},
 		"with whitespace":       {input: "  cursor  ", want: Cursor, wantErr: false},

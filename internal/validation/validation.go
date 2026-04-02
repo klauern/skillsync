@@ -310,6 +310,14 @@ func validateFileExtension(skill model.Skill) error {
 				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
+	case model.PiDev:
+		// Pi.dev skills use the shared SKILL.md format.
+		if ext != ".md" {
+			return &Error{
+				Field:   fmt.Sprintf("skill %q", skill.Name),
+				Message: fmt.Sprintf("invalid file extension %q for Pi.dev skill (expected .md)", ext),
+			}
+		}
 	}
 
 	return nil
@@ -491,6 +499,7 @@ func ValidatePath(path string, _ model.Platform) error {
 //   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
 //   - SKILLSYNC_CURSOR_PATH for Cursor
 //   - SKILLSYNC_CODEX_PATH for Codex
+//   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
 	case model.ClaudeCode:
@@ -509,6 +518,13 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.PiDev:
+		for _, key := range []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"} {
+			if envPath := os.Getenv(key); envPath != "" {
+				return envPath, nil
+			}
+		}
+		return util.PiDevSkillsPath(), nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}

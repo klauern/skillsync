@@ -199,6 +199,7 @@ func TestParser_Platform(t *testing.T) {
 		{model.ClaudeCode},
 		{model.Cursor},
 		{model.Codex},
+		{model.PiDev},
 	}
 
 	for _, tt := range tests {
@@ -229,6 +230,7 @@ func TestParser_DefaultPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 
 	for _, tt := range tests {
