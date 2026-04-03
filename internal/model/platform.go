@@ -12,6 +12,8 @@ type Platform string
 const (
 	// ClaudeCode is the identifier for the Claude Code platform.
 	ClaudeCode Platform = "claude-code"
+	// Copilot is the identifier for the GitHub Copilot platform.
+	Copilot Platform = "copilot"
 	// Cursor is the identifier for the Cursor platform.
 	Cursor Platform = "cursor"
 	// Codex is the identifier for the Codex platform.
@@ -23,7 +25,7 @@ const (
 // IsValid returns true if the platform is recognized
 func (p Platform) IsValid() bool {
 	switch p {
-	case ClaudeCode, Cursor, Codex, PiDev:
+	case ClaudeCode, Copilot, Cursor, Codex, PiDev:
 		return true
 	default:
 		return false
@@ -36,6 +38,8 @@ func (p Platform) ConfigDir() string {
 	switch p {
 	case ClaudeCode:
 		return "claude"
+	case Copilot:
+		return "github"
 	case Cursor:
 		return "cursor"
 	case Codex:
@@ -53,6 +57,8 @@ func (p Platform) Short() string {
 	switch p {
 	case ClaudeCode:
 		return "cc"
+	case Copilot:
+		return "cop"
 	case Cursor:
 		return "cur"
 	case Codex:
@@ -85,6 +91,8 @@ func ParsePlatform(s string) (Platform, error) {
 	switch normalized {
 	case "claudecode", "claude":
 		return ClaudeCode, nil
+	case "copilot", "github-copilot", "githubcopilot":
+		return Copilot, nil
 	case "cursor":
 		return Cursor, nil
 	case "codex":

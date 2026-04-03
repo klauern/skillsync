@@ -10,6 +10,7 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 )
@@ -34,6 +35,13 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 				return len(skills), err
 			},
 			want: 2,
+		},
+		"copilot": {
+			parse: func() (int, error) {
+				skills, err := copilot.New(filepath.Join(fixtureRoot, "copilot")).Parse()
+				return len(skills), err
+			},
+			want: 3,
 		},
 		"codex": {
 			parse: func() (int, error) {
