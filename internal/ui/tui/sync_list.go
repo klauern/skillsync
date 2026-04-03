@@ -280,10 +280,6 @@ func (m *SyncListModel) updateColumns(totalWidth int) {
 	m.table.SetColumns(columns)
 }
 
-func truncateSyncListValue(value string, width int) string {
-	return truncateTableValue(value, width)
-}
-
 func (m SyncListModel) detailPanelWidth() int {
 	if m.width > 0 {
 		return m.width

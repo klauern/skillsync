@@ -264,10 +264,6 @@ func (m *DiscoverListModel) updateColumns(totalWidth int) {
 	m.table.SetColumns(columns)
 }
 
-func truncateDiscoverListValue(value string, width int) string {
-	return truncateTableValue(value, width)
-}
-
 func (m DiscoverListModel) detailPanelWidth() int {
 	if m.width > 0 {
 		return m.width

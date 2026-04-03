@@ -444,10 +444,6 @@ func (m *PromoteDemoteListModel) updateColumns(totalWidth int) {
 	m.table.SetColumns(columns)
 }
 
-func truncatePromoteDemoteValue(value string, width int) string {
-	return truncateTableValue(value, width)
-}
-
 func (m *PromoteDemoteListModel) applyFilter() {
 	if m.filter == "" {
 		m.filtered = m.skills

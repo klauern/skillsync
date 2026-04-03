@@ -301,10 +301,6 @@ func (m *DeleteListModel) updateColumns(totalWidth int) {
 	m.table.SetColumns(columns)
 }
 
-func truncateDeleteListValue(value string, width int) string {
-	return truncateTableValue(value, width)
-}
-
 func (m DeleteListModel) detailPanelWidth() int {
 	if m.width > 0 {
 		return m.width
