@@ -279,10 +279,6 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := truncatePromoteDemoteValue(s.Name, m.columnWidths.name)
-		platform := truncatePromoteDemoteValue(string(s.Platform), m.columnWidths.platform)
-		scope := truncatePromoteDemoteValue(s.DisplayScope(), m.columnWidths.scope)
-
 		// Determine target scope based on current scope
 		var targetScope string
 		switch s.Scope {
@@ -294,14 +290,13 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			targetScope = "-"
 		}
 
-		desc := truncatePromoteDemoteValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
 			checkbox,
-			name,
-			platform,
-			scope,
-			targetScope,
-			desc,
+			truncateTableValue(s.Name, m.columnWidths.name),
+			truncateTableValue(string(s.Platform), m.columnWidths.platform),
+			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
+			truncateTableValue(targetScope, m.columnWidths.canMoveTo),
+			truncateTableValue(s.Description, m.columnWidths.desc),
 		}
 	}
 	return rows
@@ -450,16 +445,7 @@ func (m *PromoteDemoteListModel) updateColumns(totalWidth int) {
 }
 
 func truncatePromoteDemoteValue(value string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if runewidth.StringWidth(value) <= width {
-		return value
-	}
-	if width <= 3 {
-		return runewidth.Truncate(value, width, "")
-	}
-	return runewidth.Truncate(value, width, "...")
+	return truncateTableValue(value, width)
 }
 
 func (m *PromoteDemoteListModel) applyFilter() {

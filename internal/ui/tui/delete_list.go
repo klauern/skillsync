@@ -284,16 +284,12 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[x]"
 		}
 
-		name := truncateDeleteListValue(s.Name, m.columnWidths.name)
-		platform := truncateDeleteListValue(string(s.Platform), m.columnWidths.platform)
-		scope := truncateDeleteListValue(s.DisplayScope(), m.columnWidths.scope)
-		desc := truncateDeleteListValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
 			checkbox,
-			name,
-			platform,
-			scope,
-			desc,
+			truncateTableValue(s.Name, m.columnWidths.name),
+			truncateTableValue(string(s.Platform), m.columnWidths.platform),
+			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
+			truncateTableValue(s.Description, m.columnWidths.desc),
 		}
 	}
 	return rows
@@ -306,16 +302,7 @@ func (m *DeleteListModel) updateColumns(totalWidth int) {
 }
 
 func truncateDeleteListValue(value string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if len(value) <= width {
-		return value
-	}
-	if width <= 3 {
-		return value[:width]
-	}
-	return value[:width-3] + "..."
+	return truncateTableValue(value, width)
 }
 
 func (m DeleteListModel) detailPanelWidth() int {

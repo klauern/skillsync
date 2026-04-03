@@ -170,13 +170,10 @@ func NewBackupListModel(backups []backup.Metadata) BackupListModel {
 func backupsToRows(backups []backup.Metadata) []table.Row {
 	rows := make([]table.Row, len(backups))
 	for i, b := range backups {
-		source := b.SourcePath
-		if len(source) > 40 {
-			source = "..." + source[len(source)-37:]
-		}
+		source := truncateTableValueFromStart(b.SourcePath, 40)
 		rows[i] = table.Row{
-			b.ID,
-			b.Platform,
+			truncateTableValue(b.ID, 28),
+			truncateTableValue(b.Platform, 12),
 			source,
 			b.CreatedAt.Format("2006-01-02 15:04"),
 			formatSize(b.Size),

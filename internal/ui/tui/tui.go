@@ -217,6 +217,49 @@ func wrapLabeledText(label, value string, width int) string {
 	return b.String()
 }
 
+func truncateTableValue(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+	return runewidth.Truncate(value, width, "...")
+}
+
+func truncateTableValueFromStart(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+
+	runes := []rune(value)
+	target := width - 3
+	used := 0
+	start := len(runes)
+	for start > 0 {
+		runeWidth := runewidth.RuneWidth(runes[start-1])
+		if used+runeWidth > target && used > 0 {
+			break
+		}
+		used += runeWidth
+		start--
+		if used == target {
+			break
+		}
+	}
+
+	return "..." + string(runes[start:])
+}
+
 func padLines(lines []string, count int) []string {
 	if count <= 0 {
 		return lines

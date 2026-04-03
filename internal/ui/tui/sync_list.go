@@ -264,14 +264,11 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := truncateSyncListValue(s.Name, m.columnWidths.name)
-		scope := truncateSyncListValue(s.DisplayScope(), m.columnWidths.scope)
-		desc := truncateSyncListValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
 			checkbox,
-			name,
-			scope,
-			desc,
+			truncateTableValue(s.Name, m.columnWidths.name),
+			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
+			truncateTableValue(s.Description, m.columnWidths.desc),
 		}
 	}
 	return rows
@@ -284,16 +281,7 @@ func (m *SyncListModel) updateColumns(totalWidth int) {
 }
 
 func truncateSyncListValue(value string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if len(value) <= width {
-		return value
-	}
-	if width <= 3 {
-		return value[:width]
-	}
-	return value[:width-3] + "..."
+	return truncateTableValue(value, width)
 }
 
 func (m SyncListModel) detailPanelWidth() int {
