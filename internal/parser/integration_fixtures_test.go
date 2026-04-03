@@ -207,7 +207,7 @@ func copyFixtureTree(t *testing.T, srcRoot, dstRoot string) {
 			return os.MkdirAll(target, 0o755)
 		}
 
-		// #nosec G304 -- fixture paths are derived from repo-controlled testdata.
+		// #nosec G304, G122 -- fixture paths are derived from repo-controlled testdata.
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
