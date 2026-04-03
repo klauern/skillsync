@@ -17,6 +17,9 @@ with this assessment.
 
 ## Executive Summary
 
+- SkillSync currently has first-class parser/runtime support for Claude Code,
+  Cursor, and Codex. Copilot, Gemini CLI, and Pi.dev are documented here as
+  adjacent portability references.
 - `SKILL.md` skills are the most portable artifact type. The Agent Skills
   Standard is shared, and all three products use `name`, `description`,
   markdown body content, and supporting directories in broadly similar ways.
