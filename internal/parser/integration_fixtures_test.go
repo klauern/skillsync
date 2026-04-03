@@ -15,7 +15,7 @@ import (
 )
 
 func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
-	fixtureRoot := filepath.Join("..", "..", "testdata", "skills")
+	fixtureRoot := filepath.Join(findRepoRoot(t), "testdata", "skills")
 
 	tests := map[string]struct {
 		parse func() (int, error)
@@ -64,7 +64,7 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 }
 
 func TestCodexFixturesIncludeHumanReadableNameSkill(t *testing.T) {
-	fixtureRoot := filepath.Join("..", "..", "testdata", "skills", "codex")
+	fixtureRoot := filepath.Join(findRepoRoot(t), "testdata", "skills", "codex")
 
 	skills, err := codex.New(fixtureRoot).Parse()
 	if err != nil {
@@ -82,7 +82,7 @@ func TestCodexFixturesIncludeHumanReadableNameSkill(t *testing.T) {
 }
 
 func TestPiDevFixturesParseSkillsPromptsAndInstructions(t *testing.T) {
-	fixtureRoot := filepath.Join("..", "..", "testdata", "skills", "pidev")
+	fixtureRoot := filepath.Join(findRepoRoot(t), "testdata", "skills", "pidev")
 	tmpRoot := t.TempDir()
 	copyFixtureTree(t, fixtureRoot, tmpRoot)
 
@@ -215,6 +215,26 @@ func copyFixtureTree(t *testing.T, srcRoot, dstRoot string) {
 	})
 	if err != nil {
 		t.Fatalf("copy fixture tree: %v", err)
+	}
+}
+
+func findRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "testdata", "skills")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not find repository root from %s", dir)
+		}
+		dir = parent
 	}
 }
 
