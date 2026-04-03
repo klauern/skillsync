@@ -250,7 +250,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex
+   Supported platforms: claude-code, cursor, codex, pi.dev
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -262,7 +262,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -772,6 +772,8 @@ func colorPlatform(platform string, width int) string {
 		return ui.Success(formatted)
 	case "codex":
 		return ui.Warning(formatted)
+	case "pi.dev":
+		return ui.Magenta(formatted)
 	default:
 		return formatted
 	}
@@ -2038,7 +2040,7 @@ func exportCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2208,7 +2210,7 @@ func backupCreateCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to back up (claude-code, cursor, codex, all)",
+				Usage:   "Platform to back up (claude-code, cursor, codex, pi.dev, all)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -2289,7 +2291,7 @@ func backupListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2508,7 +2510,7 @@ func backupDeleteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
@@ -2568,7 +2570,7 @@ func backupVerifyCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {

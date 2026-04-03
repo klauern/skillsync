@@ -49,7 +49,7 @@ func dedupeDeleteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:     "platform",
 				Aliases:  []string{"p"},
-				Usage:    "Platform where the skill exists (claude-code, cursor, codex). Required.",
+				Usage:    "Platform where the skill exists (claude-code, cursor, codex, pi.dev). Required.",
 				Required: true,
 			},
 			&cli.StringFlag{
@@ -99,7 +99,7 @@ func dedupeRenameCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:     "platform",
 				Aliases:  []string{"p"},
-				Usage:    "Platform where the skill exists (claude-code, cursor, codex). Required.",
+				Usage:    "Platform where the skill exists (claude-code, cursor, codex, pi.dev). Required.",
 				Required: true,
 			},
 			&cli.StringFlag{

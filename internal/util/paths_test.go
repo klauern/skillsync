@@ -241,6 +241,7 @@ func TestPlatformDirName(t *testing.T) {
 		{model.ClaudeCode, ".claude"},
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
+		{model.PiDev, ".pi/agent"},
 	}
 
 	for _, tt := range tests {
@@ -254,7 +255,11 @@ func TestPlatformDirName(t *testing.T) {
 }
 
 func TestPlatformSkillsPath(t *testing.T) {
-	home := HomeDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create pi.dev skills dir: %v", err)
+	}
 
 	tests := []struct {
 		platform model.Platform
@@ -263,6 +268,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 
 	for _, tt := range tests {
@@ -284,6 +290,7 @@ func TestRepoSkillsPath(t *testing.T) {
 		{model.ClaudeCode, "/test/repo", "/test/repo/.claude/skills"},
 		{model.Cursor, "/test/repo", "/test/repo/.cursor/skills"},
 		{model.Codex, "/test/repo", "/test/repo/.codex/skills"},
+		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
 	}
 
 	for _, tt := range tests {
@@ -293,6 +300,46 @@ func TestRepoSkillsPath(t *testing.T) {
 				t.Errorf("RepoSkillsPath(%s, %s) = %q, want %q", tt.platform, tt.repoRoot, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestPiDevPathsPreferAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	agentsRoot := filepath.Join(home, ".agents")
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents prompts dir: %v", err)
+	}
+
+	if got := PiDevSkillsPath(); got != filepath.Join(agentsRoot, "skills") {
+		t.Fatalf("PiDevSkillsPath() = %q, want %q", got, filepath.Join(agentsRoot, "skills"))
+	}
+	if got := PiDevPromptsPath(); got != filepath.Join(agentsRoot, "prompts") {
+		t.Fatalf("PiDevPromptsPath() = %q, want %q", got, filepath.Join(agentsRoot, "prompts"))
+	}
+}
+
+func TestPiDevPathsFallBackToPiAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	piAgentRoot := filepath.Join(home, ".pi", "agent")
+	if err := os.MkdirAll(filepath.Join(piAgentRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .pi/agent skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(piAgentRoot, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create .pi/agent prompts dir: %v", err)
+	}
+
+	if got := PiDevSkillsPath(); got != filepath.Join(piAgentRoot, "skills") {
+		t.Fatalf("PiDevSkillsPath() = %q, want %q", got, filepath.Join(piAgentRoot, "skills"))
+	}
+	if got := PiDevPromptsPath(); got != filepath.Join(piAgentRoot, "prompts") {
+		t.Fatalf("PiDevPromptsPath() = %q, want %q", got, filepath.Join(piAgentRoot, "prompts"))
 	}
 }
 

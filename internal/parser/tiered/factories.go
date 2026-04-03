@@ -9,6 +9,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/pidev"
 )
 
 // ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
@@ -32,6 +33,13 @@ func CodexParserFactory() ParserFactory {
 	}
 }
 
+// PiDevParserFactory returns a ParserFactory for Pi.dev.
+func PiDevParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return pidev.New(basePath)
+	}
+}
+
 // ParserFactoryFor returns the appropriate ParserFactory for a platform.
 func ParserFactoryFor(platform model.Platform) ParserFactory {
 	switch platform {
@@ -41,6 +49,8 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 		return CursorParserFactory()
 	case model.Codex:
 		return CodexParserFactory()
+	case model.PiDev:
+		return PiDevParserFactory()
 	default:
 		// Return a factory that creates Claude parsers as a fallback
 		return ClaudeCodeParserFactory()

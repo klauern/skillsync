@@ -199,6 +199,7 @@ func TestParser_Platform(t *testing.T) {
 		{model.ClaudeCode},
 		{model.Cursor},
 		{model.Codex},
+		{model.PiDev},
 	}
 
 	for _, tt := range tests {
@@ -393,6 +394,19 @@ func TestNewForPlatform(t *testing.T) {
 
 	if p.Platform() != model.ClaudeCode {
 		t.Errorf("Platform() = %s, want %s", p.Platform(), model.ClaudeCode)
+	}
+}
+
+func TestNewForPlatform_PiDev(t *testing.T) {
+	p, err := NewForPlatform(model.PiDev)
+	if err != nil {
+		t.Fatalf("NewForPlatform() error = %v", err)
+	}
+	if p == nil {
+		t.Fatal("NewForPlatform() returned nil")
+	}
+	if p.Platform() != model.PiDev {
+		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiDev)
 	}
 }
 
