@@ -45,6 +45,36 @@ func TestNewPromoteDemoteListModel(t *testing.T) {
 	}
 }
 
+func TestPromoteDemoteListModel_WindowResize_AdjustsColumnWidths(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "test-skill",
+			Description: "A test skill description that should fit",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewPromoteDemoteListModel(skills)
+
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	pm := newModel.(PromoteDemoteListModel)
+
+	cols := pm.table.Columns()
+	if len(cols) != 6 {
+		t.Fatalf("expected 6 columns, got %d", len(cols))
+	}
+	if cols[1].Width <= 25 {
+		t.Errorf("expected name column width to expand, got %d", cols[1].Width)
+	}
+	if cols[3].Width <= 10 {
+		t.Errorf("expected scope column width to expand, got %d", cols[3].Width)
+	}
+	if cols[5].Width <= 30 {
+		t.Errorf("expected description column width to expand, got %d", cols[5].Width)
+	}
+}
+
 func TestNewPromoteDemoteListModel_FiltersMovableScopes(t *testing.T) {
 	skills := []model.Skill{
 		{

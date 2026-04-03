@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/klauern/skillsync/internal/model"
 )
@@ -24,6 +25,17 @@ const (
 	PromoteDemoteActionPromote
 	// PromoteDemoteActionDemote means the user wants to demote selected skills.
 	PromoteDemoteActionDemote
+)
+
+const (
+	promoteDemoteCheckboxWidth  = 3
+	promoteDemoteNameWidth      = 25
+	promoteDemotePlatformWidth  = 12
+	promoteDemoteScopeWidth     = 10
+	promoteDemoteCanMoveToWidth = 12
+	promoteDemoteDescWidth      = 30
+	promoteDemoteColumnPadding  = 2
+	promoteDemoteColumnCount    = 6
 )
 
 // PromoteDemoteListResult contains the result of the promote/demote list TUI interaction.
@@ -114,6 +126,7 @@ type PromoteDemoteListModel struct {
 	height        int
 	quitting      bool
 	removeSource  bool // move instead of copy
+	columnWidths  promoteDemoteColumnWidths
 }
 
 // Styles for the promote/demote list TUI.
@@ -143,6 +156,62 @@ var promoteDemoteListStyles = struct {
 	Option:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 }
 
+type promoteDemoteColumnWidths struct {
+	name      int
+	platform  int
+	scope     int
+	canMoveTo int
+	desc      int
+}
+
+func promoteDemoteListColumns(totalWidth int, skills []model.Skill) ([]table.Column, promoteDemoteColumnWidths) {
+	widths := promoteDemoteColumnWidths{
+		name:      promoteDemoteNameWidth,
+		platform:  promoteDemotePlatformWidth,
+		scope:     promoteDemoteScopeWidth,
+		canMoveTo: promoteDemoteCanMoveToWidth,
+		desc:      promoteDemoteDescWidth,
+	}
+
+	if totalWidth > 0 {
+		baseTotal := promoteDemoteCheckboxWidth + widths.name + widths.platform + widths.scope + widths.canMoveTo + widths.desc +
+			(promoteDemoteColumnPadding * promoteDemoteColumnCount)
+		extra := totalWidth - baseTotal
+		if extra > 0 {
+			maxScopeWidth := widths.scope
+			for _, skill := range skills {
+				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
+				if scopeWidth > maxScopeWidth {
+					maxScopeWidth = scopeWidth
+				}
+			}
+
+			scopeNeeded := maxScopeWidth - widths.scope
+			if scopeNeeded > 0 {
+				scopeExtra := min(scopeNeeded, extra)
+				widths.scope += scopeExtra
+				extra -= scopeExtra
+			}
+
+			nameExtra := extra / 3
+			descExtra := extra - nameExtra
+			widths.name += nameExtra
+			widths.desc += descExtra
+		}
+	}
+
+	columns := []table.Column{
+		{Title: " ", Width: promoteDemoteCheckboxWidth},
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Can Move To", Width: widths.canMoveTo},
+		{Title: "Description", Width: widths.desc},
+	}
+
+	return columns, widths
+}
+
 // promoteDemoteSkillKey creates a unique key for a skill (platform + scope + name combination).
 func promoteDemoteSkillKey(s model.Skill) string {
 	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
@@ -164,23 +233,17 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 		return strings.ToLower(movableSkills[i].Name) < strings.ToLower(movableSkills[j].Name)
 	})
 
-	columns := []table.Column{
-		{Title: " ", Width: 3},            // Checkbox column
-		{Title: "Name", Width: 25},        // Skill name
-		{Title: "Platform", Width: 12},    // Platform
-		{Title: "Scope", Width: 10},       // Current scope
-		{Title: "Can Move To", Width: 12}, // Target scope
-		{Title: "Description", Width: 30}, // Description
-	}
+	columns, columnWidths := promoteDemoteListColumns(0, movableSkills)
 
 	// Initialize with no skills selected
 	selected := make(map[string]bool)
 
 	m := PromoteDemoteListModel{
-		skills:   movableSkills,
-		filtered: movableSkills,
-		selected: selected,
-		keys:     defaultPromoteDemoteListKeyMap(),
+		skills:       movableSkills,
+		filtered:     movableSkills,
+		selected:     selected,
+		keys:         defaultPromoteDemoteListKeyMap(),
+		columnWidths: columnWidths,
 	}
 
 	rows := m.skillsToRows(movableSkills)
@@ -213,25 +276,12 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 	for i, s := range skills {
 		checkbox := "[ ]"
 		if m.selected[promoteDemoteSkillKey(s)] {
-			checkbox := "[✓]"
-			_ = checkbox
-		}
-		if m.selected[promoteDemoteSkillKey(s)] {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
+		name := truncatePromoteDemoteValue(s.Name, m.columnWidths.name)
+		platform := truncatePromoteDemoteValue(string(s.Platform), m.columnWidths.platform)
+		scope := truncatePromoteDemoteValue(s.DisplayScope(), m.columnWidths.scope)
 
 		// Determine target scope based on current scope
 		var targetScope string
@@ -244,10 +294,7 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			targetScope = "-"
 		}
 
-		desc := s.Description
-		if len(desc) > 30 {
-			desc = desc[:27] + "..."
-		}
+		desc := truncatePromoteDemoteValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
 			checkbox,
 			name,
@@ -276,6 +323,8 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(msg.Height-12, 5) // Reserve space for title, info, help, status
 		m.table.SetHeight(newHeight)
+		m.updateColumns(msg.Width)
+		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -392,6 +441,25 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
+}
+
+func (m *PromoteDemoteListModel) updateColumns(totalWidth int) {
+	columns, widths := promoteDemoteListColumns(totalWidth, m.skills)
+	m.columnWidths = widths
+	m.table.SetColumns(columns)
+}
+
+func truncatePromoteDemoteValue(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+	return runewidth.Truncate(value, width, "...")
 }
 
 func (m *PromoteDemoteListModel) applyFilter() {
