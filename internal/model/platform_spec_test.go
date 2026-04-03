@@ -1,6 +1,7 @@
 package model
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -315,6 +316,74 @@ func TestPlatformSpec_TargetScope(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.spec.TargetScope(); got != tt.want {
 				t.Errorf("PlatformSpec.TargetScope() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseSourceScopes(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []SkillScope
+		wantErr bool
+	}{
+		{name: "all alias", input: "all", want: nil},
+		{name: "empty string", input: "", want: nil},
+		{name: "single scope", input: "repo", want: []SkillScope{ScopeRepo}},
+		{name: "multiple scopes canonicalized", input: "user,plugin,system", want: []SkillScope{ScopeSystem, ScopeUser, ScopePlugin}},
+		{name: "duplicates removed", input: "repo,repo,user", want: []SkillScope{ScopeUser, ScopeRepo}},
+		{name: "full set collapses to all", input: "builtin,system,admin,user,repo,plugin", want: nil},
+		{name: "all inside list collapses to all", input: "repo,all,user", want: nil},
+		{name: "invalid scope", input: "repo,invalid", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseSourceScopes(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ParseSourceScopes(%q) expected error, got nil", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseSourceScopes(%q) unexpected error: %v", tt.input, err)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("ParseSourceScopes(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeSourceScopes(t *testing.T) {
+	got := NormalizeSourceScopes([]SkillScope{ScopePlugin, ScopeRepo, ScopeRepo, ScopeUser})
+	want := []SkillScope{ScopeUser, ScopeRepo, ScopePlugin}
+	if !slices.Equal(got, want) {
+		t.Fatalf("NormalizeSourceScopes() = %v, want %v", got, want)
+	}
+
+	if got := NormalizeSourceScopes(AllScopes()); got != nil {
+		t.Fatalf("NormalizeSourceScopes(AllScopes()) = %v, want nil", got)
+	}
+}
+
+func TestPlatformSpec_SourceString(t *testing.T) {
+	tests := []struct {
+		name string
+		spec PlatformSpec
+		want string
+	}{
+		{name: "single scope", spec: PlatformSpec{Platform: Cursor, Scopes: []SkillScope{ScopeRepo}}, want: "cursor:repo"},
+		{name: "multiple scopes canonicalized", spec: PlatformSpec{Platform: Cursor, Scopes: []SkillScope{ScopePlugin, ScopeUser, ScopeSystem}}, want: "cursor:system,user,plugin"},
+		{name: "full selection becomes all", spec: PlatformSpec{Platform: Cursor, Scopes: AllScopes()}, want: "cursor"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.spec.SourceString(); got != tt.want {
+				t.Fatalf("PlatformSpec.SourceString() = %q, want %q", got, tt.want)
 			}
 		})
 	}

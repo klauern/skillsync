@@ -28,6 +28,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
@@ -1191,6 +1192,8 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		return nil, fmt.Errorf("invalid target: %w", err)
 	}
 
+	sourceSpec = sourceSpec.NormalizeSource()
+
 	if sourceSpec.Platform == targetSpec.Platform {
 		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourceSpec.Platform)
 	}
@@ -1621,6 +1624,8 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 		parser = cursor.New(basePath)
 	case model.Codex:
 		parser = codex.New(basePath)
+	case model.PiDev:
+		parser = pidev.New(basePath)
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -3072,10 +3077,7 @@ func runSyncTUI() error {
 	}
 
 	if len(sourceSkills) == 0 {
-		sourceScopeLabel := "all"
-		if len(sourceScopes) == 1 {
-			sourceScopeLabel = string(sourceScopes[0])
-		}
+		sourceScopeLabel := model.FormatSourceScopes(sourceScopes)
 		ui.Info(fmt.Sprintf("No skills found in %s:%s", sourcePlatform, sourceScopeLabel))
 		return nil
 	}

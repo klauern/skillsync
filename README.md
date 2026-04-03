@@ -30,6 +30,7 @@ skillsync --help
 skillsync config init
 skillsync discover --format table
 skillsync sync cursor claudecode --dry-run
+skillsync sync cursor:repo,user codex:repo
 ```
 
 ## Commands
