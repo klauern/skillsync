@@ -4,10 +4,7 @@
 //   - SKILL.md files under the selected skills root
 //   - markdown prompt templates under the matching prompts root
 //   - AGENTS.md instruction files (global + hierarchical repo chain)
-//
-// Non-goal for this pass:
-//   - SYSTEM.md / APPEND_SYSTEM.md are documented by Pi.dev, but are not
-//     promoted as first-class sync artifacts here.
+//   - SYSTEM.md / APPEND_SYSTEM.md system-prompt customization files
 package pidev
 
 import (
@@ -88,6 +85,17 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		)
 	} else {
 		allSkills = append(allSkills, instructionSkills...)
+	}
+
+	systemSkills, err := p.parseSystemPrompts(seenNames)
+	if err != nil {
+		logging.Warn("failed to parse SYSTEM.md files",
+			logging.Platform(string(p.Platform())),
+			logging.Path(p.configRoot()),
+			logging.Err(err),
+		)
+	} else {
+		allSkills = append(allSkills, systemSkills...)
 	}
 
 	return allSkills, nil
@@ -284,6 +292,67 @@ func (p *Parser) parseInstructions(seenNames map[string]bool) ([]model.Skill, er
 	}
 
 	return results, nil
+}
+
+func (p *Parser) parseSystemPrompts(seenNames map[string]bool) ([]model.Skill, error) {
+	var results []model.Skill
+
+	for _, fileName := range []struct {
+		name        string
+		description string
+		mode        string
+	}{
+		{name: "SYSTEM.md", description: "Pi.dev SYSTEM.md replacement prompt", mode: "replace"},
+		{name: "APPEND_SYSTEM.md", description: "Pi.dev APPEND_SYSTEM.md append prompt", mode: "append"},
+	} {
+		filePath := filepath.Join(p.configRoot(), fileName.name)
+		skill, err := p.parseSystemPromptFile(filePath, fileName.description, fileName.mode)
+		if err != nil || skill == nil {
+			continue
+		}
+		if seenNames[skill.Name] {
+			continue
+		}
+		seenNames[skill.Name] = true
+		results = append(results, *skill)
+	}
+
+	return results, nil
+}
+
+func (p *Parser) parseSystemPromptFile(filePath, description, mode string) (*model.Skill, error) {
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, nil
+	}
+
+	// #nosec G304 - filePath is validated via explicit system prompt discovery.
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %q: %w", filePath, err)
+	}
+
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file %q: %w", filePath, err)
+	}
+
+	name := strings.ToLower(strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath)))
+	if name == "append_system" {
+		name = "append-system"
+	}
+	if err := coreparser.ValidateSkillName(name); err != nil {
+		return nil, fmt.Errorf("invalid system prompt name %q in %q: %w", name, filePath, err)
+	}
+
+	return &model.Skill{
+		Name:        name,
+		Description: description,
+		Platform:    p.Platform(),
+		Path:        filePath,
+		Metadata:    map[string]string{"type": "system-prompt", "mode": mode},
+		Content:     coreparser.NormalizeContent(string(content)),
+		ModifiedAt:  fileInfo.ModTime(),
+	}, nil
 }
 
 func (p *Parser) parseAgentsFile(filePath, nameRoot string) (*model.Skill, error) {

@@ -87,8 +87,10 @@ category: triage
 ---
 Prompt body.
 `,
-		filepath.Join(root, "AGENTS.md"):         "# Repo rules\n\nAlways run tests.",
-		filepath.Join(root, "docs", "AGENTS.md"): "# Docs rules\n\nKeep docs current.",
+		filepath.Join(root, "AGENTS.md"):               "# Repo rules\n\nAlways run tests.",
+		filepath.Join(root, "docs", "AGENTS.md"):       "# Docs rules\n\nKeep docs current.",
+		filepath.Join(projectRoot, "SYSTEM.md"):        "System prompt replacement.",
+		filepath.Join(projectRoot, "APPEND_SYSTEM.md"): "Appended system prompt guidance.",
 	}
 	for path, content := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -113,8 +115,8 @@ Prompt body.
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if len(skills) != 4 {
-		t.Fatalf("Parse() returned %d skills, want 4", len(skills))
+	if len(skills) != 6 {
+		t.Fatalf("Parse() returned %d skills, want 6", len(skills))
 	}
 
 	byName := make(map[string]model.Skill)
@@ -155,6 +157,22 @@ Prompt body.
 	docsAgents := byName["docs-agents"]
 	if docsAgents.Metadata["type"] != "agents" {
 		t.Fatalf("nested AGENTS metadata type = %q, want agents", docsAgents.Metadata["type"])
+	}
+
+	system := byName["system"]
+	if system.Metadata["type"] != "system-prompt" {
+		t.Fatalf("system metadata type = %q, want system-prompt", system.Metadata["type"])
+	}
+	if system.Metadata["mode"] != "replace" {
+		t.Fatalf("system metadata mode = %q, want replace", system.Metadata["mode"])
+	}
+
+	appendSystem := byName["append-system"]
+	if appendSystem.Metadata["type"] != "system-prompt" {
+		t.Fatalf("append system metadata type = %q, want system-prompt", appendSystem.Metadata["type"])
+	}
+	if appendSystem.Metadata["mode"] != "append" {
+		t.Fatalf("append system metadata mode = %q, want append", appendSystem.Metadata["mode"])
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -72,6 +73,33 @@ func TestSyncPickerModel_CompleteSelectionFlow(t *testing.T) {
 	}
 	if len(result.SourceScopes) != 0 {
 		t.Fatalf("expected empty source scopes for all, got %v", result.SourceScopes)
+	}
+}
+
+func TestSyncPickerModel_PiDevIsSelectable(t *testing.T) {
+	m := NewSyncPickerModel()
+
+	for i, p := range m.platforms {
+		if p == model.PiDev {
+			m.cursor = i
+			break
+		}
+	}
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(SyncPickerModel)
+	if m.source != model.PiDev {
+		t.Fatalf("source = %q, want pi.dev", m.source)
+	}
+
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(SyncPickerModel)
+	if m.phase != syncPickerPhaseTargetPlatform {
+		t.Fatalf("expected target platform phase, got %v", m.phase)
+	}
+
+	if !strings.Contains(m.View(), "pi.dev") {
+		t.Fatalf("expected view to include pi.dev, got %q", m.View())
 	}
 }
 

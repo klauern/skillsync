@@ -195,6 +195,7 @@ func showConfigPaths() error {
 	fmt.Printf("  Claude Code:     %v\n", cfg.Platforms.ClaudeCode.SkillsPaths)
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
+	fmt.Printf("  Pi.dev:          %v\n", cfg.Platforms.PiDev.SkillsPaths)
 
 	fmt.Println("\nData paths:")
 	fmt.Printf("  Backups:         %s\n", util.SkillsyncBackupsPath())
@@ -1670,6 +1671,11 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		rawPaths = cfg.Platforms.Codex.SkillsPaths
 		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
 			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
+	case model.PiDev:
+		rawPaths = cfg.Platforms.PiDev.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.PiDev.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.PiDev.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
 	default:
 		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
