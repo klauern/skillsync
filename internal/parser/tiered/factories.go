@@ -8,6 +8,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 )
@@ -33,6 +34,13 @@ func CodexParserFactory() ParserFactory {
 	}
 }
 
+// CopilotParserFactory returns a ParserFactory for GitHub Copilot.
+func CopilotParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return copilot.New(basePath)
+	}
+}
+
 // PiDevParserFactory returns a ParserFactory for Pi.dev.
 func PiDevParserFactory() ParserFactory {
 	return func(basePath string) parser.Parser {
@@ -49,6 +57,8 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 		return CursorParserFactory()
 	case model.Codex:
 		return CodexParserFactory()
+	case model.Copilot:
+		return CopilotParserFactory()
 	case model.PiDev:
 		return PiDevParserFactory()
 	default:
