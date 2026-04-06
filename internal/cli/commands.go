@@ -28,6 +28,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
@@ -252,7 +253,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex, pi.dev
+   Supported platforms: claude-code, cursor, codex, gemini, pi.dev
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -264,7 +265,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, gemini, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -1624,6 +1625,8 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 		parser = cursor.New(basePath)
 	case model.Codex:
 		parser = codex.New(basePath)
+	case model.Gemini:
+		parser = gemini.New(basePath)
 	case model.PiDev:
 		parser = pidev.New(basePath)
 	default:
@@ -1676,6 +1679,11 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		rawPaths = cfg.Platforms.Codex.SkillsPaths
 		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
 			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
+	case model.Gemini:
+		rawPaths = cfg.Platforms.Gemini.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.Gemini.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.Gemini.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
 	case model.PiDev:
 		rawPaths = cfg.Platforms.PiDev.SkillsPaths

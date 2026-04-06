@@ -10,6 +10,7 @@ func TestPlatformValidation(t *testing.T) {
 		"claude code valid": {platform: ClaudeCode, valid: true},
 		"cursor valid":      {platform: Cursor, valid: true},
 		"codex valid":       {platform: Codex, valid: true},
+		"gemini valid":      {platform: Gemini, valid: true},
 		"pi.dev valid":      {platform: PiDev, valid: true},
 		"empty invalid":     {platform: "", valid: false},
 		"unknown invalid":   {platform: "unknown", valid: false},
@@ -29,8 +30,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 4 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 4", len(platforms))
+	if len(platforms) != 5 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 5", len(platforms))
 	}
 
 	for _, p := range platforms {
@@ -48,6 +49,7 @@ func TestPlatformShort(t *testing.T) {
 		"claude code": {platform: ClaudeCode, want: "cc"},
 		"cursor":      {platform: Cursor, want: "cur"},
 		"codex":       {platform: Codex, want: "cdx"},
+		"gemini":      {platform: Gemini, want: "gem"},
 		"pi.dev":      {platform: PiDev, want: "pi"},
 		"unknown":     {platform: "unknown", want: "unknown"},
 	}
@@ -71,6 +73,7 @@ func TestPlatformConfigDir(t *testing.T) {
 		"claude code":     {platform: ClaudeCode, want: "claude"},
 		"cursor":          {platform: Cursor, want: "cursor"},
 		"codex":           {platform: Codex, want: "codex"},
+		"gemini":          {platform: Gemini, want: "gemini"},
 		"pi.dev":          {platform: PiDev, want: "pi/agent"},
 		"unknown returns": {platform: "unknown", want: "unknown"},
 		"empty":           {platform: "", want: ""},
@@ -98,6 +101,7 @@ func TestParsePlatform(t *testing.T) {
 		"claude shorthand":      {input: "claude", want: ClaudeCode, wantErr: false},
 		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
+		"gemini exact":          {input: "gemini", want: Gemini, wantErr: false},
 		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
 		"pidev normalized":      {input: "pidev", want: PiDev, wantErr: false},
 		"uppercase normalized":  {input: "CURSOR", want: Cursor, wantErr: false},

@@ -102,6 +102,12 @@ func TestEnvironmentOverrides(t *testing.T) {
 			envValue: "/custom/claude/path",
 			check:    func(c *Config) bool { return c.Platforms.ClaudeCode.SkillsPath == "/custom/claude/path" },
 		},
+		{
+			name:     "gemini path",
+			envKey:   "SKILLSYNC_GEMINI_PATH",
+			envValue: "/custom/gemini/path",
+			check:    func(c *Config) bool { return c.Platforms.Gemini.SkillsPath == "/custom/gemini/path" },
+		},
 	}
 
 	for _, tt := range tests {
@@ -503,6 +509,17 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 	if cfg.Platforms.Codex.SkillsPaths[2] != "/etc/codex/skills" {
 		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
+	}
+
+	// Check Gemini defaults (2 config roots: project, user)
+	if len(cfg.Platforms.Gemini.SkillsPaths) != 2 {
+		t.Errorf("expected 2 Gemini paths, got %d", len(cfg.Platforms.Gemini.SkillsPaths))
+	}
+	if cfg.Platforms.Gemini.SkillsPaths[0] != ".gemini" {
+		t.Errorf("expected first Gemini path to be '.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[0])
+	}
+	if cfg.Platforms.Gemini.SkillsPaths[1] != "~/.gemini" {
+		t.Errorf("expected second Gemini path to be '~/.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[1])
 	}
 }
 

@@ -310,6 +310,13 @@ func validateFileExtension(skill model.Skill) error {
 				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
+	case model.Gemini:
+		if ext != ".md" {
+			return &Error{
+				Field:   fmt.Sprintf("skill %q", skill.Name),
+				Message: fmt.Sprintf("invalid file extension %q for Gemini skill (expected .md)", ext),
+			}
+		}
 	}
 
 	return nil
@@ -491,6 +498,7 @@ func ValidatePath(path string, _ model.Platform) error {
 //   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
 //   - SKILLSYNC_CURSOR_PATH for Cursor
 //   - SKILLSYNC_CODEX_PATH for Codex
+//   - SKILLSYNC_GEMINI_PATH for Gemini CLI
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
 	case model.ClaudeCode:
@@ -509,6 +517,11 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.Gemini:
+		if envPath := os.Getenv("SKILLSYNC_GEMINI_PATH"); envPath != "" {
+			return envPath, nil
+		}
+		return util.GeminiPath(), nil
 	case model.PiDev:
 		return util.PiDevSkillsPath(), nil
 	default:

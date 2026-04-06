@@ -106,6 +106,16 @@ func CodexSkillsPath() string {
 	return filepath.Join(HomeDir(), ".codex", "skills")
 }
 
+// GeminiPath returns the default Gemini CLI config directory (user-level).
+func GeminiPath() string {
+	return filepath.Join(HomeDir(), ".gemini")
+}
+
+// GeminiRepoPath returns the Gemini CLI config directory for a project.
+func GeminiRepoPath(projectDir string) string {
+	return filepath.Join(projectDir, ".gemini")
+}
+
 // SkillsyncConfigPath returns the skillsync configuration directory
 // Supports SKILLSYNC_HOME environment variable override
 func SkillsyncConfigPath() string {
@@ -270,6 +280,8 @@ func platformDirName(p model.Platform) string {
 		return ".cursor"
 	case model.Codex:
 		return ".codex"
+	case model.Gemini:
+		return ".gemini"
 	case model.PiDev:
 		return ".pi/agent"
 	default:
@@ -280,6 +292,8 @@ func platformDirName(p model.Platform) string {
 // PlatformSkillsPath returns the user-level skills path for a platform.
 func PlatformSkillsPath(p model.Platform) string {
 	switch p {
+	case model.Gemini:
+		return GeminiPath()
 	case model.PiDev:
 		return PiDevSkillsPath()
 	default:
@@ -290,6 +304,8 @@ func PlatformSkillsPath(p model.Platform) string {
 // RepoSkillsPath returns the repo-level skills path for a platform.
 func RepoSkillsPath(p model.Platform, repoRoot string) string {
 	switch p {
+	case model.Gemini:
+		return GeminiRepoPath(repoRoot)
 	case model.PiDev:
 		return PiDevRepoSkillsPath(repoRoot)
 	default:

@@ -448,6 +448,11 @@ func TestGetPlatformPath(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "Gemini",
+			platform: model.Gemini,
+			wantErr:  false,
+		},
+		{
 			name:     "Pi.dev",
 			platform: model.PiDev,
 			wantErr:  false,
@@ -506,6 +511,22 @@ func TestGetPlatformPath_PiDevPrefersAgents(t *testing.T) {
 	expected := filepath.Join(home, ".agents", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_GeminiDefaultsToConfigRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_GEMINI_PATH", "")
+
+	got, err := GetPlatformPath(model.Gemini)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".gemini")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Gemini) = %q, want %q", got, expected)
 	}
 }
 

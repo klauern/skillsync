@@ -72,6 +72,15 @@ func TestCodexSkillsPath(t *testing.T) {
 	}
 }
 
+func TestGeminiPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".gemini")
+	got := GeminiPath()
+	if got != expected {
+		t.Errorf("GeminiPath() = %q, want %q", got, expected)
+	}
+}
+
 func TestGetRepoRoot(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -173,6 +182,15 @@ func TestGetTieredPaths(t *testing.T) {
 			checkScope: model.ScopeSystem,
 			wantPaths:  true,
 		},
+		{
+			name: "gemini with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.Gemini,
+			},
+			checkScope: model.ScopeUser,
+			wantPaths:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -241,6 +259,7 @@ func TestPlatformDirName(t *testing.T) {
 		{model.ClaudeCode, ".claude"},
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
+		{model.Gemini, ".gemini"},
 		{model.PiDev, ".pi/agent"},
 	}
 
@@ -268,6 +287,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.Gemini, filepath.Join(home, ".gemini")},
 		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 

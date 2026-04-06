@@ -34,6 +34,7 @@ type PlatformsConfig struct {
 	ClaudeCode PlatformConfig `yaml:"claude_code"`
 	Cursor     PlatformConfig `yaml:"cursor"`
 	Codex      PlatformConfig `yaml:"codex"`
+	Gemini     PlatformConfig `yaml:"gemini"`
 	PiDev      PlatformConfig `yaml:"pidev"`
 }
 
@@ -98,6 +99,12 @@ func Default() *Config {
 					".codex/skills",     // Project (relative)
 					"~/.codex/skills",   // User (absolute)
 					"/etc/codex/skills", // Admin (system-wide)
+				},
+			},
+			Gemini: PlatformConfig{
+				SkillsPaths: []string{
+					".gemini",   // Project config root (includes skills/ and GEMINI.md)
+					"~/.gemini", // User config root (includes skills/ and GEMINI.md)
 				},
 			},
 			PiDev: PlatformConfig{
@@ -247,6 +254,9 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_CODEX_SKILLS_PATHS"); v != "" {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
+	if v := os.Getenv("SKILLSYNC_GEMINI_SKILLS_PATHS"); v != "" {
+		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
+	}
 	if v := os.Getenv("SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
 		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
 	}
@@ -260,6 +270,9 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := os.Getenv("SKILLSYNC_CODEX_PATH"); v != "" {
 		c.Platforms.Codex.SkillsPath = v
+	}
+	if v := os.Getenv("SKILLSYNC_GEMINI_PATH"); v != "" {
+		c.Platforms.Gemini.SkillsPath = v
 	}
 	if v := os.Getenv("SKILLSYNC_PIDEV_PATH"); v != "" {
 		c.Platforms.PiDev.SkillsPath = v
