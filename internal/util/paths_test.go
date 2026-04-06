@@ -241,6 +241,7 @@ func TestPlatformDirName(t *testing.T) {
 		{model.ClaudeCode, ".claude"},
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
+		{model.Copilot, ".github"},
 		{model.PiDev, ".pi/agent"},
 	}
 
@@ -268,6 +269,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.Copilot, filepath.Join(home, ".github")},
 		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 
@@ -290,6 +292,7 @@ func TestRepoSkillsPath(t *testing.T) {
 		{model.ClaudeCode, "/test/repo", "/test/repo/.claude/skills"},
 		{model.Cursor, "/test/repo", "/test/repo/.cursor/skills"},
 		{model.Codex, "/test/repo", "/test/repo/.codex/skills"},
+		{model.Copilot, "/test/repo", "/test/repo/.github"},
 		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
 	}
 
