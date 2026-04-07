@@ -103,6 +103,119 @@ This is the skill content.
 	}
 }
 
+func TestSynchronizer_Sync_CopilotSourceToCodex(t *testing.T) {
+	s := New()
+	sourceDir := filepath.Join(t.TempDir(), ".github")
+	targetDir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(sourceDir, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create prompts dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "prompts", "review.prompt.md"), []byte(`---
+description: Review code
+---
+
+Review the current changes.`), 0o600); err != nil {
+		t.Fatalf("failed to write prompt file: %v", err)
+	}
+
+	result, err := s.Sync(model.Copilot, model.Codex, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	})
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+
+	if len(result.Skills) != 1 {
+		t.Fatalf("expected 1 synced skill, got %d", len(result.Skills))
+	}
+	if result.Skills[0].Action != ActionCreated {
+		t.Fatalf("expected created action, got %s", result.Skills[0].Action)
+	}
+
+	targetFile := filepath.Join(targetDir, "review", "SKILL.md")
+	content, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("failed to read synced target file: %v", err)
+	}
+	if !strings.Contains(string(content), "type: prompt") {
+		t.Fatalf("expected prompt transport metadata in %s", targetFile)
+	}
+}
+
+func TestSynchronizer_SyncWithSkills_ToCopilotPaths(t *testing.T) {
+	s := New()
+	targetDir := t.TempDir()
+
+	sourceFile := filepath.Join(t.TempDir(), "source.md")
+	if err := os.WriteFile(sourceFile, []byte("source"), 0o600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	skills := []model.Skill{
+		{
+			Name:     "copilot-instructions",
+			Platform: model.ClaudeCode,
+			Path:     filepath.Join(t.TempDir(), "CLAUDE.md"),
+			Content:  "Always-on guidance",
+			Metadata: map[string]string{
+				model.MetadataKeyCopilotArtifact: model.CopilotArtifactRepositoryInstructions,
+			},
+		},
+		{
+			Name:     "go-style",
+			Platform: model.ClaudeCode,
+			Path:     sourceFile,
+			Content:  "Go guidance",
+			Metadata: map[string]string{
+				model.MetadataKeyCopilotArtifact: model.CopilotArtifactInstructions,
+				"applyTo":                        "**/*.go",
+			},
+		},
+		{
+			Name:     "review",
+			Platform: model.ClaudeCode,
+			Path:     sourceFile,
+			Content:  "Review prompt",
+			Type:     model.SkillTypePrompt,
+			Trigger:  "/review",
+		},
+		{
+			Name:     "reviewer",
+			Platform: model.ClaudeCode,
+			Path:     sourceFile,
+			Content:  "Review agent",
+		},
+	}
+
+	result, err := s.SyncWithSkills(skills, model.Copilot, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		TargetPath: targetDir,
+	})
+	if err != nil {
+		t.Fatalf("SyncWithSkills failed: %v", err)
+	}
+
+	if len(result.Skills) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(result.Skills))
+	}
+
+	for _, path := range []string{
+		filepath.Join(targetDir, "copilot-instructions.md"),
+		filepath.Join(targetDir, "instructions", "go-style.instructions.md"),
+		filepath.Join(targetDir, "prompts", "review.prompt.md"),
+		filepath.Join(targetDir, "agents", "reviewer.agent.md"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected Copilot artifact at %s: %v", path, err)
+		}
+	}
+}
+
 func TestSynchronizer_Sync_SkipsNestedSkillDuplicates(t *testing.T) {
 	s := New()
 	sourceDir := t.TempDir()

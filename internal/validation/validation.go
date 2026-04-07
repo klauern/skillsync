@@ -491,6 +491,7 @@ func ValidatePath(path string, _ model.Platform) error {
 //   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
 //   - SKILLSYNC_CURSOR_PATH for Cursor
 //   - SKILLSYNC_CODEX_PATH for Codex
+//   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
 	case model.ClaudeCode:
@@ -509,6 +510,11 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.Copilot:
+		if envPath := os.Getenv("SKILLSYNC_COPILOT_PATH"); envPath != "" {
+			return envPath, nil
+		}
+		return util.CopilotSkillsPath(), nil
 	case model.PiDev:
 		return util.PiDevSkillsPath(), nil
 	default:

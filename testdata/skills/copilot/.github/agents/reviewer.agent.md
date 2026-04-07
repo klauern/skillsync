@@ -16,4 +16,4 @@ disable-model-invocation: false
 target: vscode
 ---
 
-Review code for security issues and summarize findings.
+Review the proposed code for security and correctness issues.

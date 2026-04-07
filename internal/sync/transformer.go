@@ -85,6 +85,10 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 		}
 	}
 
+	if target == model.Copilot {
+		return transformCopilotPath(skill)
+	}
+
 	if skill.Type == model.SkillTypePrompt {
 		switch target {
 		case model.Codex:
@@ -203,6 +207,10 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
 			fm["alwaysApply"] = alwaysApply
 		}
+	case model.Copilot:
+		if len(skill.Tools) > 0 {
+			fm["tools"] = skill.Tools
+		}
 	}
 
 	// Include other metadata that's platform-agnostic
@@ -211,10 +219,19 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if key == "globs" || key == "alwaysApply" {
 			continue
 		}
+		if target == model.Copilot && key == model.MetadataKeyCopilotArtifact {
+			continue
+		}
 		// Include if not already set
 		if _, exists := fm[key]; !exists {
 			fm[key] = val
 		}
+	}
+
+	if target == model.Copilot && copilotArtifactType(skill) == model.CopilotArtifactRepositoryInstructions {
+		delete(fm, "name")
+		delete(fm, "type")
+		delete(fm, "trigger")
 	}
 
 	return fm
@@ -233,6 +250,40 @@ func shouldIncludeFrontmatter(target model.Platform, targetPath string) bool {
 
 func isSystemPromptSkill(skill model.Skill) bool {
 	return skill.Metadata["type"] == "system-prompt"
+}
+
+func transformCopilotPath(skill model.Skill) string {
+	switch copilotArtifactType(skill) {
+	case model.CopilotArtifactRepositoryInstructions:
+		return "copilot-instructions.md"
+	case model.CopilotArtifactInstructions:
+		return filepath.Join("instructions", skill.Name+".instructions.md")
+	case model.CopilotArtifactPrompt:
+		return filepath.Join("prompts", skill.Name+".prompt.md")
+	default:
+		return filepath.Join("agents", skill.Name+".agent.md")
+	}
+}
+
+func copilotArtifactType(skill model.Skill) string {
+	if artifact := skill.Metadata[model.MetadataKeyCopilotArtifact]; artifact != "" {
+		return artifact
+	}
+	if skill.Type == model.SkillTypePrompt {
+		return model.CopilotArtifactPrompt
+	}
+
+	base := strings.ToLower(filepath.Base(skill.Path))
+	switch {
+	case base == "copilot-instructions.md", base == "agents.md", base == "claude.md", base == "gemini.md":
+		return model.CopilotArtifactRepositoryInstructions
+	case strings.HasSuffix(base, ".instructions.md"):
+		return model.CopilotArtifactInstructions
+	case strings.HasSuffix(base, ".prompt.md"):
+		return model.CopilotArtifactPrompt
+	default:
+		return model.CopilotArtifactAgent
+	}
 }
 
 // transformMetadata transforms metadata for the target platform.

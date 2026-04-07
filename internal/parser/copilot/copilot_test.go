@@ -16,13 +16,38 @@ func TestParsePromptsAndAgents(t *testing.T) {
 		t.Fatalf("Parse() failed: %v", err)
 	}
 
-	if got, want := len(skills), 2; got != want {
+	if got, want := len(skills), 4; got != want {
 		t.Fatalf("Parse() returned %d skills, want %d", got, want)
 	}
 
 	byName := make(map[string]model.Skill, len(skills))
 	for _, skill := range skills {
 		byName[skill.Name] = skill
+	}
+
+	repoInstructions := byName["copilot-instructions"]
+	if repoInstructions.Type != model.SkillTypeSkill {
+		t.Fatalf("repo instructions type = %q, want %q", repoInstructions.Type, model.SkillTypeSkill)
+	}
+	if repoInstructions.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactRepositoryInstructions {
+		t.Fatalf("repo instructions artifact = %q, want %q", repoInstructions.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactRepositoryInstructions)
+	}
+	if repoInstructions.Trigger != "" {
+		t.Fatalf("repo instructions trigger = %q, want empty", repoInstructions.Trigger)
+	}
+
+	instructions := byName["go-style"]
+	if instructions.Type != model.SkillTypeSkill {
+		t.Fatalf("instructions type = %q, want %q", instructions.Type, model.SkillTypeSkill)
+	}
+	if instructions.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactInstructions {
+		t.Fatalf("instructions artifact = %q, want %q", instructions.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactInstructions)
+	}
+	if instructions.Metadata["applyTo"] != "**/*.go" {
+		t.Fatalf("instructions metadata applyTo = %q, want **/*.go", instructions.Metadata["applyTo"])
+	}
+	if instructions.Description != "Go-specific repository guidance" {
+		t.Fatalf("instructions description = %q, want Go-specific repository guidance", instructions.Description)
 	}
 
 	prompt := byName["test-gen"]
@@ -52,6 +77,9 @@ func TestParsePromptsAndAgents(t *testing.T) {
 	}
 	if prompt.Metadata["argument-hint"] != "Describe the test scenarios" {
 		t.Fatalf("prompt metadata argument-hint = %q, want Describe the test scenarios", prompt.Metadata["argument-hint"])
+	}
+	if prompt.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactPrompt {
+		t.Fatalf("prompt metadata artifact = %q, want %q", prompt.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactPrompt)
 	}
 
 	agent := byName["reviewer"]
@@ -90,6 +118,9 @@ func TestParsePromptsAndAgents(t *testing.T) {
 	}
 	if agent.Metadata["target"] != "vscode" {
 		t.Fatalf("agent metadata target = %q, want vscode", agent.Metadata["target"])
+	}
+	if agent.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactAgent {
+		t.Fatalf("agent metadata artifact = %q, want %q", agent.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactAgent)
 	}
 }
 

@@ -343,13 +343,14 @@ Tools are controlled at the agent and prompt file level via the `tools` frontmat
 
 ## Parser Implementation Notes
 
-- **No existing parser** in SkillSync — needs a new `internal/parser/copilot/copilot.go`
+- SkillSync parses the markdown Copilot repository surfaces in `internal/parser/copilot/copilot.go`
 - **Multiple artifact types** with different frontmatter schemas; the parser must distinguish by file extension (`.instructions.md`, `.prompt.md`, `.agent.md`) and location (`copilot-instructions.md`)
 - `.instructions.md` `applyTo` maps conceptually to Cursor's `globs` field
 - `.prompt.md` maps to Claude Code's commands (slash-command invocation model)
 - `.agent.md` is the richest artifact type — no direct equivalent in other platforms; closest analog is Claude Code's agent definitions but with far more frontmatter
 - `copilot-instructions.md` maps to Claude's `CLAUDE.md` and Cursor's `.cursor/rules` (always-on instructions)
 - `AGENTS.md` is a shared format across platforms (Copilot, Codex, Gemini)
+- SkillSync preserves the original Copilot surface in transport metadata so sync can round-trip between Copilot prompts, agents, scoped instruction files, and repository instructions
 
 **Suggested test fixtures:**
 
@@ -376,6 +377,7 @@ testdata/copilot/
 - **`excludeAgent`** was announced for GitHub.com (coding agent and code review); VS Code IDE support for this field is unverified as of February 2026
 - **User-scoped profile folder path** varies by OS and VS Code profile; no stable cross-platform path constant
 - **Organization-level instructions** are configured via GitHub.com settings, not file-based — cannot be parsed from repo content
+- **`.vscode/mcp.json` remains a documented non-goal for first-pass sync**: SkillSync does not currently transform Copilot MCP config into other platforms' MCP formats
 - **`mcp-servers` in agent frontmatter** is supported at org/enterprise level on GitHub.com but not in repository-level agent files or VS Code IDE agent files
 - **Agent skills** (`.github/skills/` folders containing instructions, scripts, and resources) are a distinct artifact type referenced in VS Code docs but not yet well-documented for file format details
 - **`chat.useNestedAgentsMdFiles`** is experimental; subfolder-level `AGENTS.md` behavior may change

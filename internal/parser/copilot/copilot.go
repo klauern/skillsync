@@ -27,7 +27,7 @@ func New(basePath string) *Parser {
 	return &Parser{basePath: basePath}
 }
 
-// Parse discovers prompt and agent artifacts from the configured .github root.
+// Parse discovers supported Copilot artifacts from the configured .github root.
 func (p *Parser) Parse() ([]model.Skill, error) {
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
 		logging.Debug("copilot directory not found",
@@ -39,6 +39,18 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	var allSkills []model.Skill
 	seenNames := make(map[string]bool)
+
+	repositoryInstructions, err := p.parseRepositoryInstructions(seenNames)
+	if err != nil {
+		return nil, err
+	}
+	allSkills = append(allSkills, repositoryInstructions...)
+
+	instructionSkills, err := p.parseInstructionFiles(seenNames)
+	if err != nil {
+		return nil, err
+	}
+	allSkills = append(allSkills, instructionSkills...)
 
 	promptSkills, err := p.parsePromptFiles(seenNames)
 	if err != nil {
@@ -65,6 +77,55 @@ func (p *Parser) DefaultPath() string {
 	return util.CopilotSkillsPath()
 }
 
+func (p *Parser) parseRepositoryInstructions(seen map[string]bool) ([]model.Skill, error) {
+	filePath := filepath.Join(p.basePath, "copilot-instructions.md")
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat Copilot repository instructions %q: %w", filePath, err)
+	}
+
+	skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false, model.CopilotArtifactRepositoryInstructions)
+	if err != nil {
+		logging.Warn("failed to parse Copilot repository instructions",
+			logging.Path(filePath),
+			logging.Err(err),
+		)
+		return nil, nil
+	}
+	if seen[skill.Name] {
+		return nil, nil
+	}
+	seen[skill.Name] = true
+	return []model.Skill{skill}, nil
+}
+
+func (p *Parser) parseInstructionFiles(seen map[string]bool) ([]model.Skill, error) {
+	files, err := parser.DiscoverFiles(p.basePath, []string{"instructions/*.instructions.md"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover Copilot instruction files in %q: %w", p.basePath, err)
+	}
+
+	var results []model.Skill
+	for _, filePath := range files {
+		skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false, model.CopilotArtifactInstructions)
+		if err != nil {
+			logging.Warn("failed to parse Copilot instruction file",
+				logging.Path(filePath),
+				logging.Err(err),
+			)
+			continue
+		}
+		if seen[skill.Name] {
+			continue
+		}
+		seen[skill.Name] = true
+		results = append(results, skill)
+	}
+
+	return results, nil
+}
+
 func (p *Parser) parsePromptFiles(seen map[string]bool) ([]model.Skill, error) {
 	files, err := parser.DiscoverFiles(p.basePath, []string{"prompts/*.prompt.md"})
 	if err != nil {
@@ -73,7 +134,7 @@ func (p *Parser) parsePromptFiles(seen map[string]bool) ([]model.Skill, error) {
 
 	var results []model.Skill
 	for _, filePath := range files {
-		skill, err := p.parseArtifactFile(filePath, model.SkillTypePrompt, true)
+		skill, err := p.parseArtifactFile(filePath, model.SkillTypePrompt, true, model.CopilotArtifactPrompt)
 		if err != nil {
 			logging.Warn("failed to parse Copilot prompt file",
 				logging.Path(filePath),
@@ -99,7 +160,7 @@ func (p *Parser) parseAgentFiles(seen map[string]bool) ([]model.Skill, error) {
 
 	var results []model.Skill
 	for _, filePath := range files {
-		skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false)
+		skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false, model.CopilotArtifactAgent)
 		if err != nil {
 			logging.Warn("failed to parse Copilot agent file",
 				logging.Path(filePath),
@@ -117,7 +178,12 @@ func (p *Parser) parseAgentFiles(seen map[string]bool) ([]model.Skill, error) {
 	return results, nil
 }
 
-func (p *Parser) parseArtifactFile(filePath string, defaultType model.SkillType, isPrompt bool) (model.Skill, error) {
+func (p *Parser) parseArtifactFile(
+	filePath string,
+	defaultType model.SkillType,
+	isPrompt bool,
+	artifactType string,
+) (model.Skill, error) {
 	// #nosec G304 - filePath is validated through directory traversal from basePath
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -130,6 +196,9 @@ func (p *Parser) parseArtifactFile(filePath string, defaultType model.SkillType,
 		Path:     filePath,
 		Metadata: make(map[string]string),
 		Type:     defaultType,
+	}
+	if artifactType != "" {
+		skill.Metadata[model.MetadataKeyCopilotArtifact] = artifactType
 	}
 
 	if result.HasFrontmatter {
@@ -190,6 +259,7 @@ func artifactStem(filePath string) string {
 	stem := strings.TrimSuffix(base, filepath.Ext(base))
 	stem = strings.TrimSuffix(stem, ".prompt")
 	stem = strings.TrimSuffix(stem, ".agent")
+	stem = strings.TrimSuffix(stem, ".instructions")
 	return stem
 }
 

@@ -98,6 +98,34 @@ func TestTransformer_TransformPath(t *testing.T) {
 			expected:   "review/SKILL.md",
 		},
 		{
+			name:       "prompt to copilot prompt file",
+			sourcePath: "/source/review.md",
+			skillName:  "review",
+			target:     model.Copilot,
+			expected:   "prompts/review.prompt.md",
+		},
+		{
+			name:       "agent to copilot agent file",
+			sourcePath: "/source/skill.md",
+			skillName:  "reviewer",
+			target:     model.Copilot,
+			expected:   "agents/reviewer.agent.md",
+		},
+		{
+			name:       "instructions to copilot instructions file",
+			sourcePath: "/source/style.md",
+			skillName:  "go-style",
+			target:     model.Copilot,
+			expected:   "instructions/go-style.instructions.md",
+		},
+		{
+			name:       "claude instructions to copilot repo instructions",
+			sourcePath: "/source/CLAUDE.md",
+			skillName:  "claude",
+			target:     model.Copilot,
+			expected:   "copilot-instructions.md",
+		},
+		{
 			name:       "system prompt to pidev append file",
 			sourcePath: "/source/APPEND_SYSTEM.md",
 			skillName:  "append-system",
@@ -112,6 +140,13 @@ func TestTransformer_TransformPath(t *testing.T) {
 			if tt.name == "prompt to codex skill file" {
 				skill.Type = model.SkillTypePrompt
 				skill.Trigger = "/review"
+			}
+			if tt.name == "prompt to copilot prompt file" {
+				skill.Type = model.SkillTypePrompt
+				skill.Trigger = "/review"
+			}
+			if tt.name == "instructions to copilot instructions file" {
+				skill.Metadata = map[string]string{model.MetadataKeyCopilotArtifact: model.CopilotArtifactInstructions}
 			}
 			if tt.name == "system prompt to pidev append file" {
 				skill.Metadata = map[string]string{"type": "system-prompt", "mode": "append"}
@@ -218,6 +253,30 @@ func TestTransformer_TransformContent_PiDevSystemPrompt(t *testing.T) {
 	}
 }
 
+func TestTransformer_TransformContent_CopilotRepositoryInstructions(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name: "copilot-instructions",
+		Metadata: map[string]string{
+			model.MetadataKeyCopilotArtifact: model.CopilotArtifactRepositoryInstructions,
+		},
+		Content: "Always-on instructions",
+	}
+
+	content, err := tr.transformContent(skill, model.Copilot, "copilot-instructions.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if strings.HasPrefix(content, "---\n") {
+		t.Fatal("Copilot repository instructions should not gain synthetic frontmatter")
+	}
+	if content != "Always-on instructions" {
+		t.Fatalf("content = %q, want body only", content)
+	}
+}
+
 func TestTransformer_BuildFrontmatter_ClaudeCode(t *testing.T) {
 	tr := NewTransformer()
 
@@ -290,6 +349,37 @@ func TestTransformer_BuildFrontmatter_Codex(t *testing.T) {
 	}
 	if fm["trigger"] != "/test" {
 		t.Error("Codex frontmatter should include trigger for prompt artifacts")
+	}
+}
+
+func TestTransformer_BuildFrontmatter_CopilotPrompt(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "review",
+		Description: "Review code",
+		Tools:       []string{"read", "search"},
+		Type:        model.SkillTypePrompt,
+		Trigger:     "/review",
+		Metadata: map[string]string{
+			model.MetadataKeyCopilotArtifact: model.CopilotArtifactPrompt,
+			"model":                          "gpt-4o",
+		},
+	}
+
+	fm := tr.buildFrontmatter(skill, model.Copilot)
+
+	if fm["name"] != "review" {
+		t.Error("Copilot frontmatter should include name")
+	}
+	if fm["tools"] == nil {
+		t.Error("Copilot frontmatter should include tools")
+	}
+	if _, exists := fm[model.MetadataKeyCopilotArtifact]; exists {
+		t.Error("Copilot frontmatter should not include internal artifact metadata")
+	}
+	if fm["model"] != "gpt-4o" {
+		t.Error("Copilot frontmatter should preserve model")
 	}
 }
 
