@@ -98,6 +98,7 @@ func defaultSyncListKeyMap() syncListKeyMap {
 // SyncListModel is the BubbleTea model for interactive sync skill selection.
 type SyncListModel struct {
 	table          table.Model
+	hScroll        horizontalTableState
 	skills         []model.Skill
 	filtered       []model.Skill
 	selected       map[string]bool // map of skill name to selected state
@@ -229,6 +230,7 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform, initi
 		sourcePlatform: source,
 		targetPlatform: target,
 		columnWidths:   columnWidths,
+		hScroll:        newHorizontalTableState(columns),
 	}
 
 	rows := m.skillsToRows(skills)
@@ -277,7 +279,12 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 func (m *SyncListModel) updateColumns(totalWidth int) {
 	columns, widths := syncListColumns(totalWidth, m.skills)
 	m.columnWidths = widths
-	m.table.SetColumns(columns)
+	m.hScroll.SetColumns(columns)
+	m.refreshTable()
+}
+
+func (m *SyncListModel) refreshTable() {
+	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
 }
 
 func (m SyncListModel) detailPanelWidth() int {
@@ -324,7 +331,6 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newHeight := max(msg.Height-10-syncListDetailHeight-syncListDetailGap, 5) // Reserve space for title, help, status, detail
 		m.table.SetHeight(newHeight)
 		m.updateColumns(msg.Width)
-		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -372,6 +378,18 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
+		case msg.String() == "left" || msg.String() == "h":
+			if m.hScroll.MoveLeft() {
+				m.refreshTable()
+			}
+			return m, nil
+
+		case msg.String() == "right" || msg.String() == "l":
+			if m.hScroll.MoveRight(m.width) {
+				m.refreshTable()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
@@ -393,7 +411,7 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filtered) > 0 {
 				skill := m.getSelectedSkill()
 				m.selected[skill.Name] = !m.selected[skill.Name]
-				m.table.SetRows(m.skillsToRows(m.filtered))
+				m.refreshTable()
 			}
 			return m, nil
 
@@ -410,7 +428,7 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, s := range m.filtered {
 				m.selected[s.Name] = selectAll
 			}
-			m.table.SetRows(m.skillsToRows(m.filtered))
+			m.refreshTable()
 			return m, nil
 
 		case key.Matches(msg, m.keys.Preview):
@@ -453,7 +471,7 @@ func (m *SyncListModel) applyFilter() {
 		}
 		m.filtered = filtered
 	}
-	m.table.SetRows(m.skillsToRows(m.filtered))
+	m.refreshTable()
 }
 
 func (m SyncListModel) getSelectedSkill() model.Skill {
@@ -521,6 +539,9 @@ func (m SyncListModel) View() string {
 	if m.filter != "" {
 		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
 	}
+	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
+		status += " • " + scrollStatus
+	}
 	b.WriteString(syncListStyles.Status.Render(status))
 	b.WriteString("\n")
 
@@ -540,6 +561,7 @@ func (m SyncListModel) View() string {
 func (m SyncListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"←/→ columns",
 		"space toggle",
 		"a toggle all",
 		"p preview",
@@ -555,6 +577,8 @@ func (m SyncListModel) renderFullHelp() string {
 	help := `Navigation:
   ↑/k      Move up
   ↓/j      Move down
+  ←/h      Show previous columns
+  →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
 

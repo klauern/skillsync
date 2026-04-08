@@ -106,6 +106,7 @@ const (
 // DeleteListModel is the BubbleTea model for interactive skill deletion.
 type DeleteListModel struct {
 	table        table.Model
+	hScroll      horizontalTableState
 	skills       []model.Skill
 	filtered     []model.Skill
 	selected     map[string]bool // map of skill key to selected state
@@ -249,6 +250,7 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		keys:         defaultDeleteListKeyMap(),
 		columnWidths: columnWidths,
 		phase:        deleteListPhaseList,
+		hScroll:      newHorizontalTableState(columns),
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -298,7 +300,12 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 func (m *DeleteListModel) updateColumns(totalWidth int) {
 	columns, widths := deleteListColumns(totalWidth, m.skills)
 	m.columnWidths = widths
-	m.table.SetColumns(columns)
+	m.hScroll.SetColumns(columns)
+	m.refreshTable()
+}
+
+func (m *DeleteListModel) refreshTable() {
+	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
 }
 
 func (m DeleteListModel) detailPanelWidth() int {
@@ -354,7 +361,6 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newHeight := max(msg.Height-10-deleteListDetailHeight-deleteListDetailGap, 5) // Reserve space for title, warning, help, status, detail
 		m.table.SetHeight(newHeight)
 		m.updateColumns(msg.Width)
-		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -402,6 +408,18 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
+		case msg.String() == "left" || msg.String() == "h":
+			if m.hScroll.MoveLeft() {
+				m.refreshTable()
+			}
+			return m, nil
+
+		case msg.String() == "right" || msg.String() == "l":
+			if m.hScroll.MoveRight(m.width) {
+				m.refreshTable()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
@@ -423,7 +441,7 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filtered) > 0 {
 				skill := m.getSelectedSkill()
 				m.selected[deleteSkillKey(skill)] = !m.selected[deleteSkillKey(skill)]
-				m.table.SetRows(m.skillsToRows(m.filtered))
+				m.refreshTable()
 			}
 			return m, nil
 
@@ -440,7 +458,7 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, s := range m.filtered {
 				m.selected[deleteSkillKey(s)] = selectAll
 			}
-			m.table.SetRows(m.skillsToRows(m.filtered))
+			m.refreshTable()
 			return m, nil
 
 		case key.Matches(msg, m.keys.View):
@@ -511,7 +529,7 @@ func (m *DeleteListModel) applyFilter() {
 		}
 		m.filtered = filtered
 	}
-	m.table.SetRows(m.skillsToRows(m.filtered))
+	m.refreshTable()
 }
 
 func (m DeleteListModel) getSelectedSkill() model.Skill {
@@ -587,6 +605,9 @@ func (m DeleteListModel) View() string {
 	status := fmt.Sprintf("%d skill(s) marked for deletion of %d", selectedCount, len(m.filtered))
 	if m.filter != "" {
 		status = fmt.Sprintf("%d marked for deletion, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
+	}
+	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
+		status += " • " + scrollStatus
 	}
 	b.WriteString(deleteListStyles.Status.Render(status))
 	b.WriteString("\n")
@@ -704,6 +725,7 @@ func (m DeleteListModel) buildDetailContent(width int) string {
 func (m DeleteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"←/→ columns",
 		"space mark/unmark delete",
 		"a toggle all",
 		"enter details",
@@ -719,6 +741,8 @@ func (m DeleteListModel) renderFullHelp() string {
 	help := `Navigation:
   ↑/k      Move up
   ↓/j      Move down
+  ←/h      Show previous columns
+  →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
 
