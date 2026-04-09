@@ -4,6 +4,9 @@ This note summarizes what is genuinely portable between Claude Code, Codex CLI,
 and Pi.dev, what is only partially portable, and where this repository still
 leaves gaps.
 
+Pi.dev is included here as a reference portability surface, not as a statement
+of implemented runtime support in SkillSync today.
+
 It is intentionally narrower than `docs/platforms/cross-platform-mapping.md`.
 The goal here is not to restate every file location, but to answer a practical
 question: **which artifact types can move across these CLIs without changing
@@ -20,6 +23,9 @@ with this assessment.
 - SkillSync currently has first-class parser/runtime support for Claude Code,
   Cursor, and Codex. Copilot, Gemini CLI, and Pi.dev are documented here as
   adjacent portability references.
+- Claude Code, Cursor, and Codex are the **implemented sync surfaces** in the
+  current CLI. Copilot, Gemini CLI, and Pi.dev are **reference-only** mapping
+  surfaces in the current docs.
 - `SKILL.md` skills are the most portable artifact type. The Agent Skills
   Standard is shared, and all three products use `name`, `description`,
   markdown body content, and supporting directories in broadly similar ways.
@@ -49,6 +55,23 @@ with this assessment.
   context does not transfer.
 - The structured portability snapshot records these claims explicitly so they
   can be checked mechanically later instead of being inferred only from prose.
+
+## Current Repo Support Status
+
+This repository documents six platforms, but it does not implement them all at
+the same level.
+
+| Platform | Repo status | Current emphasis |
+|---|---|---|
+| Claude Code | Implemented | Parser + sync + portability baseline |
+| Cursor | Implemented | Parser + sync + Agent Skills/rules mapping |
+| Codex CLI | Implemented | Parser + sync for skills/instructions; deprecated prompts are compatibility metadata only |
+| Copilot | Reference-only | Mapping target and portability comparison |
+| Gemini CLI | Reference-only | Mapping target and portability comparison |
+| Pi.dev | Reference-only | Mapping target and portability comparison; first-pass sync boundary only |
+
+The machine-readable source of truth for this status table is
+`docs/platforms/portability-snapshot.yaml`.
 
 ## Artifact Portability Matrix
 

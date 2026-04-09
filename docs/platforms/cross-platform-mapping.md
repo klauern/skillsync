@@ -6,6 +6,17 @@
 > Copilot, Gemini CLI, and Pi.dev are documented here as reference mappings and portability targets,
 > not as first-class runtime support in the current CLI.
 
+## Support Status
+
+| Platform | Status in SkillSync | Notes |
+|---|---|---|
+| Claude Code | Implemented | First-class parser and sync target |
+| Cursor | Implemented | First-class parser and sync target |
+| Codex | Implemented | First-class parser and sync target; deprecated prompts remain compatibility-only |
+| Copilot | Reference-only | Documented for concept mapping and portability analysis |
+| Gemini CLI | Reference-only | Documented for concept mapping and portability analysis |
+| Pi.dev | Reference-only | Documented for concept mapping and portability analysis |
+
 ## Concept Mapping
 
 What each platform calls equivalent concepts:
