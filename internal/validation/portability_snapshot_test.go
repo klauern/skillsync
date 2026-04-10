@@ -37,12 +37,16 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 	snapshotPath := filepath.Join(root, "docs", "platforms", "portability-snapshot.yaml")
 	assessmentPath := filepath.Join(root, "docs", "platforms", "portability-assessment.md")
 	claudePath := filepath.Join(root, "docs", "platforms", "claude.md")
+	geminiPath := filepath.Join(root, "docs", "platforms", "gemini.md")
 	mappingPath := filepath.Join(root, "docs", "platforms", "cross-platform-mapping.md")
+	schemaPath := filepath.Join(root, "docs", "platforms", "schema.yaml")
 
 	snapshotBytes := readFile(t, snapshotPath)
 	assessment := strings.ToLower(string(readFile(t, assessmentPath)))
 	claude := strings.ToLower(string(readFile(t, claudePath)))
+	gemini := strings.ToLower(string(readFile(t, geminiPath)))
 	mapping := strings.ToLower(string(readFile(t, mappingPath)))
+	schema := strings.ToLower(string(readFile(t, schemaPath)))
 
 	var snapshot portabilitySnapshot
 	if err := yaml.Unmarshal(snapshotBytes, &snapshot); err != nil {
@@ -101,7 +105,7 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 		t.Fatalf("portability assessment does not reference docs/platforms/portability-snapshot.yaml")
 	}
 
-	comparisonText := assessment + "\n" + claude + "\n" + mapping
+	comparisonText := assessment + "\n" + claude + "\n" + gemini + "\n" + mapping
 	for _, behavior := range snapshot.NonportableBehaviors {
 		if !strings.Contains(comparisonText, strings.ToLower(behavior)) {
 			t.Fatalf("nonportable behavior %q is not reflected in the docs", behavior)
@@ -111,6 +115,28 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 		if !strings.Contains(comparisonText, strings.ToLower(mapping.Field)) {
 			t.Fatalf("lossy field %q is not reflected in the docs", mapping.Field)
 		}
+	}
+
+	if !strings.Contains(gemini, "first-pass sync boundary") {
+		t.Fatalf("gemini platform doc must include an explicit first-pass sync boundary section")
+	}
+	if !strings.Contains(gemini, "skills, commands, and context") {
+		t.Fatalf("gemini platform doc must state the first-pass syncable subset")
+	}
+	if !strings.Contains(gemini, "metadata only where safe") {
+		t.Fatalf("gemini platform doc must explain metadata-only preservation for extension fields")
+	}
+	if !strings.Contains(gemini, "not first-pass sync targets") {
+		t.Fatalf("gemini platform doc must call out extension-only runtime surfaces as non-goals")
+	}
+	if !strings.Contains(schema, "first_pass_sync:") {
+		t.Fatalf("schema.yaml must include a first_pass_sync section for gemini")
+	}
+	if !strings.Contains(schema, "metadata_only_surfaces:") {
+		t.Fatalf("schema.yaml must describe metadata-only Gemini extension surfaces")
+	}
+	if !strings.Contains(schema, "unsupported_runtime_surfaces:") {
+		t.Fatalf("schema.yaml must describe unsupported Gemini runtime surfaces")
 	}
 }
 

@@ -129,7 +129,7 @@ Default paths side-by-side for all 6 documented platforms.
 | Codex | `/etc/codex/skills/` | System-wide admin skills |
 | Copilot | GitHub.com org settings | Org-level instructions (not file-based) |
 | Cursor | -- | No system-level path |
-| Gemini | Extension directory | Extension-bundled content |
+| Gemini | Extension directory | Extension-bundled content; first-pass sync extracts portable content only, not extension runtime behavior |
 | Pi.dev | -- | Packages, extensions, and themes exist, but they are out of scope for first-pass sync |
 
 ## Scope Level Comparison
@@ -141,7 +141,7 @@ How global/user/project/extension maps across platforms.
 | Organization / Enterprise | Enterprise (highest) | Admin (`/etc/`) | Organization (lowest) | -- | -- | -- |
 | User / Personal | Personal | User (`~/.codex/`) | Personal (VS Code profile, highest) | Global (`~/.cursor/`) | User (`~/.gemini/`) | User (`~/.pi/agent/`) |
 | Project / Repository | Project | Project (`.codex/`) | Repository | Project (`.cursor/`) | Workspace (`.gemini/`) | Project (`.pi/` + repo `AGENTS.md`) |
-| Plugin / Extension | Namespaced | -- | -- | -- | Extension (lowest) | Packages / themes / extensions (not first-pass sync targets) |
+| Plugin / Extension | Namespaced | -- | -- | -- | Extension bundle (portable content only; runtime surfaces are not first-pass sync targets) | Packages / themes / extensions (not first-pass sync targets) |
 
 **Precedence direction varies by platform:**
 - Claude: Enterprise > Personal > Project
@@ -195,6 +195,7 @@ These are not interchangeable. Each uses different delimiters and supports diffe
 | Copilot uses multiple file extensions | `.instructions.md`, `.prompt.md`, `.agent.md` each have different schemas |
 | Cursor legacy `.mdc` format | Functionally identical to `.md` but extension is Cursor-specific |
 | Claude plugin namespacing | `plugin-name:skill-name` format has no equivalent on other platforms |
+| Gemini extension runtime surfaces | Gemini extension-only runtime surfaces such as `mcpServers`, hooks, subagents, themes, and install state are not first-pass sync targets |
 | Pi.dev package ecosystem | Packages, extensions, and themes are runtime surfaces, not first-pass sync targets |
 
 ## SkillSync Unified Model Mapping
