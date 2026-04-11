@@ -60,6 +60,23 @@ introduce separate first-class `command` or `agent` entities for Codex, and it
 does not imply that Codex can reproduce Claude command triggers or subagent
 behavior natively.
 
+## Portability Boundaries
+
+The architecture docs use the same portability classes as the platform docs:
+
+- **Portable**: `SKILL.md` content plus supporting directories that fit the
+  shared Agent Skills subset.
+- **Partially portable**: prompt/command artifacts and always-on instruction
+  files, where content survives but runtime semantics differ by platform.
+- **Non-portable**: agent/subagent definitions, plugin/package provenance, and
+  other runtime-owned behavior with no common cross-platform file model.
+
+This means the unified model is intentionally conservative:
+
+- it preserves content and source metadata for lossy conversions
+- it does not claim that `Type=prompt` recreates native slash-command behavior
+- it does not model agent files as a portable top-level runtime concept
+
 ### Discovery
 
 - `discover` can return both skills and prompts; filtering is handled via the
