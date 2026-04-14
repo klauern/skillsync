@@ -82,6 +82,7 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 		"copilot": {"personal", "repository", "organization"},
 		"cursor":  {"project", "global"},
 		"gemini":  {"workspace", "user", "extension"},
+		"pidev":   {"user", "project"},
 	}
 	if len(snapshot.Precedence) != len(wantPrecedence) {
 		t.Fatalf("precedence entries = %d, want %d", len(snapshot.Precedence), len(wantPrecedence))
@@ -138,7 +139,7 @@ func findRepoRoot(t *testing.T) string {
 func readFile(t *testing.T, path string) []byte {
 	t.Helper()
 
-	// #nosec G304 -- test helper reads repository-controlled fixture/doc paths.
+	// #nosec G304 -- test helper reads only repo-controlled documentation paths.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)

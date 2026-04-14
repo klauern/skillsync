@@ -509,6 +509,8 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.PiDev:
+		return util.PiDevSkillsPath(), nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}

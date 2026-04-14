@@ -30,6 +30,7 @@ skillsync --help
 skillsync config init
 skillsync discover --format table
 skillsync sync cursor claudecode --dry-run
+skillsync sync cursor:repo,user codex:repo
 ```
 
 ## Commands
@@ -121,9 +122,16 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 ## Docs
 
 - Architecture overview: `docs/architecture.md`
+- Quick start: `docs/quick-start.md`
 - Sync strategies: `docs/strategies.md`
 - Portability assessment: `docs/platforms/portability-assessment.md`
 - Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
+- Claude Code reference: `docs/platforms/claude.md`
+- Codex reference: `docs/platforms/codex.md`
+- Cursor reference: `docs/platforms/cursor.md`
+- Copilot reference: `docs/platforms/copilot.md`
+- Gemini reference: `docs/platforms/gemini.md`
+- Pi.dev reference: `docs/platforms/pidev.md`
 
 ## Development
 

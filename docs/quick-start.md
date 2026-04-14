@@ -245,6 +245,8 @@ skillsync sync cursor:user claude-code
 **Valid Source Scopes:** repo, user, admin, system, builtin, plugin (can specify multiple)
 **Valid Target Scopes:** repo, user (writable locations only, single scope)
 
+If you select every source scope in the TUI, SkillSync normalizes it back to `all`.
+
 > **Tip:** Use `plugin` scope to sync skills from installed Claude Code plugins to other platforms like Cursor or Codex.
 
 ### Interactive Sync

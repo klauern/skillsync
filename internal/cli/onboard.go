@@ -30,7 +30,7 @@ func onboardGuide() string {
 - Keep skills consistent, deduplicate, and back up before changes.
 
 ## Key concepts
-- Platform: claude-code, cursor, codex.
+- Platform: claude-code, cursor, codex, pi.dev.
 - Scope: repo, user, admin, system, builtin, plugin.
 - Writable scopes: repo and user.
 - Sync is one-way: source -> target.

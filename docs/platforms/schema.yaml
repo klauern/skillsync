@@ -444,6 +444,58 @@ platforms:
             type: string
             required: false
 
+  pidev:
+    name: Pi.dev
+    config_dir: .pi
+    global_dir: ~/.pi/agent
+    unsupported_artifact_surfaces:
+      - package
+      - extension
+      - theme
+      - agent
+    artifact_types:
+      skill:
+        location:
+          - ".pi/skills/*/SKILL.md"
+          - "~/.pi/agent/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+            description: "Unique skill identifier."
+          description:
+            type: string
+            required: true
+            description: "Purpose and trigger guidance."
+      prompt:
+        location:
+          - ".pi/prompts/*.md"
+          - "~/.pi/agent/prompts/*.md"
+        format: markdown
+        trigger: "filename stem -> /name"
+        argument_syntax:
+          - "{{name}}"
+      instructions:
+        location:
+          - "AGENTS.md"
+          - "**/AGENTS.md"
+          - "~/.pi/agent/AGENTS.md"
+        frontmatter: null
+        loading: concatenated  # global + parent directories + cwd
+      system_prompt:
+        location:
+          - ".pi/SYSTEM.md"
+          - "~/.pi/agent/SYSTEM.md"
+          - ".pi/APPEND_SYSTEM.md"
+          - "~/.pi/agent/APPEND_SYSTEM.md"
+        frontmatter: null
+        loading: replace_or_append
+      settings:
+        location:
+          - ".pi/settings.json"
+          - "~/.pi/agent/settings.json"
+        format: json
+
 # Cross-platform field mappings
 mappings:
   field_mappings:
@@ -454,6 +506,7 @@ mappings:
         copilot: "name"
         cursor: "name"
         gemini: "name"
+        pidev: "name"
       lossy: []
 
     - source_field: description
@@ -463,6 +516,7 @@ mappings:
         copilot: "description"
         cursor: "description"
         gemini: "description"
+        pidev: "description"
       lossy: []
 
     - source_field: tools
@@ -472,7 +526,8 @@ mappings:
         copilot: "tools"
         cursor: "tools"
         gemini: null
-      lossy: ["gemini"]
+        pidev: null
+      lossy: ["gemini", "pidev"]
 
     - source_field: argument-hint
       platforms:
@@ -481,7 +536,8 @@ mappings:
         copilot: "argument-hint"
         cursor: null
         gemini: null
-      lossy: ["codex", "cursor", "gemini"]
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
 
     - source_field: model
       platforms:
@@ -490,7 +546,8 @@ mappings:
         copilot: "model"
         cursor: null
         gemini: null
-      lossy: ["codex", "cursor", "gemini"]
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
 
     - source_field: disable-model-invocation
       platforms:
@@ -499,7 +556,8 @@ mappings:
         copilot: "disable-model-invocation"
         cursor: null
         gemini: null
-      lossy: ["codex", "cursor", "gemini"]
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
 
     - source_field: user-invocable
       platforms:
@@ -508,7 +566,8 @@ mappings:
         copilot: "user-invokable"
         cursor: null
         gemini: null
-      lossy: ["codex", "cursor", "gemini"]
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
       note: "Claude uses 'user-invocable', Copilot uses 'user-invokable' (different spelling)"
 
     - source_field: globs
@@ -518,7 +577,8 @@ mappings:
         copilot: "applyTo"
         cursor: "globs"
         gemini: null
-      lossy: ["claude", "codex", "gemini"]
+        pidev: null
+      lossy: ["claude", "codex", "gemini", "pidev"]
 
     - source_field: version
       platforms:
@@ -527,7 +587,8 @@ mappings:
         copilot: null
         cursor: null
         gemini: null
-      lossy: ["claude", "copilot", "cursor", "gemini"]
+        pidev: null
+      lossy: ["claude", "copilot", "cursor", "gemini", "pidev"]
 
     - source_field: target
       platforms:
@@ -536,7 +597,8 @@ mappings:
         copilot: "target"
         cursor: null
         gemini: null
-      lossy: ["claude", "codex", "cursor", "gemini"]
+        pidev: null
+      lossy: ["claude", "codex", "cursor", "gemini", "pidev"]
 
     - source_field: handoffs
       platforms:
@@ -545,7 +607,8 @@ mappings:
         copilot: "handoffs"
         cursor: null
         gemini: null
-      lossy: ["claude", "codex", "cursor", "gemini"]
+        pidev: null
+      lossy: ["claude", "codex", "cursor", "gemini", "pidev"]
 
   type_mappings:
     skill:
@@ -554,24 +617,28 @@ mappings:
       copilot: "agent"
       cursor: "skill"
       gemini: "skill"
+      pidev: "skill"
     prompt:
       claude: "command"
       codex: null
       copilot: "prompt"
       cursor: "command"
       gemini: "command"
+      pidev: "prompt"
     rule:
       claude: null
       codex: null
       copilot: "instruction"
       cursor: "rule"
       gemini: null
+      pidev: null
     instructions:
       claude: "CLAUDE.md"
       codex: "AGENTS.md"
       copilot: "copilot-instructions.md"
       cursor: "rule (alwaysApply)"
       gemini: "GEMINI.md"
+      pidev: "AGENTS.md + SYSTEM.md"
 
   path_defaults:
     skills:
@@ -580,18 +647,21 @@ mappings:
       copilot: [".github/agents/"]
       cursor: [".cursor/skills/", "~/.cursor/skills/"]
       gemini: [".gemini/skills/", ".agents/skills/", "~/.gemini/skills/", "~/.agents/skills/"]
+      pidev: [".pi/skills/", "~/.pi/agent/skills/"]
     commands:
       claude: [".claude/commands/", "~/.claude/commands/"]
       codex: null
       copilot: [".github/prompts/"]
       cursor: [".cursor/commands/", "~/.cursor/commands/"]
       gemini: [".gemini/commands/", "~/.gemini/commands/"]
+      pidev: [".pi/prompts/", "~/.pi/agent/prompts/"]
     instructions:
       claude: ["CLAUDE.md", ".claude/CLAUDE.md", "~/.claude/CLAUDE.md"]
       codex: ["AGENTS.md", "~/.codex/AGENTS.md"]
       copilot: [".github/copilot-instructions.md"]
       cursor: [".cursor/rules/", "~/.cursor/rules/"]
       gemini: [".gemini/GEMINI.md", "~/.gemini/GEMINI.md"]
+      pidev: ["AGENTS.md", "~/.pi/agent/AGENTS.md", ".pi/SYSTEM.md", "~/.pi/agent/SYSTEM.md"]
 
 # Lossy conversion details
 lossy_conversions:
@@ -601,11 +671,11 @@ lossy_conversions:
 
   - field: "$ARGUMENTS interpolation"
     supported: [claude]
-    behavior: "Kept as literal text. Gemini uses {{args}}, Copilot uses ${input:var}. Not auto-converted."
+    behavior: "Kept as literal text. Gemini uses {{args}}, Copilot uses ${input:var}, and Pi.dev uses {{name}}-style placeholders. Not auto-converted."
 
   - field: "tools / allowed-tools"
     supported: [claude, codex, copilot, cursor]
-    behavior: "Gemini has no per-skill tool field. Preserved in metadata."
+    behavior: "Gemini and Pi.dev have no first-pass per-skill tool field here. Preserved in metadata."
 
   - field: "disable-model-invocation"
     supported: [claude, copilot]
@@ -617,7 +687,7 @@ lossy_conversions:
 
   - field: "globs / applyTo (pattern rules)"
     supported: [copilot, cursor]
-    behavior: "No conversion target on Claude, Codex, Gemini. Pattern rules are a distinct concept."
+    behavior: "No conversion target on Claude, Codex, Gemini, or Pi.dev. Pattern rules are a distinct concept."
 
   - field: "model (per-skill)"
     supported: [claude, copilot]
@@ -638,3 +708,7 @@ lossy_conversions:
   - field: "plugin namespacing"
     supported: [claude]
     behavior: "plugin-name:skill-name format has no equivalent. Namespace prefix dropped on conversion."
+
+  - field: "SYSTEM.md / APPEND_SYSTEM.md"
+    supported: [pidev]
+    behavior: "Pi.dev-specific system-prompt replacement/append layer. Preserve as instruction metadata or re-author manually."

@@ -28,6 +28,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
@@ -195,6 +196,7 @@ func showConfigPaths() error {
 	fmt.Printf("  Claude Code:     %v\n", cfg.Platforms.ClaudeCode.SkillsPaths)
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
+	fmt.Printf("  Pi.dev:          %v\n", cfg.Platforms.PiDev.SkillsPaths)
 
 	fmt.Println("\nData paths:")
 	fmt.Printf("  Backups:         %s\n", util.SkillsyncBackupsPath())
@@ -250,7 +252,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex
+   Supported platforms: claude-code, cursor, codex, pi.dev
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -262,7 +264,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -772,6 +774,8 @@ func colorPlatform(platform string, width int) string {
 		return ui.Success(formatted)
 	case "codex":
 		return ui.Warning(formatted)
+	case "pi.dev":
+		return ui.Magenta(formatted)
 	default:
 		return formatted
 	}
@@ -1187,6 +1191,8 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 	if err := targetSpec.ValidateAsTarget(); err != nil {
 		return nil, fmt.Errorf("invalid target: %w", err)
 	}
+
+	sourceSpec = sourceSpec.NormalizeSource()
 
 	if sourceSpec.Platform == targetSpec.Platform {
 		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourceSpec.Platform)
@@ -1618,6 +1624,8 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 		parser = cursor.New(basePath)
 	case model.Codex:
 		parser = codex.New(basePath)
+	case model.PiDev:
+		parser = pidev.New(basePath)
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -1668,6 +1676,11 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		rawPaths = cfg.Platforms.Codex.SkillsPaths
 		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
 			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
+	case model.PiDev:
+		rawPaths = cfg.Platforms.PiDev.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.PiDev.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.PiDev.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
 	default:
 		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
@@ -2038,7 +2051,7 @@ func exportCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2208,7 +2221,7 @@ func backupCreateCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to back up (claude-code, cursor, codex, all)",
+				Usage:   "Platform to back up (claude-code, cursor, codex, pi.dev, all)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -2289,7 +2302,7 @@ func backupListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2508,7 +2521,7 @@ func backupDeleteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
@@ -2568,7 +2581,7 @@ func backupVerifyCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -3064,10 +3077,7 @@ func runSyncTUI() error {
 	}
 
 	if len(sourceSkills) == 0 {
-		sourceScopeLabel := "all"
-		if len(sourceScopes) == 1 {
-			sourceScopeLabel = string(sourceScopes[0])
-		}
+		sourceScopeLabel := model.FormatSourceScopes(sourceScopes)
 		ui.Info(fmt.Sprintf("No skills found in %s:%s", sourcePlatform, sourceScopeLabel))
 		return nil
 	}

@@ -8,8 +8,19 @@ import (
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/pidev"
 )
+
+// claudePluginParserFor returns the CachePluginsParser for use as the plugin-scope
+// provider in a ClaudeCode tiered parser. Returns nil for all other platforms.
+func claudePluginParserFor(platform model.Platform) parser.Parser {
+	if platform == model.ClaudeCode {
+		return claude.NewCachePluginsParser("")
+	}
+	return nil
+}
 
 // ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
 func ClaudeCodeParserFactory() ParserFactory {
@@ -32,6 +43,20 @@ func CodexParserFactory() ParserFactory {
 	}
 }
 
+// CopilotParserFactory returns a ParserFactory for GitHub Copilot.
+func CopilotParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return copilot.New(basePath)
+	}
+}
+
+// PiDevParserFactory returns a ParserFactory for Pi.dev.
+func PiDevParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return pidev.New(basePath)
+	}
+}
+
 // ParserFactoryFor returns the appropriate ParserFactory for a platform.
 func ParserFactoryFor(platform model.Platform) ParserFactory {
 	switch platform {
@@ -41,6 +66,10 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 		return CursorParserFactory()
 	case model.Codex:
 		return CodexParserFactory()
+	case model.Copilot:
+		return CopilotParserFactory()
+	case model.PiDev:
+		return PiDevParserFactory()
 	default:
 		// Return a factory that creates Claude parsers as a fallback
 		return ClaudeCodeParserFactory()
@@ -59,6 +88,7 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 		Platform:      platform,
 		WorkingDir:    cwd,
 		ParserFactory: ParserFactoryFor(platform),
+		PluginParser:  claudePluginParserFor(platform),
 	}), nil
 }
 
@@ -68,5 +98,6 @@ func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
 		Platform:      platform,
 		WorkingDir:    workingDir,
 		ParserFactory: ParserFactoryFor(platform),
+		PluginParser:  claudePluginParserFor(platform),
 	})
 }

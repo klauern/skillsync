@@ -798,6 +798,10 @@ func TestColorPlatform(t *testing.T) {
 			platform: "codex",
 			contains: "codex",
 		},
+		"pi.dev platform": {
+			platform: "pi.dev",
+			contains: "pi.dev",
+		},
 		"unknown platform": {
 			platform: "unknown",
 			contains: "unknown",
