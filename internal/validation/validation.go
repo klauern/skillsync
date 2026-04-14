@@ -310,6 +310,14 @@ func validateFileExtension(skill model.Skill) error {
 				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
+	case model.Copilot:
+		// Copilot artifacts are markdown files with .prompt.md / .agent.md suffixes.
+		if ext != ".md" {
+			return &Error{
+				Field:   fmt.Sprintf("skill %q", skill.Name),
+				Message: fmt.Sprintf("invalid file extension %q for Copilot artifact (expected .md)", ext),
+			}
+		}
 	case model.PiDev:
 		// Pi.dev skills use the shared SKILL.md format.
 		if ext != ".md" {
@@ -518,6 +526,11 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.Copilot:
+		if envPath := os.Getenv("SKILLSYNC_COPILOT_PATH"); envPath != "" {
+			return envPath, nil
+		}
+		return util.CopilotSkillsPath(), nil
 	case model.PiDev:
 		for _, key := range []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"} {
 			if envPath := os.Getenv(key); envPath != "" {

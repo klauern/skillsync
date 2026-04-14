@@ -66,6 +66,25 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 
 // transformPath generates the appropriate file path for the target platform.
 func (t *Transformer) transformPath(skill model.Skill, target model.Platform) string {
+	if isSystemPromptSkill(skill) {
+		switch target {
+		case model.PiDev:
+			if skill.Metadata["mode"] == "append" {
+				return "APPEND_SYSTEM.md"
+			}
+			return "SYSTEM.md"
+		default:
+			baseName := filepath.Base(skill.Path)
+			if baseName == "" {
+				if skill.Metadata["mode"] == "append" {
+					return "append-system.md"
+				}
+				return "system.md"
+			}
+			return baseName
+		}
+	}
+
 	if skill.Type == model.SkillTypePrompt {
 		switch target {
 		case model.Codex:
@@ -121,7 +140,11 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 func (t *Transformer) transformContent(skill model.Skill, target model.Platform, targetPath string) (string, error) {
 	// Build frontmatter based on target platform
 	var frontmatter map[string]any
-	if shouldIncludeFrontmatter(target, targetPath) {
+	includeFrontmatter := shouldIncludeFrontmatter(target, targetPath)
+	if isSystemPromptSkill(skill) && target == model.PiDev {
+		includeFrontmatter = false
+	}
+	if includeFrontmatter {
 		frontmatter = t.buildFrontmatter(skill, target)
 	}
 
@@ -206,6 +229,10 @@ func shouldIncludeFrontmatter(target model.Platform, targetPath string) bool {
 		return isSkillFile(targetPath)
 	}
 	return true
+}
+
+func isSystemPromptSkill(skill model.Skill) bool {
+	return skill.Metadata["type"] == "system-prompt"
 }
 
 // transformMetadata transforms metadata for the target platform.

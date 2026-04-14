@@ -1,6 +1,10 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mattn/go-runewidth"
+)
 
 func TestWrapText_TruncatesWithEllipsis(t *testing.T) {
 	lines := wrapText("one two three", 6, 2)
@@ -39,5 +43,27 @@ func TestPadLines(t *testing.T) {
 	}
 	if lines[1] != "" || lines[2] != "" {
 		t.Errorf("expected padded lines to be empty, got %v", lines)
+	}
+}
+
+func TestTruncateTableValue_UsesVisualWidth(t *testing.T) {
+	value := "你你你你"
+	got := truncateTableValue(value, 5)
+	if runewidth.StringWidth(got) > 5 {
+		t.Fatalf("expected visual width <= 5, got %d for %q", runewidth.StringWidth(got), got)
+	}
+	if got != "你..." {
+		t.Errorf("expected ellipsis truncation to preserve whole runes, got %q", got)
+	}
+}
+
+func TestTruncateTableValueFromStart_PreservesTail(t *testing.T) {
+	value := "abcdefghijklmno"
+	got := truncateTableValueFromStart(value, 10)
+	if runewidth.StringWidth(got) > 10 {
+		t.Fatalf("expected visual width <= 10, got %d for %q", runewidth.StringWidth(got), got)
+	}
+	if len(got) < 3 || got[:3] != "..." {
+		t.Fatalf("expected leading ellipsis, got %q", got)
 	}
 }

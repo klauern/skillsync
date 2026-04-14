@@ -34,7 +34,8 @@ type PlatformsConfig struct {
 	ClaudeCode PlatformConfig `yaml:"claude_code"`
 	Cursor     PlatformConfig `yaml:"cursor"`
 	Codex      PlatformConfig `yaml:"codex"`
-	PiDev      PlatformConfig `yaml:"pi_dev"`
+	Copilot    PlatformConfig `yaml:"copilot"`
+	PiDev      PlatformConfig `yaml:"pidev"`
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -100,10 +101,17 @@ func Default() *Config {
 					"/etc/codex/skills", // Admin (system-wide)
 				},
 			},
+			Copilot: PlatformConfig{
+				SkillsPaths: []string{
+					".github", // GitHub Copilot workspace root
+				},
+			},
 			PiDev: PlatformConfig{
 				SkillsPaths: []string{
-					".pi/skills",         // Project (relative)
-					"~/.pi/agent/skills", // User (absolute)
+					".agents/skills",     // Project (preferred)
+					".pi/skills",         // Project fallback
+					"~/.agents/skills",   // User (preferred)
+					"~/.pi/agent/skills", // User fallback
 				},
 			},
 		},
@@ -248,6 +256,9 @@ func (c *Config) applyEnvironment() {
 	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_SKILLS_PATHS", "SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
 		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
 	}
+	if v := os.Getenv("SKILLSYNC_COPILOT_SKILLS_PATHS"); v != "" {
+		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
+	}
 
 	// Deprecated: single path environment variables (for backward compatibility)
 	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
@@ -261,6 +272,9 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"); v != "" {
 		c.Platforms.PiDev.SkillsPath = v
+	}
+	if v := os.Getenv("SKILLSYNC_COPILOT_PATH"); v != "" {
+		c.Platforms.Copilot.SkillsPath = v
 	}
 
 	// Similarity settings

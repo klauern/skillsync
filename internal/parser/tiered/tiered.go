@@ -21,6 +21,7 @@ type Parser struct {
 	platform      model.Platform
 	pathConfig    util.TieredPathConfig
 	parserFactory ParserFactory
+	pluginParser  parser.Parser // optional; nil means no plugin-scope layer
 }
 
 // Config holds configuration for creating a TieredParser.
@@ -37,6 +38,11 @@ type Config struct {
 	SystemPath string
 	// ParserFactory creates platform-specific parsers
 	ParserFactory ParserFactory
+	// PluginParser is an optional parser for the plugin scope.
+	// When set, plugin-scope skills are sourced from this parser rather than
+	// a filesystem path. This is used for Claude Code to surface skills from
+	// the installed-plugins cache as a distinct platform layer.
+	PluginParser parser.Parser
 }
 
 // New creates a new TieredParser with the given configuration.
@@ -51,6 +57,7 @@ func New(cfg Config) *Parser {
 			SystemPath: cfg.SystemPath,
 		},
 		parserFactory: cfg.ParserFactory,
+		pluginParser:  cfg.PluginParser,
 	}
 }
 
@@ -97,6 +104,12 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		// Assign scope to each skill and handle deduplication
 		for _, skill := range skills {
 			skill.Scope = sp.Scope
+			// Re-scope skills that were installed via the plugin system.
+			// These appear in user-scope paths as symlinks but belong to the
+			// plugin layer, not ordinary user files.
+			if skill.PluginInfo != nil {
+				skill.Scope = model.ScopePlugin
+			}
 
 			// Check for name collision
 			if existing, exists := skillsByName[skill.Name]; exists {
@@ -111,6 +124,29 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 				}
 			} else {
 				skillsByName[skill.Name] = skill
+			}
+		}
+	}
+
+	// Include plugin-scope skills from the dedicated plugin parser (e.g. Claude cache).
+	// These are treated as a distinct platform layer separate from filesystem scopes.
+	if p.pluginParser != nil {
+		pluginSkills, err := p.pluginParser.Parse()
+		if err != nil {
+			logging.Warn("tiered lookup: failed to parse plugin scope",
+				logging.Platform(string(p.platform)),
+				logging.Err(err),
+			)
+		} else {
+			for _, skill := range pluginSkills {
+				skill.Scope = model.ScopePlugin
+				if existing, exists := skillsByName[skill.Name]; exists {
+					if skill.Scope.IsHigherPrecedence(existing.Scope) {
+						skillsByName[skill.Name] = skill
+					}
+				} else {
+					skillsByName[skill.Name] = skill
+				}
 			}
 		}
 	}
@@ -167,12 +203,37 @@ func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill,
 
 		for _, skill := range skills {
 			skill.Scope = sp.Scope
+			if skill.PluginInfo != nil {
+				skill.Scope = model.ScopePlugin
+			}
 			if existing, exists := skillsByName[skill.Name]; exists {
 				if skill.Scope.IsHigherPrecedence(existing.Scope) {
 					skillsByName[skill.Name] = skill
 				}
 			} else {
 				skillsByName[skill.Name] = skill
+			}
+		}
+	}
+
+	// Include plugin-scope skills if requested and a plugin parser is configured.
+	if scopeSet[model.ScopePlugin] && p.pluginParser != nil {
+		pluginSkills, err := p.pluginParser.Parse()
+		if err != nil {
+			logging.Warn("tiered lookup: failed to parse plugin scope",
+				logging.Platform(string(p.platform)),
+				logging.Err(err),
+			)
+		} else {
+			for _, skill := range pluginSkills {
+				skill.Scope = model.ScopePlugin
+				if existing, exists := skillsByName[skill.Name]; exists {
+					if skill.Scope.IsHigherPrecedence(existing.Scope) {
+						skillsByName[skill.Name] = skill
+					}
+				} else {
+					skillsByName[skill.Name] = skill
+				}
 			}
 		}
 	}
@@ -186,6 +247,21 @@ func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill,
 
 // ParseFromScope parses skills from only a single scope.
 func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
+	// Plugin scope is served by the dedicated plugin parser, not filesystem paths.
+	if scope == model.ScopePlugin {
+		if p.pluginParser == nil {
+			return []model.Skill{}, nil
+		}
+		skills, err := p.pluginParser.Parse()
+		if err != nil {
+			return nil, err
+		}
+		for i := range skills {
+			skills[i].Scope = model.ScopePlugin
+		}
+		return skills, nil
+	}
+
 	paths := util.GetTieredPaths(p.pathConfig)
 	scopePaths, ok := paths[scope]
 	if !ok || len(scopePaths) == 0 {

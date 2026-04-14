@@ -551,20 +551,7 @@ func (m ImportListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
-
-		rows[i] = table.Row{checkbox, name, desc, scope}
+		rows[i] = table.Row{checkbox, truncateTableValue(s.Name, 25), truncateTableValue(s.Description, 40), truncateTableValue(s.DisplayScope(), 10)}
 	}
 	return rows
 }

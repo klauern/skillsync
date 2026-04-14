@@ -41,18 +41,20 @@ const (
 )
 
 type sourceScopeOption struct {
-	label  string
-	scopes []model.SkillScope
+	label string
+	scope model.SkillScope
 }
 
 // syncPickerKeyMap defines the key bindings for the sync picker.
 type syncPickerKeyMap struct {
-	Up     key.Binding
-	Down   key.Binding
-	Select key.Binding
-	Back   key.Binding
-	Help   key.Binding
-	Quit   key.Binding
+	Up        key.Binding
+	Down      key.Binding
+	Select    key.Binding
+	Toggle    key.Binding
+	ToggleAll key.Binding
+	Back      key.Binding
+	Help      key.Binding
+	Quit      key.Binding
 }
 
 func defaultSyncPickerKeyMap() syncPickerKeyMap {
@@ -66,8 +68,16 @@ func defaultSyncPickerKeyMap() syncPickerKeyMap {
 			key.WithHelp("↓/j", "down"),
 		),
 		Select: key.NewBinding(
-			key.WithKeys("enter", " "),
-			key.WithHelp("enter", "select"),
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "next"),
+		),
+		Toggle: key.NewBinding(
+			key.WithKeys(" ", "tab"),
+			key.WithHelp("space/tab", "toggle"),
+		),
+		ToggleAll: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "all"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("esc", "backspace"),
@@ -88,10 +98,10 @@ func defaultSyncPickerKeyMap() syncPickerKeyMap {
 type SyncPickerModel struct {
 	platforms         []model.Platform
 	sourceScopes      []sourceScopeOption
+	sourceSelected    map[model.SkillScope]bool
 	targetScopes      []model.SkillScope
 	cursor            int
 	source            model.Platform
-	sourceScopeChoice int
 	target            model.Platform
 	targetScopeChoice int
 	phase             syncPickerPhase
@@ -126,21 +136,19 @@ var syncPickerStyles = struct {
 
 // NewSyncPickerModel creates a new sync picker model.
 func NewSyncPickerModel() SyncPickerModel {
-	return SyncPickerModel{
-		platforms: model.AllPlatforms(),
-		sourceScopes: []sourceScopeOption{
-			{label: "all", scopes: nil},
-			{label: "repo", scopes: []model.SkillScope{model.ScopeRepo}},
-			{label: "user", scopes: []model.SkillScope{model.ScopeUser}},
-			{label: "plugin", scopes: []model.SkillScope{model.ScopePlugin}},
-			{label: "system", scopes: []model.SkillScope{model.ScopeSystem}},
-			{label: "admin", scopes: []model.SkillScope{model.ScopeAdmin}},
-			{label: "builtin", scopes: []model.SkillScope{model.ScopeBuiltin}},
-		},
-		targetScopes: []model.SkillScope{model.ScopeRepo, model.ScopeUser},
-		keys:         defaultSyncPickerKeyMap(),
-		phase:        syncPickerPhaseSourcePlatform,
+	m := SyncPickerModel{
+		platforms:      model.AllPlatforms(),
+		targetScopes:   []model.SkillScope{model.ScopeRepo, model.ScopeUser},
+		keys:           defaultSyncPickerKeyMap(),
+		phase:          syncPickerPhaseSourcePlatform,
+		sourceSelected: make(map[model.SkillScope]bool),
 	}
+	m.sourceScopes = make([]sourceScopeOption, 0, len(model.SourceScopeOrder()))
+	for _, scope := range model.SourceScopeOrder() {
+		m.sourceScopes = append(m.sourceScopes, sourceScopeOption{label: string(scope), scope: scope})
+	}
+	m.setAllSourceScopes(true)
+	return m
 }
 
 // Init implements tea.Model.
@@ -180,7 +188,18 @@ func (m SyncPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.stepBack()
 			return m, nil
-		case key.Matches(msg, m.keys.Select):
+		case m.phase == syncPickerPhaseSourceScope && (msg.Type == tea.KeySpace || msg.Type == tea.KeyTab):
+			m.toggleSourceScope(m.sourceScopes[m.cursor].scope)
+			return m, nil
+		case m.phase == syncPickerPhaseSourceScope && key.Matches(msg, m.keys.ToggleAll):
+			m.setAllSourceScopes(true)
+			return m, nil
+		case m.phase == syncPickerPhaseSourceScope && msg.Type == tea.KeyEnter:
+			if m.selectedSourceScopeCount() == 0 {
+				return m, nil
+			}
+			return m.stepForward()
+		case msg.Type == tea.KeyEnter:
 			return m.stepForward()
 		}
 	}
@@ -216,7 +235,7 @@ func (m *SyncPickerModel) stepBack() {
 		}
 	case syncPickerPhaseTargetPlatform:
 		m.phase = syncPickerPhaseSourceScope
-		m.cursor = m.sourceScopeChoice
+		m.cursor = 0
 	case syncPickerPhaseTargetScope:
 		m.phase = syncPickerPhaseTargetPlatform
 		m.cursor = 0
@@ -235,9 +254,9 @@ func (m SyncPickerModel) stepForward() (tea.Model, tea.Cmd) {
 		m.source = m.platforms[m.cursor]
 		m.phase = syncPickerPhaseSourceScope
 		m.cursor = 0
+		m.setAllSourceScopes(true)
 		return m, nil
 	case syncPickerPhaseSourceScope:
-		m.sourceScopeChoice = m.cursor
 		m.phase = syncPickerPhaseTargetPlatform
 		m.cursor = 0
 		for i, p := range m.platforms {
@@ -258,9 +277,7 @@ func (m SyncPickerModel) stepForward() (tea.Model, tea.Cmd) {
 		return m, nil
 	case syncPickerPhaseTargetScope:
 		m.targetScopeChoice = m.cursor
-		sourceScopeOption := m.sourceScopes[m.sourceScopeChoice]
-		sourceScopes := make([]model.SkillScope, len(sourceScopeOption.scopes))
-		copy(sourceScopes, sourceScopeOption.scopes)
+		sourceScopes := m.selectedSourceScopes()
 		m.result = SyncPickerResult{
 			Action:       SyncPickerActionSelect,
 			Source:       m.source,
@@ -273,6 +290,39 @@ func (m SyncPickerModel) stepForward() (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
+}
+
+func (m SyncPickerModel) selectedSourceScopes() []model.SkillScope {
+	scopes := make([]model.SkillScope, 0, len(m.sourceScopes))
+	for _, option := range m.sourceScopes {
+		if m.sourceSelected[option.scope] {
+			scopes = append(scopes, option.scope)
+		}
+	}
+	return model.NormalizeSourceScopes(scopes)
+}
+
+func (m *SyncPickerModel) setAllSourceScopes(selected bool) {
+	for _, option := range m.sourceScopes {
+		m.sourceSelected[option.scope] = selected
+	}
+}
+
+func (m *SyncPickerModel) toggleSourceScope(scope model.SkillScope) {
+	if m.sourceSelected[scope] && m.selectedSourceScopeCount() == 1 {
+		return
+	}
+	m.sourceSelected[scope] = !m.sourceSelected[scope]
+}
+
+func (m SyncPickerModel) selectedSourceScopeCount() int {
+	count := 0
+	for _, option := range m.sourceScopes {
+		if m.sourceSelected[option.scope] {
+			count++
+		}
+	}
+	return count
 }
 
 // View implements tea.Model.
@@ -319,15 +369,19 @@ func (m SyncPickerModel) View() string {
   ↑/k      Move up
   ↓/j      Move down
 
+Source scope selection:
+  space    Toggle selected scope
+  a        Select all scopes
+  enter    Continue to target selection
+
 Actions:
-  Enter    Select
   Esc      Go back
 
 General:
   ?        Toggle full help
   q        Quit`))
 	} else {
-		keys := []string{"↑/↓ navigate", "enter select", "esc back", "? help", "q quit"}
+		keys := []string{"↑/↓ navigate", "space toggle", "a all", "enter next", "esc back", "? help", "q quit"}
 		b.WriteString(syncPickerStyles.Help.Render(strings.Join(keys, " • ")))
 	}
 
@@ -354,7 +408,7 @@ func (m SyncPickerModel) phaseStatus() string {
 	case syncPickerPhaseSourcePlatform:
 		return "Choose where to sync FROM"
 	case syncPickerPhaseSourceScope:
-		return "Choose source scope(s): all or a specific scope"
+		return "Choose source scope(s): space toggles, a selects all"
 	case syncPickerPhaseTargetPlatform:
 		return "Choose where to sync TO"
 	case syncPickerPhaseTargetScope:
@@ -370,8 +424,8 @@ func (m SyncPickerModel) selectionSummary() string {
 		parts = append(parts, fmt.Sprintf("Source: %s", syncPickerStyles.Highlight.Render(string(m.source))))
 	}
 	if m.phase > syncPickerPhaseSourceScope {
-		scope := m.sourceScopes[m.sourceScopeChoice].label
-		parts = append(parts, fmt.Sprintf("Source scope: %s", syncPickerStyles.Highlight.Render(scope)))
+		scopes := m.selectedSourceScopes()
+		parts = append(parts, fmt.Sprintf("Source scopes: %s", syncPickerStyles.Highlight.Render(model.FormatSourceScopes(scopes))))
 	}
 	if m.target != "" {
 		parts = append(parts, fmt.Sprintf("Target: %s", syncPickerStyles.Highlight.Render(string(m.target))))
@@ -388,7 +442,12 @@ func (m SyncPickerModel) itemLine(index int) (string, bool) {
 	case syncPickerPhaseSourcePlatform:
 		return string(m.platforms[index]), false
 	case syncPickerPhaseSourceScope:
-		return m.sourceScopes[index].label, false
+		option := m.sourceScopes[index]
+		checkbox := "[ ]"
+		if m.sourceSelected[option.scope] {
+			checkbox = "[✓]"
+		}
+		return fmt.Sprintf("%s %s", checkbox, option.label), false
 	case syncPickerPhaseTargetPlatform:
 		p := m.platforms[index]
 		if p == m.source {

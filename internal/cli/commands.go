@@ -774,6 +774,8 @@ func colorPlatform(platform string, width int) string {
 		return ui.Success(formatted)
 	case "codex":
 		return ui.Warning(formatted)
+	case "pi.dev":
+		return ui.Magenta(formatted)
 	default:
 		return formatted
 	}
@@ -1189,6 +1191,8 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 	if err := targetSpec.ValidateAsTarget(); err != nil {
 		return nil, fmt.Errorf("invalid target: %w", err)
 	}
+
+	sourceSpec = sourceSpec.NormalizeSource()
 
 	if sourceSpec.Platform == targetSpec.Platform {
 		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourceSpec.Platform)
@@ -3073,10 +3077,7 @@ func runSyncTUI() error {
 	}
 
 	if len(sourceSkills) == 0 {
-		sourceScopeLabel := "all"
-		if len(sourceScopes) == 1 {
-			sourceScopeLabel = string(sourceScopes[0])
-		}
+		sourceScopeLabel := model.FormatSourceScopes(sourceScopes)
 		ui.Info(fmt.Sprintf("No skills found in %s:%s", sourcePlatform, sourceScopeLabel))
 		return nil
 	}

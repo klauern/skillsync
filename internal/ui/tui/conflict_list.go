@@ -260,10 +260,10 @@ func buildConflictRow(c *sync.Conflict, resolution string) table.Row {
 
 	return table.Row{
 		status,
-		c.SkillName,
-		string(c.Type),
-		c.DiffSummary(),
-		resStr,
+		truncateTableValue(c.SkillName, 25),
+		truncateTableValue(string(c.Type), 12),
+		truncateTableValue(c.DiffSummary(), 20),
+		truncateTableValue(resStr, 12),
 	}
 }
 

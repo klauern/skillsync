@@ -97,6 +97,13 @@ func TestTransformer_TransformPath(t *testing.T) {
 			target:     model.Codex,
 			expected:   "review/SKILL.md",
 		},
+		{
+			name:       "system prompt to pidev append file",
+			sourcePath: "/source/APPEND_SYSTEM.md",
+			skillName:  "append-system",
+			target:     model.PiDev,
+			expected:   "APPEND_SYSTEM.md",
+		},
 	}
 
 	for _, tt := range tests {
@@ -105,6 +112,9 @@ func TestTransformer_TransformPath(t *testing.T) {
 			if tt.name == "prompt to codex skill file" {
 				skill.Type = model.SkillTypePrompt
 				skill.Trigger = "/review"
+			}
+			if tt.name == "system prompt to pidev append file" {
+				skill.Metadata = map[string]string{"type": "system-prompt", "mode": "append"}
 			}
 			result := tr.transformPath(skill, tt.target)
 			if result != tt.expected {
@@ -179,6 +189,32 @@ func TestTransformer_TransformContent_CodexAgents(t *testing.T) {
 
 	if strings.HasPrefix(content, "---\n") {
 		t.Error("Codex AGENTS.md content should not include frontmatter")
+	}
+}
+
+func TestTransformer_TransformContent_PiDevSystemPrompt(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "append-system",
+		Description: "Append system instructions",
+		Metadata: map[string]string{
+			"type": "system-prompt",
+			"mode": "append",
+		},
+		Content: "System prompt body",
+	}
+
+	content, err := tr.transformContent(skill, model.PiDev, "APPEND_SYSTEM.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if strings.HasPrefix(content, "---\n") {
+		t.Fatal("Pi.dev system prompt content should not include frontmatter")
+	}
+	if content != "System prompt body" {
+		t.Fatalf("content = %q, want body only", content)
 	}
 }
 

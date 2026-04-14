@@ -10,6 +10,7 @@ func TestPlatformValidation(t *testing.T) {
 		"claude code valid": {platform: ClaudeCode, valid: true},
 		"cursor valid":      {platform: Cursor, valid: true},
 		"codex valid":       {platform: Codex, valid: true},
+		"copilot valid":     {platform: Copilot, valid: true},
 		"pi.dev valid":      {platform: PiDev, valid: true},
 		"empty invalid":     {platform: "", valid: false},
 		"unknown invalid":   {platform: "unknown", valid: false},
@@ -19,8 +20,7 @@ func TestPlatformValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := tt.platform.IsValid()
 			if got != tt.valid {
-				t.Errorf("Platform(%q).IsValid() = %v, want %v",
-					tt.platform, got, tt.valid)
+				t.Errorf("Platform(%q).IsValid() = %v, want %v", tt.platform, got, tt.valid)
 			}
 		})
 	}
@@ -29,8 +29,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 4 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 4", len(platforms))
+	if len(platforms) != 5 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 5", len(platforms))
 	}
 
 	for _, p := range platforms {
@@ -48,6 +48,7 @@ func TestPlatformShort(t *testing.T) {
 		"claude code": {platform: ClaudeCode, want: "cc"},
 		"cursor":      {platform: Cursor, want: "cur"},
 		"codex":       {platform: Codex, want: "cdx"},
+		"copilot":     {platform: Copilot, want: "cop"},
 		"pi.dev":      {platform: PiDev, want: "pi"},
 		"unknown":     {platform: "unknown", want: "unknown"},
 	}
@@ -56,8 +57,7 @@ func TestPlatformShort(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := tt.platform.Short()
 			if got != tt.want {
-				t.Errorf("Platform(%q).Short() = %q, want %q",
-					tt.platform, got, tt.want)
+				t.Errorf("Platform(%q).Short() = %q, want %q", tt.platform, got, tt.want)
 			}
 		})
 	}
@@ -71,7 +71,8 @@ func TestPlatformConfigDir(t *testing.T) {
 		"claude code":     {platform: ClaudeCode, want: "claude"},
 		"cursor":          {platform: Cursor, want: "cursor"},
 		"codex":           {platform: Codex, want: "codex"},
-		"pi.dev":          {platform: PiDev, want: "pi"},
+		"copilot":         {platform: Copilot, want: "github"},
+		"pi.dev":          {platform: PiDev, want: "pi/agent"},
 		"unknown returns": {platform: "unknown", want: "unknown"},
 		"empty":           {platform: "", want: ""},
 	}
@@ -80,8 +81,7 @@ func TestPlatformConfigDir(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := tt.platform.ConfigDir()
 			if got != tt.want {
-				t.Errorf("Platform(%q).ConfigDir() = %q, want %q",
-					tt.platform, got, tt.want)
+				t.Errorf("Platform(%q).ConfigDir() = %q, want %q", tt.platform, got, tt.want)
 			}
 		})
 	}
@@ -98,10 +98,11 @@ func TestParsePlatform(t *testing.T) {
 		"claude shorthand":      {input: "claude", want: ClaudeCode, wantErr: false},
 		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
+		"copilot exact":         {input: "copilot", want: Copilot, wantErr: false},
+		"github copilot":        {input: "github-copilot", want: Copilot, wantErr: false},
 		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
-		"pi shorthand":          {input: "pi", want: PiDev, wantErr: false},
 		"pi-dev alias":          {input: "pi-dev", want: PiDev, wantErr: false},
-		"pidev alias":           {input: "pidev", want: PiDev, wantErr: false},
+		"pidev normalized":      {input: "pidev", want: PiDev, wantErr: false},
 		"uppercase normalized":  {input: "CURSOR", want: Cursor, wantErr: false},
 		"mixed case":            {input: "ClaudeCode", want: ClaudeCode, wantErr: false},
 		"with whitespace":       {input: "  cursor  ", want: Cursor, wantErr: false},

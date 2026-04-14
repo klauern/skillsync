@@ -432,7 +432,7 @@ func TestDiscoverCommand(t *testing.T) {
 
 // TestDiscoverWithPlatformFilter verifies discover with platform filter.
 func TestDiscoverWithPlatformFilter(t *testing.T) {
-	tests := []string{"claude-code", "cursor", "codex"}
+	tests := []string{"claude-code", "cursor", "codex", "pi.dev"}
 
 	for _, platform := range tests {
 		t.Run(platform, func(t *testing.T) {
@@ -529,14 +529,19 @@ func TestDiscoverMultiplePlatforms(t *testing.T) {
 	cursorFixture := h.CursorFixture()
 	cursorFixture.WriteSkill("cursor-skill.mdc", "cursor-skill", "Cursor skill", "# Cursor skill")
 
+	piDevFixture := h.PiDevFixture()
+	piDevFixture.WriteSkill("pi-skill/SKILL.md", "pi-skill", "Pi.dev skill", "# Pi skill")
+
 	// Run discover without platform filter
 	result := h.Run("discover")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "claude-skill")
 	e2e.AssertOutputContains(t, result, "cursor-skill")
+	e2e.AssertOutputContains(t, result, "pi-skill")
 	e2e.AssertOutputContains(t, result, "claude-code")
 	e2e.AssertOutputContains(t, result, "cursor")
+	e2e.AssertOutputContains(t, result, "pi.dev")
 }
 
 // TestDiscoverPlatformFilterWithSkills verifies platform filter shows only matching skills.

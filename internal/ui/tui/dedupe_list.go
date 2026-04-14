@@ -274,43 +274,18 @@ func (m DedupeListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 22 {
-			name = name[:19] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 8 {
-			scope = scope[:5] + "..."
-		}
-
 		// Find similar skill info
 		similarSkill, nameScore, contentScore := m.findSimilarSkill(s)
-		similarName := similarSkill.Name
-		if len(similarName) > 22 {
-			similarName = similarName[:19] + "..."
-		}
-
-		nameScoreStr := fmt.Sprintf("%.0f%%", nameScore*100)
-		contentScoreStr := fmt.Sprintf("%.0f%%", contentScore*100)
-
-		desc := s.Description
-		if len(desc) > 25 {
-			desc = desc[:22] + "..."
-		}
 
 		rows[i] = table.Row{
 			checkbox,
-			name,
-			platform,
-			scope,
-			similarName,
-			nameScoreStr,
-			contentScoreStr,
-			desc,
+			truncateTableValue(s.Name, 22),
+			truncateTableValue(string(s.Platform), 12),
+			truncateTableValue(s.DisplayScope(), 8),
+			truncateTableValue(similarSkill.Name, 22),
+			fmt.Sprintf("%.0f%%", nameScore*100),
+			fmt.Sprintf("%.0f%%", contentScore*100),
+			truncateTableValue(s.Description, 25),
 		}
 	}
 	return rows

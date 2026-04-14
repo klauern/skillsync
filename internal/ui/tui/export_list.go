@@ -214,28 +214,12 @@ func (m ExportListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
 		rows[i] = table.Row{
 			checkbox,
-			name,
-			platform,
-			scope,
-			desc,
+			truncateTableValue(s.Name, 25),
+			truncateTableValue(string(s.Platform), 12),
+			truncateTableValue(s.DisplayScope(), 10),
+			truncateTableValue(s.Description, 40),
 		}
 	}
 	return rows
