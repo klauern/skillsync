@@ -101,6 +101,16 @@ func CursorProjectSkillsPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "skills")
 }
 
+// CursorCommandsPath returns the global Cursor commands directory (~/.cursor/commands)
+func CursorCommandsPath() string {
+	return filepath.Join(HomeDir(), ".cursor", "commands")
+}
+
+// CursorProjectCommandsPath returns the Cursor commands directory for a project
+func CursorProjectCommandsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".cursor", "commands")
+}
+
 // CodexConfigPath returns the Codex skills directory for a project
 func CodexConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".codex", "skills")

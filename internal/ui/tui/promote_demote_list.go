@@ -34,7 +34,7 @@ const (
 	promoteDemoteScopeWidth     = 10
 	promoteDemoteCanMoveToWidth = 12
 	promoteDemoteDescWidth      = 30
-	promoteDemoteColumnPadding = 2
+	promoteDemoteColumnPadding  = 2
 	// promoteDemoteMaxHOffset is the maximum horizontal scroll offset (4 scrollable cols - 1).
 	promoteDemoteMaxHOffset = 3
 )
