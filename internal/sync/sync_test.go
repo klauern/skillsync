@@ -137,6 +137,7 @@ Review the current changes.`), 0o600); err != nil {
 	}
 
 	targetFile := filepath.Join(targetDir, "review", "SKILL.md")
+	// #nosec G304 -- targetFile is built from t.TempDir and fixed filenames.
 	content, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatalf("failed to read synced target file: %v", err)
