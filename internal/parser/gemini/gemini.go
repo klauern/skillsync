@@ -90,7 +90,7 @@ func (p *Parser) parseCommandFile(filePath string) (model.Skill, error) {
 
 	prompt := extractString(raw, "prompt")
 	if prompt == "" {
-		return model.Skill{}, fmt.Errorf("Gemini command %q missing required prompt", filePath)
+		return model.Skill{}, fmt.Errorf("gemini command %q missing required prompt", filePath)
 	}
 
 	name, trigger, err := commandIdentity(filePath, filepath.Join(p.basePath, "commands"))
@@ -160,7 +160,7 @@ func (p *Parser) parseAgentFile(filePath string) (model.Skill, error) {
 
 	result := parser.SplitFrontmatter(content)
 	if !result.HasFrontmatter {
-		return model.Skill{}, fmt.Errorf("Gemini agent %q missing required frontmatter", filePath)
+		return model.Skill{}, fmt.Errorf("gemini agent %q missing required frontmatter", filePath)
 	}
 
 	fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
@@ -171,10 +171,10 @@ func (p *Parser) parseAgentFile(filePath string) (model.Skill, error) {
 	name := extractString(fm, "name")
 	description := extractString(fm, "description")
 	if name == "" {
-		return model.Skill{}, fmt.Errorf("Gemini agent %q missing required name", filePath)
+		return model.Skill{}, fmt.Errorf("gemini agent %q missing required name", filePath)
 	}
 	if description == "" {
-		return model.Skill{}, fmt.Errorf("Gemini agent %q missing required description", filePath)
+		return model.Skill{}, fmt.Errorf("gemini agent %q missing required description", filePath)
 	}
 	if err := parser.ValidateSkillName(name); err != nil {
 		return model.Skill{}, fmt.Errorf("invalid Gemini agent name %q in %q: %w", name, filePath, err)
