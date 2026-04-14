@@ -11,6 +11,7 @@ func TestPlatformValidation(t *testing.T) {
 		"cursor valid":      {platform: Cursor, valid: true},
 		"codex valid":       {platform: Codex, valid: true},
 		"gemini valid":      {platform: Gemini, valid: true},
+		"copilot valid":     {platform: Copilot, valid: true},
 		"pi.dev valid":      {platform: PiDev, valid: true},
 		"empty invalid":     {platform: "", valid: false},
 		"unknown invalid":   {platform: "unknown", valid: false},
@@ -30,8 +31,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 5 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 5", len(platforms))
+	if len(platforms) != 6 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 6", len(platforms))
 	}
 
 	for _, p := range platforms {
@@ -50,6 +51,7 @@ func TestPlatformShort(t *testing.T) {
 		"cursor":      {platform: Cursor, want: "cur"},
 		"codex":       {platform: Codex, want: "cdx"},
 		"gemini":      {platform: Gemini, want: "gem"},
+		"copilot":     {platform: Copilot, want: "cop"},
 		"pi.dev":      {platform: PiDev, want: "pi"},
 		"unknown":     {platform: "unknown", want: "unknown"},
 	}
@@ -74,6 +76,7 @@ func TestPlatformConfigDir(t *testing.T) {
 		"cursor":          {platform: Cursor, want: "cursor"},
 		"codex":           {platform: Codex, want: "codex"},
 		"gemini":          {platform: Gemini, want: "gemini"},
+		"copilot":         {platform: Copilot, want: "github"},
 		"pi.dev":          {platform: PiDev, want: "pi/agent"},
 		"unknown returns": {platform: "unknown", want: "unknown"},
 		"empty":           {platform: "", want: ""},
@@ -102,6 +105,8 @@ func TestParsePlatform(t *testing.T) {
 		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
 		"gemini exact":          {input: "gemini", want: Gemini, wantErr: false},
+		"copilot exact":         {input: "copilot", want: Copilot, wantErr: false},
+		"github copilot":        {input: "github-copilot", want: Copilot, wantErr: false},
 		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
 		"pidev normalized":      {input: "pidev", want: PiDev, wantErr: false},
 		"uppercase normalized":  {input: "CURSOR", want: Cursor, wantErr: false},

@@ -108,6 +108,12 @@ func TestEnvironmentOverrides(t *testing.T) {
 			envValue: "/custom/gemini/path",
 			check:    func(c *Config) bool { return c.Platforms.Gemini.SkillsPath == "/custom/gemini/path" },
 		},
+		{
+			name:     "copilot path",
+			envKey:   "SKILLSYNC_COPILOT_PATH",
+			envValue: "/custom/copilot/path",
+			check:    func(c *Config) bool { return c.Platforms.Copilot.SkillsPath == "/custom/copilot/path" },
+		},
 	}
 
 	for _, tt := range tests {
@@ -520,6 +526,14 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 	if cfg.Platforms.Gemini.SkillsPaths[1] != "~/.gemini" {
 		t.Errorf("expected second Gemini path to be '~/.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[1])
+	}
+
+	// Check Copilot defaults (repo root only)
+	if len(cfg.Platforms.Copilot.SkillsPaths) != 1 {
+		t.Errorf("expected 1 Copilot skills path, got %d", len(cfg.Platforms.Copilot.SkillsPaths))
+	}
+	if cfg.Platforms.Copilot.SkillsPaths[0] != ".github" {
+		t.Errorf("expected Copilot path to be '.github', got %q", cfg.Platforms.Copilot.SkillsPaths[0])
 	}
 }
 

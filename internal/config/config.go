@@ -35,6 +35,7 @@ type PlatformsConfig struct {
 	Cursor     PlatformConfig `yaml:"cursor"`
 	Codex      PlatformConfig `yaml:"codex"`
 	Gemini     PlatformConfig `yaml:"gemini"`
+	Copilot    PlatformConfig `yaml:"copilot"`
 	PiDev      PlatformConfig `yaml:"pidev"`
 }
 
@@ -105,6 +106,11 @@ func Default() *Config {
 				SkillsPaths: []string{
 					".gemini",   // Project config root (includes skills/ and GEMINI.md)
 					"~/.gemini", // User config root (includes skills/ and GEMINI.md)
+				},
+			},
+			Copilot: PlatformConfig{
+				SkillsPaths: []string{
+					".github", // GitHub Copilot workspace root
 				},
 			},
 			PiDev: PlatformConfig{
@@ -257,6 +263,9 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_GEMINI_SKILLS_PATHS"); v != "" {
 		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
 	}
+	if v := os.Getenv("SKILLSYNC_COPILOT_SKILLS_PATHS"); v != "" {
+		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
+	}
 	if v := os.Getenv("SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
 		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
 	}
@@ -273,6 +282,9 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := os.Getenv("SKILLSYNC_GEMINI_PATH"); v != "" {
 		c.Platforms.Gemini.SkillsPath = v
+	}
+	if v := os.Getenv("SKILLSYNC_COPILOT_PATH"); v != "" {
+		c.Platforms.Copilot.SkillsPath = v
 	}
 	if v := os.Getenv("SKILLSYNC_PIDEV_PATH"); v != "" {
 		c.Platforms.PiDev.SkillsPath = v

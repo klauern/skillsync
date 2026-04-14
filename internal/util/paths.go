@@ -28,6 +28,11 @@ func ClaudeCodeSkillsPath() string {
 	return filepath.Join(HomeDir(), ".claude", "skills")
 }
 
+// CopilotSkillsPath returns the preferred GitHub Copilot workspace root.
+func CopilotSkillsPath() string {
+	return filepath.Join(HomeDir(), ".github")
+}
+
 // piDevRootCandidates returns the preferred Pi.dev config roots in priority order.
 func piDevRootCandidates(home string) []string {
 	return []string{
@@ -94,6 +99,16 @@ func CursorSkillsPath() string {
 // CursorProjectSkillsPath returns the Cursor skills directory for a project
 func CursorProjectSkillsPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "skills")
+}
+
+// CursorCommandsPath returns the global Cursor commands directory (~/.cursor/commands)
+func CursorCommandsPath() string {
+	return filepath.Join(HomeDir(), ".cursor", "commands")
+}
+
+// CursorProjectCommandsPath returns the Cursor commands directory for a project
+func CursorProjectCommandsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".cursor", "commands")
 }
 
 // CodexConfigPath returns the Codex skills directory for a project
@@ -188,6 +203,33 @@ func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 	paths := make(map[model.SkillScope][]string)
 
 	platformDir := platformDirName(cfg.Platform)
+
+	if cfg.Platform == model.Copilot {
+		if cfg.WorkingDir != "" {
+			cwdPath := filepath.Join(cfg.WorkingDir, ".github")
+			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
+
+			repoRoot := cfg.RepoRoot
+			if repoRoot == "" {
+				repoRoot = GetRepoRoot(cfg.WorkingDir)
+			}
+			if repoRoot != "" && repoRoot != cfg.WorkingDir {
+				paths[model.ScopeRepo] = append(paths[model.ScopeRepo], filepath.Join(repoRoot, ".github"))
+			}
+		}
+
+		paths[model.ScopeUser] = []string{filepath.Join(HomeDir(), ".github")}
+
+		if cfg.AdminPath != "" {
+			paths[model.ScopeAdmin] = []string{cfg.AdminPath}
+		}
+
+		if cfg.SystemPath != "" {
+			paths[model.ScopeSystem] = []string{cfg.SystemPath}
+		}
+
+		return paths
+	}
 
 	// Repo scope: $CWD/.{platform}/skills and $REPO_ROOT/.{platform}/skills
 	if cfg.WorkingDir != "" {
@@ -284,6 +326,8 @@ func platformDirName(p model.Platform) string {
 		return ".gemini"
 	case model.PiDev:
 		return ".pi/agent"
+	case model.Copilot:
+		return ".github"
 	default:
 		return "." + strings.ToLower(string(p))
 	}
@@ -294,6 +338,8 @@ func PlatformSkillsPath(p model.Platform) string {
 	switch p {
 	case model.Gemini:
 		return GeminiPath()
+	case model.Copilot:
+		return CopilotSkillsPath()
 	case model.PiDev:
 		return PiDevSkillsPath()
 	default:
@@ -306,6 +352,8 @@ func RepoSkillsPath(p model.Platform, repoRoot string) string {
 	switch p {
 	case model.Gemini:
 		return GeminiRepoPath(repoRoot)
+	case model.Copilot:
+		return filepath.Join(repoRoot, ".github")
 	case model.PiDev:
 		return PiDevRepoSkillsPath(repoRoot)
 	default:

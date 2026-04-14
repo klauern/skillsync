@@ -98,6 +98,7 @@ func (p *Parser) parseContextFile(filePath string) (*model.Skill, error) {
 		return nil, fmt.Errorf("failed to stat file %q: %w", filePath, err)
 	}
 
+	// #nosec G304 -- filePath is discovered under the configured Gemini root.
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %q: %w", filePath, err)
