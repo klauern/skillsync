@@ -569,7 +569,7 @@ func TestSyncListModel_HorizontalScrollChangesVisibleColumns(t *testing.T) {
 	if scrolledColumns[0].Title == initialColumns[0].Title {
 		t.Fatalf("expected horizontal scroll to change the leading visible column, still got %q", scrolledColumns[0].Title)
 	}
-	if !strings.Contains(sm.View(), "Columns 2-") {
+	if !strings.Contains(sm.View(), "col 1/2") {
 		t.Fatalf("expected status to report horizontal column window, got %q", sm.View())
 	}
 }

@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -260,6 +261,23 @@ func truncateTableValueFromStart(value string, width int) string {
 	}
 
 	return "..." + string(runes[start:])
+}
+
+// hScrollIndicator returns a compact scroll position hint like "← col 2/4 →" for use in
+// status bars. Arrows are omitted when the user is already at the respective edge.
+func hScrollIndicator(offset, maxOffset int) string {
+	if maxOffset <= 0 {
+		return ""
+	}
+	left := "  "
+	right := "  "
+	if offset > 0 {
+		left = "← "
+	}
+	if offset < maxOffset {
+		right = " →"
+	}
+	return fmt.Sprintf("%scol %d/%d%s", left, offset+1, maxOffset+1, right)
 }
 
 func padLines(lines []string, count int) []string {

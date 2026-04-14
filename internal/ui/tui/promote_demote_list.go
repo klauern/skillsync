@@ -35,7 +35,8 @@ const (
 	promoteDemoteCanMoveToWidth = 12
 	promoteDemoteDescWidth      = 30
 	promoteDemoteColumnPadding  = 2
-	promoteDemoteColumnCount    = 6
+	// promoteDemoteMaxHOffset is the maximum horizontal scroll offset (4 scrollable cols - 1).
+	promoteDemoteMaxHOffset = 3
 )
 
 // PromoteDemoteListResult contains the result of the promote/demote list TUI interaction.
@@ -47,17 +48,19 @@ type PromoteDemoteListResult struct {
 
 // promoteDemoteListKeyMap defines the key bindings for the promote/demote list.
 type promoteDemoteListKeyMap struct {
-	Up         key.Binding
-	Down       key.Binding
-	Toggle     key.Binding
-	ToggleAll  key.Binding
-	Promote    key.Binding
-	Demote     key.Binding
-	ToggleMove key.Binding
-	Filter     key.Binding
-	ClearFlt   key.Binding
-	Help       key.Binding
-	Quit       key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	Toggle      key.Binding
+	ToggleAll   key.Binding
+	Promote     key.Binding
+	Demote      key.Binding
+	ToggleMove  key.Binding
+	Filter      key.Binding
+	ClearFlt    key.Binding
+	Help        key.Binding
+	Quit        key.Binding
+	ScrollLeft  key.Binding
+	ScrollRight key.Binding
 }
 
 func defaultPromoteDemoteListKeyMap() promoteDemoteListKeyMap {
@@ -106,6 +109,14 @@ func defaultPromoteDemoteListKeyMap() promoteDemoteListKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
+		ScrollLeft: key.NewBinding(
+			key.WithKeys("left"),
+			key.WithHelp("←", "scroll cols left"),
+		),
+		ScrollRight: key.NewBinding(
+			key.WithKeys("right"),
+			key.WithHelp("→", "scroll cols right"),
+		),
 	}
 }
 
@@ -128,6 +139,7 @@ type PromoteDemoteListModel struct {
 	quitting      bool
 	removeSource  bool // move instead of copy
 	columnWidths  promoteDemoteColumnWidths
+	hOffset       int // horizontal column scroll offset (0 = show all, max = promoteDemoteMaxHOffset)
 }
 
 // Styles for the promote/demote list TUI.
@@ -165,7 +177,12 @@ type promoteDemoteColumnWidths struct {
 	desc      int
 }
 
-func promoteDemoteListColumns(totalWidth int, skills []model.Skill) ([]table.Column, promoteDemoteColumnWidths) {
+// promoteDemoteListColumns returns the visible table columns and their widths for the given
+// terminal width and horizontal scroll offset. hOffset hides the leading scrollable columns
+// (platform → scope → canMoveTo) one at a time, redistributing their space to the remaining ones.
+func promoteDemoteListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]table.Column, promoteDemoteColumnWidths) {
+	hOffset = max(0, min(hOffset, promoteDemoteMaxHOffset))
+
 	widths := promoteDemoteColumnWidths{
 		name:      promoteDemoteNameWidth,
 		platform:  promoteDemotePlatformWidth,
@@ -174,24 +191,53 @@ func promoteDemoteListColumns(totalWidth int, skills []model.Skill) ([]table.Col
 		desc:      promoteDemoteDescWidth,
 	}
 
+	// Visible scrollable columns: platform(0), scope(1), canMoveTo(2), description(3)
+	// hOffset hides columns from the front of that list.
+	showPlatform := hOffset == 0
+	showScope := hOffset <= 1
+	showCanMoveTo := hOffset <= 2
+	// description is always visible (it's the last scrollable column)
+
+	visibleColCount := 2 // checkbox + name always shown
+	if showPlatform {
+		visibleColCount++
+	}
+	if showScope {
+		visibleColCount++
+	}
+	if showCanMoveTo {
+		visibleColCount++
+	}
+	visibleColCount++ // description
+
 	if totalWidth > 0 {
-		baseTotal := promoteDemoteCheckboxWidth + widths.name + widths.platform + widths.scope + widths.canMoveTo + widths.desc +
-			(promoteDemoteColumnPadding * promoteDemoteColumnCount)
+		baseTotal := promoteDemoteCheckboxWidth + widths.name + widths.desc +
+			(promoteDemoteColumnPadding * visibleColCount)
+		if showPlatform {
+			baseTotal += widths.platform
+		}
+		if showScope {
+			baseTotal += widths.scope
+		}
+		if showCanMoveTo {
+			baseTotal += widths.canMoveTo
+		}
+
 		extra := totalWidth - baseTotal
 		if extra > 0 {
-			maxScopeWidth := widths.scope
-			for _, skill := range skills {
-				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
-				if scopeWidth > maxScopeWidth {
-					maxScopeWidth = scopeWidth
+			if showScope {
+				maxScopeWidth := widths.scope
+				for _, skill := range skills {
+					if w := runewidth.StringWidth(skill.DisplayScope()); w > maxScopeWidth {
+						maxScopeWidth = w
+					}
 				}
-			}
-
-			scopeNeeded := maxScopeWidth - widths.scope
-			if scopeNeeded > 0 {
-				scopeExtra := min(scopeNeeded, extra)
-				widths.scope += scopeExtra
-				extra -= scopeExtra
+				scopeNeeded := maxScopeWidth - widths.scope
+				if scopeNeeded > 0 {
+					scopeExtra := min(scopeNeeded, extra)
+					widths.scope += scopeExtra
+					extra -= scopeExtra
+				}
 			}
 
 			nameExtra := extra / 3
@@ -204,11 +250,17 @@ func promoteDemoteListColumns(totalWidth int, skills []model.Skill) ([]table.Col
 	columns := []table.Column{
 		{Title: " ", Width: promoteDemoteCheckboxWidth},
 		{Title: "Name", Width: widths.name},
-		{Title: "Platform", Width: widths.platform},
-		{Title: "Scope", Width: widths.scope},
-		{Title: "Can Move To", Width: widths.canMoveTo},
-		{Title: "Description", Width: widths.desc},
 	}
+	if showPlatform {
+		columns = append(columns, table.Column{Title: "Platform", Width: widths.platform})
+	}
+	if showScope {
+		columns = append(columns, table.Column{Title: "Scope", Width: widths.scope})
+	}
+	if showCanMoveTo {
+		columns = append(columns, table.Column{Title: "Can Move To", Width: widths.canMoveTo})
+	}
+	columns = append(columns, table.Column{Title: "Description", Width: widths.desc})
 
 	return columns, widths
 }
@@ -234,7 +286,7 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 		return strings.ToLower(movableSkills[i].Name) < strings.ToLower(movableSkills[j].Name)
 	})
 
-	columns, columnWidths := promoteDemoteListColumns(0, movableSkills)
+	columns, columnWidths := promoteDemoteListColumns(0, movableSkills, 0)
 
 	// Initialize with no skills selected
 	selected := make(map[string]bool)
@@ -292,14 +344,21 @@ func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			targetScope = "-"
 		}
 
-		rows[i] = table.Row{
+		row := table.Row{
 			checkbox,
 			truncateTableValue(s.Name, m.columnWidths.name),
-			truncateTableValue(string(s.Platform), m.columnWidths.platform),
-			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
-			truncateTableValue(targetScope, m.columnWidths.canMoveTo),
-			truncateTableValue(s.Description, m.columnWidths.desc),
 		}
+		if m.hOffset == 0 {
+			row = append(row, truncateTableValue(string(s.Platform), m.columnWidths.platform))
+		}
+		if m.hOffset <= 1 {
+			row = append(row, truncateTableValue(s.DisplayScope(), m.columnWidths.scope))
+		}
+		if m.hOffset <= 2 {
+			row = append(row, truncateTableValue(targetScope, m.columnWidths.canMoveTo))
+		}
+		row = append(row, truncateTableValue(s.Description, m.columnWidths.desc))
+		rows[i] = row
 	}
 	return rows
 }
@@ -310,6 +369,8 @@ func (m PromoteDemoteListModel) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
+//
+//nolint:gocyclo // interactive table/event handling is intentionally centralized here
 func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -444,6 +505,14 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirmAction = PromoteDemoteActionDemote
 			}
 			return m, nil
+
+		case key.Matches(msg, m.keys.ScrollLeft):
+			m.shiftHOffset(-1)
+			return m, nil
+
+		case key.Matches(msg, m.keys.ScrollRight):
+			m.shiftHOffset(1)
+			return m, nil
 		}
 	}
 
@@ -451,8 +520,18 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *PromoteDemoteListModel) shiftHOffset(delta int) {
+	newOffset := m.hOffset + delta
+	if newOffset < 0 || newOffset > promoteDemoteMaxHOffset {
+		return
+	}
+	m.hOffset = newOffset
+	m.updateColumns(m.width)
+	m.table.SetRows(m.skillsToRows(m.filtered))
+}
+
 func (m *PromoteDemoteListModel) updateColumns(totalWidth int) {
-	columns, widths := promoteDemoteListColumns(totalWidth, m.skills)
+	columns, widths := promoteDemoteListColumns(totalWidth, m.skills, m.hOffset)
 	m.columnWidths = widths
 	m.hScroll.SetColumns(columns)
 	m.refreshTable()
@@ -599,8 +678,9 @@ func (m PromoteDemoteListModel) View() string {
 		status = fmt.Sprintf("%d selected (%d↑, %d↓), %d of %d shown (filtered)",
 			selectedCount, promotableCount, demotableCount, len(m.filtered), len(m.skills))
 	}
-	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
-		status += " • " + scrollStatus
+	if m.hOffset > 0 || m.hOffset < promoteDemoteMaxHOffset {
+		scrollIndicator := hScrollIndicator(m.hOffset, promoteDemoteMaxHOffset)
+		status += "  " + scrollIndicator
 	}
 	b.WriteString(promoteDemoteListStyles.Status.Render(status))
 	b.WriteString("\n")
@@ -621,7 +701,7 @@ func (m PromoteDemoteListModel) View() string {
 func (m PromoteDemoteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
-		"←/→ columns",
+		"←/→ scroll cols",
 		"space toggle",
 		"a toggle all",
 		"p promote",
@@ -642,6 +722,7 @@ func (m PromoteDemoteListModel) renderFullHelp() string {
   →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
+  ←/→      Scroll columns left/right
 
 Selection:
   Space/Tab  Toggle current skill
