@@ -25,7 +25,21 @@ func TestParsePromptsAndAgents(t *testing.T) {
 		byName[skill.Name] = skill
 	}
 
-	repoInstructions := byName["copilot-instructions"]
+	verifyRepoInstructions(t, byName["copilot-instructions"])
+	verifyInstructions(t, byName["go-style"])
+	verifyPrompt(t, byName["test-gen"])
+	verifyAgent(t, byName["reviewer"])
+}
+
+func TestDefaultPath(t *testing.T) {
+	if got := New("").DefaultPath(); filepath.Base(got) != ".github" {
+		t.Fatalf("DefaultPath() = %q, want path rooted at .github", got)
+	}
+}
+
+func verifyRepoInstructions(t *testing.T, repoInstructions model.Skill) {
+	t.Helper()
+
 	if repoInstructions.Type != model.SkillTypeSkill {
 		t.Fatalf("repo instructions type = %q, want %q", repoInstructions.Type, model.SkillTypeSkill)
 	}
@@ -35,8 +49,11 @@ func TestParsePromptsAndAgents(t *testing.T) {
 	if repoInstructions.Trigger != "" {
 		t.Fatalf("repo instructions trigger = %q, want empty", repoInstructions.Trigger)
 	}
+}
 
-	instructions := byName["go-style"]
+func verifyInstructions(t *testing.T, instructions model.Skill) {
+	t.Helper()
+
 	if instructions.Type != model.SkillTypeSkill {
 		t.Fatalf("instructions type = %q, want %q", instructions.Type, model.SkillTypeSkill)
 	}
@@ -49,8 +66,11 @@ func TestParsePromptsAndAgents(t *testing.T) {
 	if instructions.Description != "Go-specific repository guidance" {
 		t.Fatalf("instructions description = %q, want Go-specific repository guidance", instructions.Description)
 	}
+}
 
-	prompt := byName["test-gen"]
+func verifyPrompt(t *testing.T, prompt model.Skill) {
+	t.Helper()
+
 	if prompt.Name != "test-gen" {
 		t.Fatalf("prompt name = %q, want test-gen", prompt.Name)
 	}
@@ -81,8 +101,11 @@ func TestParsePromptsAndAgents(t *testing.T) {
 	if prompt.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactPrompt {
 		t.Fatalf("prompt metadata artifact = %q, want %q", prompt.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactPrompt)
 	}
+}
 
-	agent := byName["reviewer"]
+func verifyAgent(t *testing.T, agent model.Skill) {
+	t.Helper()
+
 	if agent.Name != "reviewer" {
 		t.Fatalf("agent name = %q, want reviewer", agent.Name)
 	}
@@ -121,12 +144,6 @@ func TestParsePromptsAndAgents(t *testing.T) {
 	}
 	if agent.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactAgent {
 		t.Fatalf("agent metadata artifact = %q, want %q", agent.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactAgent)
-	}
-}
-
-func TestDefaultPath(t *testing.T) {
-	if got := New("").DefaultPath(); filepath.Base(got) != ".github" {
-		t.Fatalf("DefaultPath() = %q, want path rooted at .github", got)
 	}
 }
 
