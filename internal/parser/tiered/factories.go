@@ -13,6 +13,15 @@ import (
 	"github.com/klauern/skillsync/internal/parser/pidev"
 )
 
+// claudePluginParserFor returns the CachePluginsParser for use as the plugin-scope
+// provider in a ClaudeCode tiered parser. Returns nil for all other platforms.
+func claudePluginParserFor(platform model.Platform) parser.Parser {
+	if platform == model.ClaudeCode {
+		return claude.NewCachePluginsParser("")
+	}
+	return nil
+}
+
 // ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
 func ClaudeCodeParserFactory() ParserFactory {
 	return func(basePath string) parser.Parser {
@@ -79,6 +88,7 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 		Platform:      platform,
 		WorkingDir:    cwd,
 		ParserFactory: ParserFactoryFor(platform),
+		PluginParser:  claudePluginParserFor(platform),
 	}), nil
 }
 
@@ -88,5 +98,6 @@ func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
 		Platform:      platform,
 		WorkingDir:    workingDir,
 		ParserFactory: ParserFactoryFor(platform),
+		PluginParser:  claudePluginParserFor(platform),
 	})
 }

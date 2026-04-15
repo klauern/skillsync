@@ -19,6 +19,19 @@ What each platform calls equivalent concepts:
 | Agent definitions | `.claude/agents/*.md` | -- | `.github/agents/*.agent.md` | Modes (`modes.json`) | `.gemini/agents/*.md` | -- |
 | MCP config | `.claude/settings.json` | `config.toml` (`mcp_servers`) | `.vscode/mcp.json` | Mode/settings | `settings.json` (`mcpServers`) | -- |
 
+## Portability Stance By Artifact Type
+
+This table is the shortest way to read the repo's portability contract before
+digging into the full mapping details below.
+
+| Artifact type | Portability class | Why |
+|---|---|---|
+| Skills (`SKILL.md`) | Portable | Shared Agent Skills shape and supporting directory layout survive across platforms. |
+| Commands / prompts | Partially portable | Markdown content survives, but trigger syntax, arguments, and runtime controls diverge. |
+| Instructions (`CLAUDE.md`, `AGENTS.md`, system-prompt layers) | Partially portable | Persistent guidance transfers, but loading order and prompt-construction semantics do not. |
+| Agents / subagents / modes | Non-portable | Platform runtimes do not expose a common agent-definition file model. |
+| Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
+
 ## Artifact Type Equivalences
 
 Detailed mapping of which artifact types serve the same purpose across platforms.
@@ -53,6 +66,10 @@ Modular instruction packages that the AI can invoke based on task relevance.
 
 User-invocable prompt templates triggered by a name or filename.
 
+These should be read as **partially portable prompt content**, not as a claim
+that one platform's slash command becomes a native runtime equivalent on
+another platform.
+
 | Platform | Location | Format | Arguments | Trigger |
 |---|---|---|---|---|
 | Claude | `.claude/commands/*.md` | Markdown + frontmatter | `$ARGUMENTS`, `$1`, `$ARGUMENTS[N]` | Filename stem -> `/name` |
@@ -65,6 +82,10 @@ User-invocable prompt templates triggered by a name or filename.
 ### Pattern-Based Rules
 
 Instructions that activate conditionally based on file patterns.
+
+These are **non-portable as runtime behavior** outside the platforms that natively
+support them. They may be restated as prose, but they do not map 1:1 onto
+skills or always-on instruction files.
 
 | Platform | Location | Pattern Field | Description |
 |---|---|---|---|
@@ -129,7 +150,7 @@ Default paths side-by-side for all 6 documented platforms.
 | Codex | `/etc/codex/skills/` | System-wide admin skills |
 | Copilot | GitHub.com org settings | Org-level instructions (not file-based) |
 | Cursor | -- | No system-level path |
-| Gemini | Extension directory | Extension-bundled content |
+| Gemini | Extension directory | Extension-bundled content; first-pass sync extracts portable content only, not extension runtime behavior |
 | Pi.dev | -- | Packages, extensions, and themes exist, but they are out of scope for first-pass sync |
 
 ## Scope Level Comparison
@@ -141,7 +162,7 @@ How global/user/project/extension maps across platforms.
 | Organization / Enterprise | Enterprise (highest) | Admin (`/etc/`) | Organization (lowest) | -- | -- | -- |
 | User / Personal | Personal | User (`~/.codex/`) | Personal (VS Code profile, highest) | Global (`~/.cursor/`) | User (`~/.gemini/`) | User (`~/.pi/agent/`) |
 | Project / Repository | Project | Project (`.codex/`) | Repository | Project (`.cursor/`) | Workspace (`.gemini/`) | Project (`.pi/` + repo `AGENTS.md`) |
-| Plugin / Extension | Namespaced | -- | -- | -- | Extension (lowest) | Packages / themes / extensions (not first-pass sync targets) |
+| Plugin / Extension | Namespaced | -- | -- | -- | Extension bundle (portable content only; runtime surfaces are not first-pass sync targets) | Packages / themes / extensions (not first-pass sync targets) |
 
 **Precedence direction varies by platform:**
 - Claude: Enterprise > Personal > Project
@@ -195,6 +216,7 @@ These are not interchangeable. Each uses different delimiters and supports diffe
 | Copilot uses multiple file extensions | `.instructions.md`, `.prompt.md`, `.agent.md` each have different schemas |
 | Cursor legacy `.mdc` format | Functionally identical to `.md` but extension is Cursor-specific |
 | Claude plugin namespacing | `plugin-name:skill-name` format has no equivalent on other platforms |
+| Gemini extension runtime surfaces | Gemini extension-only runtime surfaces such as `mcpServers`, hooks, subagents, themes, and install state are not first-pass sync targets |
 | Pi.dev package ecosystem | Packages, extensions, and themes are runtime surfaces, not first-pass sync targets |
 
 ## SkillSync Unified Model Mapping
