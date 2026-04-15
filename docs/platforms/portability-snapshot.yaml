@@ -91,6 +91,7 @@ artifact_portability:
     notes:
       - SkillSync keeps this in `model.Skill` as transport metadata rather than a separate Codex runtime model.
       - Codex prompt files are compatibility content only in this repo.
+      - Gemini extension-bundled commands are content-only first-pass sync inputs, not runtime-equivalent extension behavior.
       - Slash triggers and argument interpolation are not behaviorally portable.
   agent:
     portability: none
@@ -162,6 +163,16 @@ lossy_field_mappings:
       - gemini
       - pidev
     behavior: preserve as intent, not identical enforcement
+  - field: gemini extension runtime surfaces
+    supported_by:
+      - gemini
+    unsupported_by:
+      - claude
+      - codex
+      - copilot
+      - cursor
+      - pidev
+    behavior: preserve only safe metadata; mcpServers, hooks, subagents, themes, and package/install state are not first-pass sync targets
   - field: model
     supported_by:
       - claude
@@ -250,6 +261,8 @@ nonportable_behaviors:
   - Session-specific tool permission policy
   - plugin-specific installation precedence
   - Pi.dev `SYSTEM.md` replacement and `APPEND_SYSTEM.md` append semantics
+  - Gemini extension/package/theme installation precedence
+  - Gemini extension-only runtime surfaces
   - package/extension/theme installation precedence
 
 source_refs:
