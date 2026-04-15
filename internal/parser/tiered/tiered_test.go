@@ -8,7 +8,6 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/mock"
-	"github.com/klauern/skillsync/internal/util"
 )
 
 func TestNew(t *testing.T) {
@@ -197,9 +196,11 @@ func TestParser_Platform(t *testing.T) {
 		platform model.Platform
 	}{
 		{model.ClaudeCode},
+		{model.Copilot},
 		{model.Cursor},
 		{model.Codex},
 		{model.PiDev},
+		{model.Gemini},
 	}
 
 	for _, tt := range tests {
@@ -221,7 +222,8 @@ func TestParser_Platform(t *testing.T) {
 }
 
 func TestParser_DefaultPath(t *testing.T) {
-	home := util.HomeDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 
 	tests := []struct {
 		platform model.Platform
@@ -230,6 +232,8 @@ func TestParser_DefaultPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.Copilot, filepath.Join(home, ".github")},
+		{model.Gemini, filepath.Join(home, ".gemini")},
 		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 
@@ -358,8 +362,11 @@ func TestParserFactoryFor(t *testing.T) {
 		platform model.Platform
 	}{
 		{model.ClaudeCode},
+		{model.Copilot},
 		{model.Cursor},
 		{model.Codex},
+		{model.Gemini},
+		{model.PiDev},
 	}
 
 	for _, tt := range tests {
@@ -408,6 +415,19 @@ func TestNewForPlatform_PiDev(t *testing.T) {
 	}
 	if p.Platform() != model.PiDev {
 		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiDev)
+	}
+}
+
+func TestNewForPlatform_Gemini(t *testing.T) {
+	p, err := NewForPlatform(model.Gemini)
+	if err != nil {
+		t.Fatalf("NewForPlatform() error = %v", err)
+	}
+	if p == nil {
+		t.Fatal("NewForPlatform() returned nil")
+	}
+	if p.Platform() != model.Gemini {
+		t.Errorf("Platform() = %s, want %s", p.Platform(), model.Gemini)
 	}
 }
 

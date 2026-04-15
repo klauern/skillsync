@@ -18,6 +18,8 @@ const (
 	Codex Platform = "codex"
 	// Copilot is the identifier for GitHub Copilot.
 	Copilot Platform = "copilot"
+	// Gemini is the identifier for the Gemini CLI platform.
+	Gemini Platform = "gemini"
 	// PiDev is the identifier for the Pi.dev platform.
 	PiDev Platform = "pi.dev"
 )
@@ -25,7 +27,7 @@ const (
 // IsValid returns true if the platform is recognized.
 func (p Platform) IsValid() bool {
 	switch p {
-	case ClaudeCode, Cursor, Codex, Copilot, PiDev:
+	case ClaudeCode, Cursor, Codex, Copilot, Gemini, PiDev:
 		return true
 	default:
 		return false
@@ -43,6 +45,8 @@ func (p Platform) ConfigDir() string {
 		return "codex"
 	case Copilot:
 		return "github"
+	case Gemini:
+		return "gemini"
 	case PiDev:
 		return "pi/agent"
 	default:
@@ -61,6 +65,8 @@ func (p Platform) Short() string {
 		return "cdx"
 	case Copilot:
 		return "cop"
+	case Gemini:
+		return "gem"
 	case PiDev:
 		return "pi"
 	default:
@@ -70,7 +76,7 @@ func (p Platform) Short() string {
 
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
-	return []Platform{ClaudeCode, Cursor, Codex, Copilot, PiDev}
+	return []Platform{ClaudeCode, Cursor, Codex, Copilot, Gemini, PiDev}
 }
 
 // ParsePlatform converts a string to a Platform type.
@@ -95,6 +101,8 @@ func ParsePlatform(s string) (Platform, error) {
 		return Codex, nil
 	case "copilot", "github-copilot", "githubcopilot":
 		return Copilot, nil
+	case "gemini":
+		return Gemini, nil
 	case "pi.dev", "pidev", "pi-dev":
 		return PiDev, nil
 	default:

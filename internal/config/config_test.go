@@ -109,6 +109,12 @@ func TestEnvironmentOverrides(t *testing.T) {
 			check:    func(c *Config) bool { return c.Platforms.Copilot.SkillsPath == "/custom/copilot/path" },
 		},
 		{
+			name:     "gemini path",
+			envKey:   "SKILLSYNC_GEMINI_PATH",
+			envValue: "/custom/gemini/path",
+			check:    func(c *Config) bool { return c.Platforms.Gemini.SkillsPath == "/custom/gemini/path" },
+		},
+		{
 			name:     "pi.dev path alias",
 			envKey:   "SKILLSYNC_PIDEV_PATH",
 			envValue: "/custom/pi/path",
@@ -533,6 +539,17 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 	if cfg.Platforms.Copilot.SkillsPaths[0] != ".github" {
 		t.Errorf("expected Copilot path to be '.github', got %q", cfg.Platforms.Copilot.SkillsPaths[0])
+	}
+
+	// Check Gemini defaults (2 config roots: project, user)
+	if len(cfg.Platforms.Gemini.SkillsPaths) != 2 {
+		t.Errorf("expected 2 Gemini paths, got %d", len(cfg.Platforms.Gemini.SkillsPaths))
+	}
+	if cfg.Platforms.Gemini.SkillsPaths[0] != ".gemini" {
+		t.Errorf("expected first Gemini path to be '.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[0])
+	}
+	if cfg.Platforms.Gemini.SkillsPaths[1] != "~/.gemini" {
+		t.Errorf("expected second Gemini path to be '~/.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[1])
 	}
 
 	// Check Pi.dev defaults (preferred .agents roots with .pi fallbacks)

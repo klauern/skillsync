@@ -72,6 +72,15 @@ func TestCodexSkillsPath(t *testing.T) {
 	}
 }
 
+func TestGeminiPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".gemini")
+	got := GeminiPath()
+	if got != expected {
+		t.Errorf("GeminiPath() = %q, want %q", got, expected)
+	}
+}
+
 func TestPiDevProjectSkillsPath(t *testing.T) {
 	projectDir := "/test/project"
 	expected := "/test/project/.pi/skills"
@@ -81,7 +90,8 @@ func TestPiDevProjectSkillsPath(t *testing.T) {
 }
 
 func TestPiDevSkillsPath(t *testing.T) {
-	home := HomeDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	expected := filepath.Join(home, ".pi", "agent", "skills")
 	if got := PiDevSkillsPath(); got != expected {
 		t.Errorf("PiDevSkillsPath() = %q, want %q", got, expected)
@@ -190,6 +200,15 @@ func TestGetTieredPaths(t *testing.T) {
 			wantPaths:  true,
 		},
 		{
+			name: "gemini with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.Gemini,
+			},
+			checkScope: model.ScopeUser,
+			wantPaths:  true,
+		},
+		{
 			name: "pi.dev with working dir",
 			cfg: TieredPathConfig{
 				WorkingDir: "/test/project",
@@ -267,6 +286,7 @@ func TestPlatformDirName(t *testing.T) {
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
 		{model.Copilot, ".github"},
+		{model.Gemini, ".gemini"},
 		{model.PiDev, ".pi/agent"},
 	}
 
@@ -298,6 +318,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
 		{model.Copilot, filepath.Join(home, ".github")},
+		{model.Gemini, filepath.Join(home, ".gemini")},
 		{model.PiDev, filepath.Join(home, ".agents", "skills")},
 	}
 
@@ -321,6 +342,7 @@ func TestRepoSkillsPath(t *testing.T) {
 		{model.Cursor, "/test/repo", "/test/repo/.cursor/skills"},
 		{model.Codex, "/test/repo", "/test/repo/.codex/skills"},
 		{model.Copilot, "/test/repo", "/test/repo/.github"},
+		{model.Gemini, "/test/repo", "/test/repo/.gemini"},
 		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
 	}
 

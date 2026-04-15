@@ -73,6 +73,8 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 				return "APPEND_SYSTEM.md"
 			}
 			return "SYSTEM.md"
+		case model.Gemini:
+			return "GEMINI.md"
 		default:
 			baseName := filepath.Base(skill.Path)
 			if baseName == "" {
@@ -87,6 +89,23 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 
 	if target == model.Copilot {
 		return transformCopilotPath(skill)
+	}
+
+	if target == model.Gemini {
+		if skill.Metadata["type"] == "instructions" {
+			return "GEMINI.md"
+		}
+		if skill.Type == model.SkillTypePrompt {
+			return filepath.Join(skill.Name, "SKILL.md")
+		}
+		baseName := filepath.Base(skill.Path)
+		if isSkillFile(baseName) && skill.Name != "" {
+			return filepath.Join(skill.Name, "SKILL.md")
+		}
+		if baseName == "" {
+			return "SKILL.md"
+		}
+		return baseName
 	}
 
 	if skill.Type == model.SkillTypePrompt {

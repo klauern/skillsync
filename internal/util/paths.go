@@ -121,6 +121,16 @@ func CodexSkillsPath() string {
 	return filepath.Join(HomeDir(), ".codex", "skills")
 }
 
+// GeminiPath returns the default Gemini CLI config directory (user-level).
+func GeminiPath() string {
+	return filepath.Join(HomeDir(), ".gemini")
+}
+
+// GeminiRepoPath returns the Gemini CLI config directory for a project.
+func GeminiRepoPath(projectDir string) string {
+	return filepath.Join(projectDir, ".gemini")
+}
+
 // PiDevProjectSkillsPath returns the Pi.dev skills directory for a project.
 func PiDevProjectSkillsPath(projectDir string) string {
 	return filepath.Join(projectDir, ".pi", "skills")
@@ -199,7 +209,8 @@ func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 
 	platformDir := platformDirName(cfg.Platform)
 
-	if cfg.Platform == model.Copilot {
+	switch cfg.Platform {
+	case model.Copilot:
 		if cfg.WorkingDir != "" {
 			cwdPath := filepath.Join(cfg.WorkingDir, ".github")
 			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
@@ -214,6 +225,31 @@ func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 		}
 
 		paths[model.ScopeUser] = []string{filepath.Join(HomeDir(), ".github")}
+
+		if cfg.AdminPath != "" {
+			paths[model.ScopeAdmin] = []string{cfg.AdminPath}
+		}
+
+		if cfg.SystemPath != "" {
+			paths[model.ScopeSystem] = []string{cfg.SystemPath}
+		}
+
+		return paths
+	case model.Gemini:
+		if cfg.WorkingDir != "" {
+			cwdPath := filepath.Join(cfg.WorkingDir, ".gemini")
+			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
+
+			repoRoot := cfg.RepoRoot
+			if repoRoot == "" {
+				repoRoot = GetRepoRoot(cfg.WorkingDir)
+			}
+			if repoRoot != "" && repoRoot != cfg.WorkingDir {
+				paths[model.ScopeRepo] = append(paths[model.ScopeRepo], filepath.Join(repoRoot, ".gemini"))
+			}
+		}
+
+		paths[model.ScopeUser] = []string{filepath.Join(HomeDir(), ".gemini")}
 
 		if cfg.AdminPath != "" {
 			paths[model.ScopeAdmin] = []string{cfg.AdminPath}
@@ -317,6 +353,8 @@ func platformDirName(p model.Platform) string {
 		return ".cursor"
 	case model.Codex:
 		return ".codex"
+	case model.Gemini:
+		return ".gemini"
 	case model.PiDev:
 		return ".pi/agent"
 	case model.Copilot:
@@ -331,6 +369,8 @@ func PlatformSkillsPath(p model.Platform) string {
 	switch p {
 	case model.Copilot:
 		return CopilotSkillsPath()
+	case model.Gemini:
+		return GeminiPath()
 	case model.PiDev:
 		return PiDevSkillsPath()
 	default:
@@ -343,6 +383,8 @@ func RepoSkillsPath(p model.Platform, repoRoot string) string {
 	switch p {
 	case model.Copilot:
 		return filepath.Join(repoRoot, ".github")
+	case model.Gemini:
+		return GeminiRepoPath(repoRoot)
 	case model.PiDev:
 		return PiDevRepoSkillsPath(repoRoot)
 	default:

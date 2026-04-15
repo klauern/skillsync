@@ -10,17 +10,9 @@ import (
 	"github.com/klauern/skillsync/internal/parser/codex"
 	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 )
-
-// claudePluginParserFor returns the CachePluginsParser for use as the plugin-scope
-// provider in a ClaudeCode tiered parser. Returns nil for all other platforms.
-func claudePluginParserFor(platform model.Platform) parser.Parser {
-	if platform == model.ClaudeCode {
-		return claude.NewCachePluginsParser("")
-	}
-	return nil
-}
 
 // ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
 func ClaudeCodeParserFactory() ParserFactory {
@@ -50,6 +42,13 @@ func CopilotParserFactory() ParserFactory {
 	}
 }
 
+// GeminiParserFactory returns a ParserFactory for Gemini CLI.
+func GeminiParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return gemini.New(basePath)
+	}
+}
+
 // PiDevParserFactory returns a ParserFactory for Pi.dev.
 func PiDevParserFactory() ParserFactory {
 	return func(basePath string) parser.Parser {
@@ -68,6 +67,8 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 		return CodexParserFactory()
 	case model.Copilot:
 		return CopilotParserFactory()
+	case model.Gemini:
+		return GeminiParserFactory()
 	case model.PiDev:
 		return PiDevParserFactory()
 	default:
@@ -88,7 +89,6 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 		Platform:      platform,
 		WorkingDir:    cwd,
 		ParserFactory: ParserFactoryFor(platform),
-		PluginParser:  claudePluginParserFor(platform),
 	}), nil
 }
 
@@ -98,6 +98,5 @@ func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
 		Platform:      platform,
 		WorkingDir:    workingDir,
 		ParserFactory: ParserFactoryFor(platform),
-		PluginParser:  claudePluginParserFor(platform),
 	})
 }

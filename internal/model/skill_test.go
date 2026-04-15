@@ -140,9 +140,17 @@ func TestSkillDisplayScope(t *testing.T) {
 			skill: Skill{Platform: Codex, Scope: ScopeUser},
 			want:  "~/.codex/skills",
 		},
+		"user scope gemini": {
+			skill: Skill{Platform: Gemini, Scope: ScopeUser},
+			want:  "~/.gemini",
+		},
 		"user scope copilot": {
 			skill: Skill{Platform: Copilot, Scope: ScopeUser},
 			want:  "~/.github/skills",
+		},
+		"repo scope copilot": {
+			skill: Skill{Platform: Copilot, Scope: ScopeRepo},
+			want:  ".github/skills",
 		},
 		"repo scope claude": {
 			skill: Skill{Platform: ClaudeCode, Scope: ScopeRepo},
@@ -151,6 +159,10 @@ func TestSkillDisplayScope(t *testing.T) {
 		"repo scope cursor": {
 			skill: Skill{Platform: Cursor, Scope: ScopeRepo},
 			want:  ".cursor/skills",
+		},
+		"repo scope gemini": {
+			skill: Skill{Platform: Gemini, Scope: ScopeRepo},
+			want:  ".gemini",
 		},
 		"plugin scope with name": {
 			skill: Skill{
