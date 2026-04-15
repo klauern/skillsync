@@ -15,6 +15,11 @@ type portabilitySnapshot struct {
 		Narrative  string `yaml:"narrative"`
 		Structured string `yaml:"structured"`
 	} `yaml:"generated_from"`
+	PlatformSupport map[string]struct {
+		Status           string   `yaml:"status"`
+		ArtifactSurfaces []string `yaml:"artifact_surfaces"`
+		Notes            []string `yaml:"notes"`
+	} `yaml:"platform_support"`
 	ArtifactPortability map[string]struct {
 		Portability        string   `yaml:"portability"`
 		Description        string   `yaml:"description"`
@@ -53,6 +58,16 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 		t.Fatalf("parse portability snapshot: %v", err)
 	}
 
+	verifySnapshotMetadata(t, snapshot)
+	verifyPlatformSupport(t, snapshot)
+	verifyArtifactPortability(t, snapshot)
+	verifyPrecedence(t, snapshot)
+	verifyDocConsistency(t, snapshot, assessment, claude, gemini, mapping, schema)
+}
+
+func verifySnapshotMetadata(t *testing.T, snapshot portabilitySnapshot) {
+	t.Helper()
+
 	if snapshot.Version != 1 {
 		t.Fatalf("snapshot version = %d, want 1", snapshot.Version)
 	}
@@ -62,6 +77,38 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 	if snapshot.GeneratedFrom.Structured != "docs/platforms/schema.yaml" {
 		t.Fatalf("snapshot structured source = %q, want docs/platforms/schema.yaml", snapshot.GeneratedFrom.Structured)
 	}
+}
+
+func verifyPlatformSupport(t *testing.T, snapshot portabilitySnapshot) {
+	t.Helper()
+
+	wantPlatformSupport := map[string]string{
+		"claude":  "implemented",
+		"cursor":  "implemented",
+		"codex":   "implemented",
+		"copilot": "reference-only",
+		"gemini":  "reference-only",
+		"pidev":   "reference-only",
+	}
+	if len(snapshot.PlatformSupport) != len(wantPlatformSupport) {
+		t.Fatalf("platform_support entries = %d, want %d", len(snapshot.PlatformSupport), len(wantPlatformSupport))
+	}
+	for platform, wantStatus := range wantPlatformSupport {
+		entry, ok := snapshot.PlatformSupport[platform]
+		if !ok {
+			t.Fatalf("platform_support missing %q entry", platform)
+		}
+		if entry.Status != wantStatus {
+			t.Fatalf("platform_support[%q].status = %q, want %q", platform, entry.Status, wantStatus)
+		}
+		if len(entry.ArtifactSurfaces) == 0 {
+			t.Fatalf("platform_support[%q].artifact_surfaces is empty", platform)
+		}
+	}
+}
+
+func verifyArtifactPortability(t *testing.T, snapshot portabilitySnapshot) {
+	t.Helper()
 
 	wantArtifacts := []string{"skill", "command", "agent", "instructions"}
 	if len(snapshot.ArtifactPortability) != len(wantArtifacts) {
@@ -79,6 +126,10 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 			t.Fatalf("artifact_portability[%q].supported_platforms is empty", key)
 		}
 	}
+}
+
+func verifyPrecedence(t *testing.T, snapshot portabilitySnapshot) {
+	t.Helper()
 
 	wantPrecedence := map[string][]string{
 		"claude":  {"enterprise", "personal", "project"},
@@ -100,12 +151,24 @@ func TestPortabilitySnapshotFreshness(t *testing.T) {
 			t.Fatalf("precedence[%q] = %v, want %v", platform, gotOrder, wantOrder)
 		}
 	}
+}
+
+func verifyDocConsistency(t *testing.T, snapshot portabilitySnapshot, assessment, claude, gemini, mapping, schema string) {
+	t.Helper()
 
 	if !strings.Contains(assessment, "docs/platforms/portability-snapshot.yaml") {
 		t.Fatalf("portability assessment does not reference docs/platforms/portability-snapshot.yaml")
 	}
 
 	comparisonText := assessment + "\n" + claude + "\n" + gemini + "\n" + mapping
+	for platform, support := range snapshot.PlatformSupport {
+		if !strings.Contains(comparisonText, platform) {
+			t.Fatalf("platform_support platform %q is not reflected in the docs", platform)
+		}
+		if !strings.Contains(comparisonText, strings.ToLower(support.Status)) {
+			t.Fatalf("platform_support[%q].status %q is not reflected in the docs", platform, support.Status)
+		}
+	}
 	for _, behavior := range snapshot.NonportableBehaviors {
 		if !strings.Contains(comparisonText, strings.ToLower(behavior)) {
 			t.Fatalf("nonportable behavior %q is not reflected in the docs", behavior)
