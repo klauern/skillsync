@@ -616,6 +616,50 @@ func TestMappingWarning(t *testing.T) {
 			contains:   nil,
 			notContain: []string{"lossy mapping"},
 		},
+		"copilot instruction applyTo preserved as metadata outside cursor": {
+			skill: model.Skill{
+				Name: "react-standards",
+				Metadata: map[string]string{
+					"applyTo": "**/*.tsx",
+				},
+			},
+			target:   model.Codex,
+			contains: []string{"lossy mapping: applyTo preserved as metadata only"},
+		},
+		"copilot per-skill model preserved as metadata outside claude": {
+			skill: model.Skill{
+				Name: "review",
+				Metadata: map[string]string{
+					"model": "GPT-4o",
+				},
+			},
+			target:   model.Codex,
+			contains: []string{"lossy mapping: model preserved as metadata only"},
+		},
+		"copilot agent-only fields warn when dropped": {
+			skill: model.Skill{
+				Name: "reviewer",
+				Metadata: map[string]string{
+					"handoffs":    "[{\"agent\":\"implementer\"}]",
+					"target":      "vscode",
+					"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+				},
+			},
+			target: model.Codex,
+			contains: []string{
+				"lossy mapping: handoffs dropped without target equivalent",
+				"lossy mapping: target dropped without target equivalent",
+				"lossy mapping: mcp-servers dropped without target equivalent",
+			},
+		},
+		"tools preserved as metadata for pidev": {
+			skill: model.Skill{
+				Name:  "portable-skill",
+				Tools: []string{"Read", "Write"},
+			},
+			target:   model.PiDev,
+			contains: []string{"lossy mapping: allowed-tools preserved as metadata only"},
+		},
 	}
 
 	for name, tt := range tests {

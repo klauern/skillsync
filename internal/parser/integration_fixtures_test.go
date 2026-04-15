@@ -48,7 +48,7 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 				skills, err := copilot.New(filepath.Join(fixtureRoot, "copilot", ".github")).Parse()
 				return len(skills), err
 			},
-			want: 4,
+			want: 6,
 		},
 		"pidev": {
 			parse: func() (int, error) {

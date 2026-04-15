@@ -11,15 +11,25 @@ import (
 func TestParsePromptsAndAgents(t *testing.T) {
 	byName := parseCopilotSkills(t)
 
-	if got, want := len(byName), 4; got != want {
+	if got, want := len(byName), 6; got != want {
 		t.Fatalf("Parse() returned %d skills, want %d", got, want)
 	}
 
 	t.Run("repo instructions", func(t *testing.T) {
 		assertRepoInstructions(t, mustSkill(t, byName, "copilot-instructions"))
 	})
+	t.Run("docs instructions", func(t *testing.T) {
+		assertInstruction(t, mustSkill(t, byName, "docs-guidance"), "docs-guidance", "Documentation guidance", "**/*.md")
+	})
+	t.Run("go instructions", func(t *testing.T) {
+		skill := mustSkill(t, byName, "go")
+		assertInstruction(t, skill, "go", "Go implementation guidance", "**/*.go")
+		if got := skill.Metadata["excludeAgent"]; got != "code-review" {
+			t.Fatalf("instruction metadata excludeAgent = %q, want code-review", got)
+		}
+	})
 	t.Run("instructions", func(t *testing.T) {
-		assertInstructions(t, mustSkill(t, byName, "go-style"))
+		assertInstruction(t, mustSkill(t, byName, "go-style"), "go-style", "Go-specific repository guidance", "**/*.go")
 	})
 	t.Run("prompt", func(t *testing.T) {
 		assertPrompt(t, mustSkill(t, byName, "test-gen"))
@@ -70,20 +80,23 @@ func assertRepoInstructions(t *testing.T, skill model.Skill) {
 	}
 }
 
-func assertInstructions(t *testing.T, skill model.Skill) {
+func assertInstruction(t *testing.T, skill model.Skill, wantName, wantDescription, wantApplyTo string) {
 	t.Helper()
 
 	if skill.Type != model.SkillTypeSkill {
-		t.Fatalf("instructions type = %q, want %q", skill.Type, model.SkillTypeSkill)
+		t.Fatalf("instruction type = %q, want %q", skill.Type, model.SkillTypeSkill)
 	}
 	if skill.Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactInstructions {
-		t.Fatalf("instructions artifact = %q, want %q", skill.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactInstructions)
+		t.Fatalf("instruction artifact = %q, want %q", skill.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactInstructions)
 	}
-	if skill.Metadata["applyTo"] != "**/*.go" {
-		t.Fatalf("instructions metadata applyTo = %q, want **/*.go", skill.Metadata["applyTo"])
+	if skill.Name != wantName {
+		t.Fatalf("instruction name = %q, want %q", skill.Name, wantName)
 	}
-	if skill.Description != "Go-specific repository guidance" {
-		t.Fatalf("instructions description = %q, want Go-specific repository guidance", skill.Description)
+	if skill.Metadata["applyTo"] != wantApplyTo {
+		t.Fatalf("instruction metadata applyTo = %q, want %q", skill.Metadata["applyTo"], wantApplyTo)
+	}
+	if skill.Description != wantDescription {
+		t.Fatalf("instruction description = %q, want %q", skill.Description, wantDescription)
 	}
 }
 

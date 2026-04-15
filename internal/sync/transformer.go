@@ -203,6 +203,8 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		// Cursor has specific fields like globs and alwaysApply
 		if globs, ok := skill.Metadata["globs"]; ok {
 			fm["globs"] = globs
+		} else if applyTo, ok := skill.Metadata["applyTo"]; ok && applyTo != "" {
+			fm["globs"] = applyTo
 		}
 		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
 			fm["alwaysApply"] = alwaysApply
@@ -301,11 +303,17 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 		delete(metadata, "alwaysApply")
 
 	case model.Cursor:
-		// Cursor metadata is typically preserved as-is
+		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
+			metadata["globs"] = applyTo
+			delete(metadata, "applyTo")
+		}
 
 	case model.Codex:
 		// Codex metadata handling - preserve source info
 		metadata["source_platform"] = string(skill.Platform)
+		delete(metadata, "handoffs")
+		delete(metadata, "target")
+		delete(metadata, "mcp-servers")
 	}
 
 	return metadata

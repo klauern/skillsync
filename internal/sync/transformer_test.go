@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser"
 )
 
 func TestNewTransformer(t *testing.T) {
@@ -423,6 +424,119 @@ func TestTransformer_TransformMetadata_Codex(t *testing.T) {
 
 	if metadata["source_platform"] != "claude-code" {
 		t.Error("Codex metadata should contain source_platform")
+	}
+}
+
+func TestTransformer_Transform_CopilotInstructionToCursor(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "react-standards",
+		Description: "Copilot instruction fixture",
+		Platform:    model.ClaudeCode,
+		Path:        "/source/react.instructions.md",
+		Content:     "Use hooks and colocated tests.",
+		Metadata: map[string]string{
+			"applyTo": "**/*.tsx",
+			"model":   "GPT-4o",
+		},
+	}
+
+	transformed, err := tr.Transform(skill, model.Cursor)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+
+	if transformed.Path != "react.instructions.md" {
+		t.Fatalf("Path = %q, want react.instructions.md", transformed.Path)
+	}
+	if _, ok := transformed.Metadata["applyTo"]; ok {
+		t.Fatal("Cursor metadata should not retain applyTo after mapping to globs")
+	}
+	if transformed.Metadata["globs"] != "**/*.tsx" {
+		t.Fatalf("globs metadata = %q, want **/*.tsx", transformed.Metadata["globs"])
+	}
+	if transformed.Metadata["model"] != "GPT-4o" {
+		t.Fatalf("model metadata = %q, want GPT-4o", transformed.Metadata["model"])
+	}
+
+	result := parser.SplitFrontmatter([]byte(transformed.Content))
+	if !result.HasFrontmatter {
+		t.Fatal("expected transformed content to include frontmatter")
+	}
+	fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
+	if err != nil {
+		t.Fatalf("parse frontmatter: %v", err)
+	}
+	if got := fm["globs"]; got != "**/*.tsx" {
+		t.Fatalf("frontmatter globs = %v, want **/*.tsx", got)
+	}
+	if got := fm["model"]; got != "GPT-4o" {
+		t.Fatalf("frontmatter model = %v, want GPT-4o", got)
+	}
+}
+
+func TestTransformer_Transform_CopilotPromptToCodexPreservesLiteralText(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "review",
+		Description: "Copilot prompt fixture",
+		Platform:    model.ClaudeCode,
+		Path:        "/source/review.prompt.md",
+		Type:        model.SkillTypePrompt,
+		Trigger:     "/review",
+		Content:     "Review ${file} and ask ${input:path} for more context.\n\nReference #file:docs/spec.md.",
+		Metadata: map[string]string{
+			"argument-hint": "<path>",
+			"model":         "GPT-4o",
+		},
+	}
+
+	transformed, err := tr.Transform(skill, model.Codex)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+
+	if transformed.Path != "review/SKILL.md" {
+		t.Fatalf("Path = %q, want review/SKILL.md", transformed.Path)
+	}
+	if !strings.Contains(transformed.Content, "${input:path}") {
+		t.Fatal("transformed content should preserve Copilot input interpolation literally")
+	}
+	if !strings.Contains(transformed.Content, "#file:docs/spec.md") {
+		t.Fatal("transformed content should preserve Copilot file references literally")
+	}
+	if transformed.Metadata["argument-hint"] != "<path>" {
+		t.Fatalf("argument-hint metadata = %q, want <path>", transformed.Metadata["argument-hint"])
+	}
+	if transformed.Metadata["model"] != "GPT-4o" {
+		t.Fatalf("model metadata = %q, want GPT-4o", transformed.Metadata["model"])
+	}
+}
+
+func TestTransformer_TransformMetadata_DropsCopilotAgentOnlyFields(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Platform: model.ClaudeCode,
+		Metadata: map[string]string{
+			"handoffs":    "[{\"agent\":\"implementer\"}]",
+			"target":      "vscode",
+			"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+			"model":       "GPT-4o",
+		},
+	}
+
+	metadata := tr.transformMetadata(skill, model.Codex)
+
+	for _, key := range []string{"handoffs", "target", "mcp-servers"} {
+		if _, ok := metadata[key]; ok {
+			t.Fatalf("metadata should drop %q for Codex target", key)
+		}
+	}
+	if metadata["model"] != "GPT-4o" {
+		t.Fatalf("model metadata = %q, want GPT-4o", metadata["model"])
 	}
 }
 
