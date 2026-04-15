@@ -519,6 +519,24 @@ func TestGetPlatformPath_PiDevDefaultsToUserSkills(t *testing.T) {
 	}
 }
 
+func TestGetPlatformPath_PiDevPrefersAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	got, err := GetPlatformPath(model.PiDev)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".agents", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
+	}
+}
+
 func TestValidationError_Error(t *testing.T) {
 	t.Run("with underlying error", func(t *testing.T) {
 		err := &Error{
@@ -690,6 +708,42 @@ func TestGetPlatformPathForScope(t *testing.T) {
 			t.Fatalf("failed to resolve repo root: %v", err)
 		}
 		expected := filepath.Join(resolvedRoot, ".claude", "skills")
+		if filepath.Clean(got) != expected {
+			t.Errorf("expected %q, got %q", expected, got)
+		}
+	})
+
+	t.Run("Pi.dev repo scope uses preferred project root", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+			t.Fatalf("failed to create .git dir: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".agents", "skills"), 0o755); err != nil {
+			t.Fatalf("failed to create .agents skills: %v", err)
+		}
+		subDir := filepath.Join(repoRoot, "pkg")
+		if err := os.MkdirAll(subDir, 0o755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chdir(cwd) })
+		if err := os.Chdir(subDir); err != nil {
+			t.Fatalf("failed to chdir: %v", err)
+		}
+
+		got, err := GetPlatformPathForScope(model.PiDev, model.ScopeRepo)
+		if err != nil {
+			t.Fatalf("GetPlatformPathForScope() error = %v", err)
+		}
+		resolvedRoot, err := filepath.EvalSymlinks(repoRoot)
+		if err != nil {
+			t.Fatalf("failed to resolve repo root: %v", err)
+		}
+		expected := filepath.Join(resolvedRoot, ".agents", "skills")
 		if filepath.Clean(got) != expected {
 			t.Errorf("expected %q, got %q", expected, got)
 		}

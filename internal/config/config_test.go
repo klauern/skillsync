@@ -108,6 +108,12 @@ func TestEnvironmentOverrides(t *testing.T) {
 			envValue: "/custom/pi/path",
 			check:    func(c *Config) bool { return c.Platforms.PiDev.SkillsPath == "/custom/pi/path" },
 		},
+		{
+			name:     "pi.dev path legacy alias",
+			envKey:   "SKILLSYNC_PI_DEV_PATH",
+			envValue: "/custom/pi/path",
+			check:    func(c *Config) bool { return c.Platforms.PiDev.SkillsPath == "/custom/pi/path" },
+		},
 	}
 
 	for _, tt := range tests {
@@ -454,6 +460,16 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 					c.Platforms.PiDev.SkillsPaths[1] == "~/.pi/agent/skills"
 			},
 		},
+		{
+			name:     "pi.dev skills paths legacy alias",
+			envKey:   "SKILLSYNC_PIDEV_SKILLS_PATHS",
+			envValue: ".pi/skills:~/.pi/agent/skills",
+			check: func(c *Config) bool {
+				return len(c.Platforms.PiDev.SkillsPaths) == 2 &&
+					c.Platforms.PiDev.SkillsPaths[0] == ".pi/skills" &&
+					c.Platforms.PiDev.SkillsPaths[1] == "~/.pi/agent/skills"
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -521,14 +537,29 @@ func TestDefaultSkillsPaths(t *testing.T) {
 		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
 	}
 
-	if len(cfg.Platforms.PiDev.SkillsPaths) != 2 {
-		t.Errorf("expected 2 Pi.dev skills paths, got %d", len(cfg.Platforms.PiDev.SkillsPaths))
+	// Check Copilot defaults (repo root only)
+	if len(cfg.Platforms.Copilot.SkillsPaths) != 1 {
+		t.Errorf("expected 1 Copilot skills path, got %d", len(cfg.Platforms.Copilot.SkillsPaths))
 	}
-	if cfg.Platforms.PiDev.SkillsPaths[0] != ".pi/skills" {
-		t.Errorf("expected first Pi.dev path to be '.pi/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[0])
+	if cfg.Platforms.Copilot.SkillsPaths[0] != ".github" {
+		t.Errorf("expected Copilot path to be '.github', got %q", cfg.Platforms.Copilot.SkillsPaths[0])
 	}
-	if cfg.Platforms.PiDev.SkillsPaths[1] != "~/.pi/agent/skills" {
-		t.Errorf("expected second Pi.dev path to be '~/.pi/agent/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[1])
+
+	// Check Pi.dev defaults (preferred project/user roots plus legacy fallback roots)
+	if len(cfg.Platforms.PiDev.SkillsPaths) != 4 {
+		t.Errorf("expected 4 Pi.dev skills paths, got %d", len(cfg.Platforms.PiDev.SkillsPaths))
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[0] != ".agents/skills" {
+		t.Errorf("expected first Pi.dev path to be '.agents/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[0])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[1] != ".pi/skills" {
+		t.Errorf("expected second Pi.dev path to be '.pi/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[1])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[2] != "~/.agents/skills" {
+		t.Errorf("expected third Pi.dev path to be '~/.agents/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[2])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[3] != "~/.pi/agent/skills" {
+		t.Errorf("expected fourth Pi.dev path to be '~/.pi/agent/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[3])
 	}
 }
 

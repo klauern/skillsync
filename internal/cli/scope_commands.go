@@ -13,7 +13,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/model"
-	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/util"
@@ -152,13 +151,15 @@ func scopeCommand() *cli.Command {
 		Description: `Commands for managing skills across different scopes.
 
    Scopes (in precedence order, highest first):
+     plugin  - Skills installed via Claude Code plugins (read-only, distinct from user files)
      repo    - Repository-level skills local to a specific project
      user    - User-level skills in the user's home directory
      admin   - Administrator-defined skills
      system  - System-wide skills installed at the system level
      builtin - Built-in skills that ship with the platform
 
-   Higher-precedence skills override lower-precedence ones with the same name.`,
+   Higher-precedence skills override lower-precedence ones with the same name.
+   Plugin-scope skills retain their provenance and are never flattened into user scope.`,
 		Commands: []*cli.Command{
 			scopeListCommand(),
 			scopePruneCommand(),
@@ -567,11 +568,6 @@ func runScopeListAll(cmd *cli.Command) error {
 		}
 
 		for _, scope := range model.AllScopes() {
-			// Skip plugin scope - plugins are handled separately below
-			if scope == model.ScopePlugin {
-				continue
-			}
-
 			skills, err := tieredParser.ParseFromScope(scope)
 			if err != nil {
 				continue
@@ -585,20 +581,6 @@ func runScopeListAll(cmd *cli.Command) error {
 					Path:     skill.Path,
 				})
 			}
-		}
-	}
-
-	// Include plugin skills by default
-	pluginParser := plugin.New("")
-	pluginSkills, err := pluginParser.Parse()
-	if err == nil {
-		for _, skill := range pluginSkills {
-			allSkills = append(allSkills, scopedSkill{
-				Platform: model.ClaudeCode, // Plugins are Claude Code specific
-				Scope:    model.ScopePlugin,
-				Name:     skill.Name,
-				Path:     skill.Path,
-			})
 		}
 	}
 

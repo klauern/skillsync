@@ -129,12 +129,156 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		allSkills = append(allSkills, skill)
 	}
 
+	// Finally, parse .cursor/commands/*.md files as prompt artifacts
+	commandSkills, err := p.parseCommandFiles(seenNames)
+	if err != nil {
+		logging.Warn("failed to parse command files",
+			logging.Platform(string(p.Platform())),
+			logging.Err(err),
+		)
+	}
+	allSkills = append(allSkills, commandSkills...)
+
 	logging.Debug("completed parsing skills",
 		logging.Platform(string(p.Platform())),
 		logging.Count(len(allSkills)),
 	)
 
 	return allSkills, nil
+}
+
+// parseCommandFiles discovers and parses .cursor/commands/*.md files as SkillTypePrompt artifacts.
+// The commands directory is inferred as a sibling of the skills basePath
+// (e.g., ~/.cursor/commands when basePath is ~/.cursor/skills).
+func (p *Parser) parseCommandFiles(seen map[string]bool) ([]model.Skill, error) {
+	// Commands live alongside skills: ~/.cursor/commands or .cursor/commands
+	commandsDir := filepath.Join(filepath.Dir(p.basePath), "commands")
+
+	if _, err := os.Stat(commandsDir); os.IsNotExist(err) {
+		logging.Debug("commands directory not found",
+			logging.Platform(string(p.Platform())),
+			logging.Path(commandsDir),
+		)
+		return nil, nil
+	}
+
+	files, err := parser.DiscoverFiles(commandsDir, []string{"*.md", "**/*.md"})
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover command files in %q: %w", commandsDir, err)
+	}
+
+	logging.Debug("discovered command files",
+		logging.Platform(string(p.Platform())),
+		logging.Path(commandsDir),
+		logging.Count(len(files)),
+	)
+
+	var results []model.Skill
+	for _, filePath := range files {
+		skill, err := p.parseCommandFile(filePath)
+		if err != nil {
+			logging.Warn("failed to parse command file",
+				logging.Platform(string(p.Platform())),
+				logging.Path(filePath),
+				logging.Err(err),
+			)
+			continue
+		}
+		if seen[skill.Name] {
+			logging.Debug("skipping command, higher-precedence artifact takes priority",
+				logging.Skill(skill.Name),
+				logging.Path(filePath),
+			)
+			continue
+		}
+		seen[skill.Name] = true
+		results = append(results, skill)
+	}
+
+	return results, nil
+}
+
+// parseCommandFile parses a single .cursor/commands/*.md file into a SkillTypePrompt artifact.
+// The slash trigger is derived from the filename stem (e.g., review.md → /review).
+// All frontmatter fields are preserved in Metadata for mode-linked semantics.
+func (p *Parser) parseCommandFile(filePath string) (model.Skill, error) {
+	// #nosec G304 - filePath is validated through directory traversal from commandsDir
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return model.Skill{}, fmt.Errorf("failed to read file %q: %w", filePath, err)
+	}
+
+	result := parser.SplitFrontmatter(content)
+
+	base := filepath.Base(filePath)
+	stem := base[:len(base)-len(filepath.Ext(base))]
+
+	skill := model.Skill{
+		Platform: p.Platform(),
+		Path:     filePath,
+		Type:     model.SkillTypePrompt,
+		Trigger:  "/" + stem,
+		Metadata: make(map[string]string),
+	}
+
+	if result.HasFrontmatter {
+		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
+		if err != nil {
+			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
+		}
+
+		if nameVal, ok := fm["name"]; ok {
+			if nameStr, ok := nameVal.(string); ok && nameStr != "" {
+				skill.Name = nameStr
+			}
+		}
+		if descVal, ok := fm["description"]; ok {
+			if descStr, ok := descVal.(string); ok {
+				skill.Description = descStr
+			}
+		}
+
+		// Preserve all frontmatter fields in metadata for mode-linked semantics
+		for key, val := range fm {
+			if key == "name" || key == "description" {
+				continue
+			}
+			switch v := val.(type) {
+			case string:
+				skill.Metadata[key] = v
+			case []any:
+				parts := make([]string, 0, len(v))
+				for _, item := range v {
+					if s, ok := item.(string); ok {
+						parts = append(parts, s)
+					} else {
+						parts = append(parts, fmt.Sprintf("%v", item))
+					}
+				}
+				skill.Metadata[key] = fmt.Sprintf("%v", parts)
+			default:
+				skill.Metadata[key] = fmt.Sprintf("%v", val)
+			}
+		}
+	}
+
+	if skill.Name == "" {
+		skill.Name = stem
+	}
+
+	if err := parser.ValidateSkillName(skill.Name); err != nil {
+		return model.Skill{}, fmt.Errorf("invalid command name %q in %q: %w", skill.Name, filePath, err)
+	}
+
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return model.Skill{}, fmt.Errorf("failed to stat file %q: %w", filePath, err)
+	}
+
+	skill.Content = parser.NormalizeContent(result.Content)
+	skill.ModifiedAt = fileInfo.ModTime()
+
+	return skill, nil
 }
 
 // parseSkillFile parses a single Cursor skill file

@@ -140,6 +140,10 @@ func TestSkillDisplayScope(t *testing.T) {
 			skill: Skill{Platform: Codex, Scope: ScopeUser},
 			want:  "~/.codex/skills",
 		},
+		"user scope copilot": {
+			skill: Skill{Platform: Copilot, Scope: ScopeUser},
+			want:  "~/.github/skills",
+		},
 		"repo scope claude": {
 			skill: Skill{Platform: ClaudeCode, Scope: ScopeRepo},
 			want:  ".claude/skills",

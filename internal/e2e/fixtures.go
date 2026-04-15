@@ -148,6 +148,22 @@ func (h *Harness) CodexFixture() *Fixture {
 	return NewFixture(h.t, skillsDir)
 }
 
+// PiDevFixture creates a fixture helper for Pi.dev skills directory.
+// It sets up the expected ~/.pi/agent/skills structure in the isolated home.
+func (h *Harness) PiDevFixture() *Fixture {
+	h.t.Helper()
+
+	skillsDir := h.env["SKILLSYNC_PIDEV_PATH"]
+	if skillsDir == "" {
+		skillsDir = filepath.Join(h.homeDir, ".pi", "agent", "skills")
+	}
+	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
+		h.t.Fatalf("failed to create Pi.dev skills directory: %v", err)
+	}
+
+	return NewFixture(h.t, skillsDir)
+}
+
 // TempFixture creates a fixture helper for a new temporary directory.
 func (h *Harness) TempFixture() *Fixture {
 	h.t.Helper()

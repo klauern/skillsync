@@ -180,19 +180,6 @@ func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareList
 func (m CompareListModel) comparisonsToRows(comparisons []*similarity.ComparisonResult) []table.Row {
 	rows := make([]table.Row, len(comparisons))
 	for i, c := range comparisons {
-		name1 := c.Skill1.Name
-		if len(name1) > 22 {
-			name1 = name1[:19] + "..."
-		}
-
-		name2 := c.Skill2.Name
-		if len(name2) > 22 {
-			name2 = name2[:19] + "..."
-		}
-
-		plat1 := c.Skill1.Platform.Short()
-		plat2 := c.Skill2.Platform.Short()
-
 		nameScore := "-"
 		if c.NameScore > 0 {
 			nameScore = fmt.Sprintf("%.0f%%", c.NameScore*100)
@@ -203,16 +190,14 @@ func (m CompareListModel) comparisonsToRows(comparisons []*similarity.Comparison
 			contentScore = fmt.Sprintf("%.0f%%", c.ContentScore*100)
 		}
 
-		changes := c.DiffSummary()
-
 		rows[i] = table.Row{
-			name1,
-			plat1,
-			name2,
-			plat2,
+			truncateTableValue(c.Skill1.Name, 22),
+			c.Skill1.Platform.Short(),
+			truncateTableValue(c.Skill2.Name, 22),
+			c.Skill2.Platform.Short(),
 			nameScore,
 			contentScore,
-			changes,
+			truncateTableValue(c.DiffSummary(), 18),
 		}
 	}
 	return rows

@@ -101,6 +101,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		Platform: p.platform,
 		Path:     filePath,
 		Metadata: make(map[string]string),
+		Type:     model.SkillTypeSkill,
 	}
 
 	if result.HasFrontmatter {
@@ -206,6 +207,10 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 	// Normalize content
 	skill.Content = parser.NormalizeContent(result.Content)
+
+	if skill.Type == "" {
+		skill.Type = model.SkillTypeSkill
+	}
 
 	return skill, nil
 }
@@ -550,6 +555,10 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 
 	// Normalize content
 	skill.Content = parser.NormalizeContent(result.Content)
+
+	if skill.Type == "" {
+		skill.Type = model.SkillTypeSkill
+	}
 
 	return skill, nil
 }

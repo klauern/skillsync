@@ -260,23 +260,11 @@ func (m *ConfigListModel) buildConfigItems() []configItem {
 func (m *ConfigListModel) itemsToRows(items []configItem) []table.Row {
 	rows := make([]table.Row, len(items))
 	for i, item := range items {
-		// Truncate long values
-		value := item.Value
-		if len(value) > 23 {
-			value = value[:20] + "..."
-		}
-
-		// Truncate description
-		desc := item.Description
-		if len(desc) > 33 {
-			desc = desc[:30] + "..."
-		}
-
 		rows[i] = table.Row{
 			item.Section,
 			item.Key,
-			value,
-			desc,
+			truncateTableValue(item.Value, 25),
+			truncateTableValue(item.Description, 35),
 		}
 	}
 	return rows
