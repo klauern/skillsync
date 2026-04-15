@@ -34,17 +34,19 @@ type DeleteListResult struct {
 
 // deleteListKeyMap defines the key bindings for the delete list.
 type deleteListKeyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	Toggle    key.Binding
-	ToggleAll key.Binding
-	View      key.Binding
-	Confirm   key.Binding
-	Filter    key.Binding
-	ClearFlt  key.Binding
-	Help      key.Binding
-	Quit      key.Binding
-	Back      key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	Toggle      key.Binding
+	ToggleAll   key.Binding
+	View        key.Binding
+	Confirm     key.Binding
+	Filter      key.Binding
+	ClearFlt    key.Binding
+	Help        key.Binding
+	Quit        key.Binding
+	Back        key.Binding
+	ScrollLeft  key.Binding
+	ScrollRight key.Binding
 }
 
 func defaultDeleteListKeyMap() deleteListKeyMap {
@@ -93,6 +95,14 @@ func defaultDeleteListKeyMap() deleteListKeyMap {
 			key.WithKeys("b", "esc"),
 			key.WithHelp("b/esc", "back"),
 		),
+		ScrollLeft: key.NewBinding(
+			key.WithKeys("left"),
+			key.WithHelp("←", "scroll cols left"),
+		),
+		ScrollRight: key.NewBinding(
+			key.WithKeys("right"),
+			key.WithHelp("→", "scroll cols right"),
+		),
 	}
 }
 
@@ -123,6 +133,7 @@ type DeleteListModel struct {
 	viewport     viewport.Model
 	ready        bool
 	detailSkill  model.Skill
+	hOffset      int // horizontal column scroll offset (0 = show all)
 }
 
 // Styles for the delete list TUI.
@@ -157,10 +168,11 @@ const (
 	deleteListScopeWidth    = 10
 	deleteListDescWidth     = 40
 	deleteListColumnPadding = 2
-	deleteListColumnCount   = 5
 	deleteListDetailLines   = 3
 	deleteListDetailGap     = 1
 	deleteListDetailHeight  = deleteListDetailLines + 1 + 2 // title + content + border
+	// deleteListMaxHOffset is the maximum horizontal scroll offset (3 scrollable cols - 1).
+	deleteListMaxHOffset = 2
 )
 
 type deleteListColumnWidths struct {
@@ -170,7 +182,11 @@ type deleteListColumnWidths struct {
 	desc     int
 }
 
-func deleteListColumns(totalWidth int, skills []model.Skill) ([]table.Column, deleteListColumnWidths) {
+// deleteListColumns returns visible table columns for the given terminal width and horizontal
+// scroll offset. Scrollable columns are: platform(0), scope(1), description(2).
+func deleteListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]table.Column, deleteListColumnWidths) {
+	hOffset = max(0, min(hOffset, deleteListMaxHOffset))
+
 	widths := deleteListColumnWidths{
 		name:     deleteListNameWidth,
 		platform: deleteListPlatformWidth,
@@ -178,24 +194,42 @@ func deleteListColumns(totalWidth int, skills []model.Skill) ([]table.Column, de
 		desc:     deleteListDescWidth,
 	}
 
+	showPlatform := hOffset == 0
+	showScope := hOffset <= 1
+
+	visibleColCount := 3 // checkbox + name + description always visible
+	if showPlatform {
+		visibleColCount++
+	}
+	if showScope {
+		visibleColCount++
+	}
+
 	if totalWidth > 0 {
-		baseTotal := deleteListCheckboxWidth + widths.name + widths.platform + widths.scope + widths.desc +
-			(deleteListColumnPadding * deleteListColumnCount)
+		baseTotal := deleteListCheckboxWidth + widths.name + widths.desc +
+			(deleteListColumnPadding * visibleColCount)
+		if showPlatform {
+			baseTotal += widths.platform
+		}
+		if showScope {
+			baseTotal += widths.scope
+		}
+
 		extra := totalWidth - baseTotal
 		if extra > 0 {
-			maxScopeWidth := widths.scope
-			for _, skill := range skills {
-				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
-				if scopeWidth > maxScopeWidth {
-					maxScopeWidth = scopeWidth
+			if showScope {
+				maxScopeWidth := widths.scope
+				for _, skill := range skills {
+					if w := runewidth.StringWidth(skill.DisplayScope()); w > maxScopeWidth {
+						maxScopeWidth = w
+					}
 				}
-			}
-
-			scopeNeeded := maxScopeWidth - widths.scope
-			if scopeNeeded > 0 {
-				scopeExtra := min(scopeNeeded, extra)
-				widths.scope += scopeExtra
-				extra -= scopeExtra
+				scopeNeeded := maxScopeWidth - widths.scope
+				if scopeNeeded > 0 {
+					scopeExtra := min(scopeNeeded, extra)
+					widths.scope += scopeExtra
+					extra -= scopeExtra
+				}
 			}
 
 			nameExtra := extra / 3
@@ -206,12 +240,16 @@ func deleteListColumns(totalWidth int, skills []model.Skill) ([]table.Column, de
 	}
 
 	columns := []table.Column{
-		{Title: " ", Width: deleteListCheckboxWidth}, // Checkbox column
-		{Title: "Name", Width: widths.name},          // Skill name
-		{Title: "Platform", Width: widths.platform},  // Platform
-		{Title: "Scope", Width: widths.scope},        // Scope
-		{Title: "Description", Width: widths.desc},   // Description
+		{Title: " ", Width: deleteListCheckboxWidth},
+		{Title: "Name", Width: widths.name},
 	}
+	if showPlatform {
+		columns = append(columns, table.Column{Title: "Platform", Width: widths.platform})
+	}
+	if showScope {
+		columns = append(columns, table.Column{Title: "Scope", Width: widths.scope})
+	}
+	columns = append(columns, table.Column{Title: "Description", Width: widths.desc})
 
 	return columns, widths
 }
@@ -237,7 +275,7 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		return strings.ToLower(deletableSkills[i].Name) < strings.ToLower(deletableSkills[j].Name)
 	})
 
-	columns, columnWidths := deleteListColumns(0, deletableSkills)
+	columns, columnWidths := deleteListColumns(0, deletableSkills, 0)
 
 	// Initialize with no skills selected (deletion is opt-in)
 	selected := make(map[string]bool)
@@ -284,19 +322,34 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[x]"
 		}
 
-		rows[i] = table.Row{
+		row := table.Row{
 			checkbox,
 			truncateTableValue(s.Name, m.columnWidths.name),
-			truncateTableValue(string(s.Platform), m.columnWidths.platform),
-			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
-			truncateTableValue(s.Description, m.columnWidths.desc),
 		}
+		if m.hOffset == 0 {
+			row = append(row, truncateTableValue(string(s.Platform), m.columnWidths.platform))
+		}
+		if m.hOffset <= 1 {
+			row = append(row, truncateTableValue(s.DisplayScope(), m.columnWidths.scope))
+		}
+		row = append(row, truncateTableValue(s.Description, m.columnWidths.desc))
+		rows[i] = row
 	}
 	return rows
 }
 
+func (m *DeleteListModel) shiftHOffset(delta int) {
+	newOffset := m.hOffset + delta
+	if newOffset < 0 || newOffset > deleteListMaxHOffset {
+		return
+	}
+	m.hOffset = newOffset
+	m.updateColumns(m.width)
+	m.table.SetRows(m.skillsToRows(m.filtered))
+}
+
 func (m *DeleteListModel) updateColumns(totalWidth int) {
-	columns, widths := deleteListColumns(totalWidth, m.skills)
+	columns, widths := deleteListColumns(totalWidth, m.skills, m.hOffset)
 	m.columnWidths = widths
 	m.table.SetColumns(columns)
 }
@@ -306,7 +359,7 @@ func (m DeleteListModel) detailPanelWidth() int {
 		return m.width
 	}
 	return deleteListCheckboxWidth + m.columnWidths.name + m.columnWidths.platform + m.columnWidths.scope + m.columnWidths.desc +
-		(deleteListColumnPadding * deleteListColumnCount)
+		(deleteListColumnPadding * 5)
 }
 
 func (m DeleteListModel) renderDetailPanel() string {
@@ -459,6 +512,14 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirmMode = true
 			}
 			return m, nil
+
+		case key.Matches(msg, m.keys.ScrollLeft):
+			m.shiftHOffset(-1)
+			return m, nil
+
+		case key.Matches(msg, m.keys.ScrollRight):
+			m.shiftHOffset(1)
+			return m, nil
 		}
 	}
 
@@ -588,6 +649,9 @@ func (m DeleteListModel) View() string {
 	if m.filter != "" {
 		status = fmt.Sprintf("%d marked for deletion, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
 	}
+	if m.hOffset > 0 || m.hOffset < deleteListMaxHOffset {
+		status += "  " + hScrollIndicator(m.hOffset, deleteListMaxHOffset)
+	}
 	b.WriteString(deleteListStyles.Status.Render(status))
 	b.WriteString("\n")
 
@@ -704,6 +768,7 @@ func (m DeleteListModel) buildDetailContent(width int) string {
 func (m DeleteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"←/→ scroll cols",
 		"space mark/unmark delete",
 		"a toggle all",
 		"enter details",
@@ -721,6 +786,7 @@ func (m DeleteListModel) renderFullHelp() string {
   ↓/j      Move down
   g/Home   Go to top
   G/End    Go to bottom
+  ←/→      Scroll columns left/right
 
 Selection:
   Space/Tab  Toggle current skill for deletion

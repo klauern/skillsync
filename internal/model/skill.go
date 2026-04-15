@@ -2,6 +2,20 @@ package model
 
 import "time"
 
+const (
+	// MetadataKeyCopilotArtifact stores the original GitHub Copilot artifact surface.
+	MetadataKeyCopilotArtifact = "copilot_artifact"
+
+	// CopilotArtifactRepositoryInstructions identifies .github/copilot-instructions.md.
+	CopilotArtifactRepositoryInstructions = "repository_instructions"
+	// CopilotArtifactInstructions identifies .github/instructions/*.instructions.md files.
+	CopilotArtifactInstructions = "instructions"
+	// CopilotArtifactPrompt identifies .github/prompts/*.prompt.md files.
+	CopilotArtifactPrompt = "prompt"
+	// CopilotArtifactAgent identifies .github/agents/*.agent.md files.
+	CopilotArtifactAgent = "agent"
+)
+
 // PluginInfo contains metadata about a plugin-installed skill.
 // This tracks whether a skill was installed via Claude Code's plugin system
 // and from which marketplace/repository it originated.

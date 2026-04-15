@@ -4,6 +4,9 @@ This note summarizes what is genuinely portable between Claude Code, Codex CLI,
 and Pi.dev, what is only partially portable, and where this repository still
 leaves gaps.
 
+Pi.dev is included here as a reference portability surface, not as a statement
+of implemented runtime support in SkillSync today.
+
 It is intentionally narrower than `docs/platforms/cross-platform-mapping.md`.
 The goal here is not to restate every file location, but to answer a practical
 question: **which artifact types can move across these CLIs without changing
@@ -20,6 +23,9 @@ with this assessment.
 - SkillSync currently has first-class parser/runtime support for Claude Code,
   Cursor, and Codex. Copilot, Gemini CLI, and Pi.dev are documented here as
   adjacent portability references.
+- Claude Code, Cursor, and Codex are the **implemented sync surfaces** in the
+  current CLI. Copilot, Gemini CLI, and Pi.dev are **reference-only** mapping
+  surfaces in the current docs.
 - `SKILL.md` skills are the most portable artifact type. The Agent Skills
   Standard is shared, and all three products use `name`, `description`,
   markdown body content, and supporting directories in broadly similar ways.
@@ -49,6 +55,41 @@ with this assessment.
   context does not transfer.
 - The structured portability snapshot records these claims explicitly so they
   can be checked mechanically later instead of being inferred only from prose.
+
+## Portability Classes Used In This Repo
+
+SkillSync uses three portability classes in the docs and transport model:
+
+| Class | Meaning | Typical examples |
+|---|---|---|
+| Portable | The destination can usually keep both the content shape and the core author intent with limited adaptation. | `SKILL.md` skill body, shared skill directories |
+| Partially portable | The content can move, but runtime behavior, invocation, precedence, or interpolation semantics change. | Commands/prompts, `AGENTS.md`/`CLAUDE.md`, tool restrictions |
+| Non-portable | The source behavior depends on a platform-specific runtime surface that has no direct equivalent. | Claude subagents, plugin/package provenance, Pi.dev system-prompt replacement semantics |
+
+The rest of this note uses those labels deliberately:
+
+- **Portable** means "safe to move as a first-pass artifact."
+- **Partially portable** means "safe to transport, unsafe to claim runtime
+  parity."
+- **Non-portable** means "preserve as metadata, flatten into another artifact,
+  or re-author manually."
+
+## Current Repo Support Status
+
+This repository documents six platforms, but it does not implement them all at
+the same level.
+
+| Platform | Repo status | Current emphasis |
+|---|---|---|
+| Claude Code | Implemented | Parser + sync + portability baseline |
+| Cursor | Implemented | Parser + sync + Agent Skills/rules mapping |
+| Codex CLI | Implemented | Parser + sync for skills/instructions; deprecated prompts are compatibility metadata only |
+| Copilot | Reference-only | Mapping target and portability comparison |
+| Gemini CLI | Reference-only | Mapping target and portability comparison |
+| Pi.dev | Reference-only | Mapping target and portability comparison; first-pass sync boundary only |
+
+The machine-readable source of truth for this status table is
+`docs/platforms/portability-snapshot.yaml`.
 
 ## Artifact Portability Matrix
 
@@ -249,7 +290,7 @@ flattened into:
 - a command/prompt,
 - or plain instruction text.
 
-### 2. Claude plugin provenance and Pi.dev package provenance
+### 2. Claude plugin provenance, Gemini extension provenance, and Pi.dev package provenance
 
 Claude plugin skills are special because the skill content is installed from a
 plugin cache and carries provenance metadata.
@@ -261,6 +302,22 @@ Pi.dev packages, extensions, and themes have the same problem in reverse: they
 may bundle useful prompts or instructions, but the package/runtime layer itself
 is not a first-pass sync target in this repo.
 
+Gemini extensions sit in the middle. They can bundle portable content
+(`skills/`, `commands/`, `GEMINI.md`-style context), but the extension runtime
+surface is still not first-pass portable:
+
+- `mcpServers`
+- `hooks/hooks.json`
+- `agents/`
+- `themes`
+- extension install/update state and package provenance
+
+SkillSync should extract the portable content subset and keep the rest as
+metadata only where safe, not as equivalent runtime behavior.
+
+Those Gemini extension-only runtime surfaces are explicitly non-portable in the
+first-pass sync model.
+
 ### 3. Runtime-only behavior
 
 These features are not safely portable:
@@ -269,6 +326,7 @@ These features are not safely portable:
 - slash-menu behavior
 - session-specific tool permission policy
 - plugin-specific installation precedence
+- Gemini extension/package/theme installation precedence
 - package/extension/theme installation precedence
 - subagent delegation semantics
 - Claude skill visibility and invocation gating
@@ -293,14 +351,18 @@ product surfaces:
 3. `docs/platforms/claude.md` is strong on Claude-specific behavior, but the
    portability boundaries would be clearer if it called out which fields are
    inherently non-portable to Codex CLI and Pi.dev.
-4. `docs/platforms/pidev.md` should keep the first-pass scope explicit:
+4. `docs/platforms/gemini.md` should keep the first-pass scope explicit:
+   skills, commands, and context are the syncable subset, while extension
+   runtime surfaces such as `mcpServers`, hooks, subagents, themes, and
+   package/install provenance remain out of scope.
+5. `docs/platforms/pidev.md` should keep the first-pass scope explicit:
    skills, prompt templates, `AGENTS.md`, and `SYSTEM.md` layers are
    documented, while packages, extensions, themes, and similar runtime features
    remain out of scope.
-5. `docs/architecture.md` correctly introduces `Type=prompt` and `Trigger`, but
+6. `docs/architecture.md` correctly introduces `Type=prompt` and `Trigger`, but
    the doc should emphasize that these are transport concepts, not evidence of
    semantic equivalence across CLIs.
-6. `internal/sync/transformer.go` currently maps prompt artifacts into Codex
+7. `internal/sync/transformer.go` currently maps prompt artifacts into Codex
    `SKILL.md` output. That is useful, but it is a lossy mapping and should be
    documented that way in the user-facing docs.
 
@@ -316,9 +378,10 @@ artifact layers like this:
 - **Commands/prompts**: portable only as content, not as behavior. Pi.dev
   prompt templates fit here too.
 - **Agents/subagents**: not directly portable; flatten or redesign them.
-- **Packages/extensions/themes**: out of scope for first-pass sync. Re-author
-  useful content into skills, prompts, or instructions instead of syncing the
-  runtime packaging layer.
+- **Packages/extensions/themes**: out of scope for first-pass sync. Gemini
+  extensions may contribute portable content, but their runtime packaging layer
+  is still not the sync target. Re-author useful content into skills, prompts,
+  or instructions instead of syncing the runtime packaging layer.
 - **Structured snapshot**: `docs/platforms/schema.yaml` and
   `docs/platforms/portability-snapshot.yaml` should remain synchronized with the
   narrative docs so the portability story can be checked mechanically later.

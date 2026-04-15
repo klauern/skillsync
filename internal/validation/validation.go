@@ -310,11 +310,27 @@ func validateFileExtension(skill model.Skill) error {
 				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
+	case model.Copilot:
+		// Copilot artifacts are markdown files with .prompt.md / .agent.md suffixes.
+		if ext != ".md" {
+			return &Error{
+				Field:   fmt.Sprintf("skill %q", skill.Name),
+				Message: fmt.Sprintf("invalid file extension %q for Copilot artifact (expected .md)", ext),
+			}
+		}
 	case model.Gemini:
 		if ext != ".md" {
 			return &Error{
 				Field:   fmt.Sprintf("skill %q", skill.Name),
 				Message: fmt.Sprintf("invalid file extension %q for Gemini skill (expected .md)", ext),
+			}
+		}
+	case model.PiDev:
+		// Pi.dev skills use the shared SKILL.md format.
+		if ext != ".md" {
+			return &Error{
+				Field:   fmt.Sprintf("skill %q", skill.Name),
+				Message: fmt.Sprintf("invalid file extension %q for Pi.dev skill (expected .md)", ext),
 			}
 		}
 	}
@@ -499,6 +515,8 @@ func ValidatePath(path string, _ model.Platform) error {
 //   - SKILLSYNC_CURSOR_PATH for Cursor
 //   - SKILLSYNC_CODEX_PATH for Codex
 //   - SKILLSYNC_GEMINI_PATH for Gemini CLI
+//   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
+//   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
 	case model.ClaudeCode:
@@ -517,12 +535,22 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		}
 		// Default to user-level Codex skills directory
 		return util.CodexSkillsPath(), nil
+	case model.Copilot:
+		if envPath := os.Getenv("SKILLSYNC_COPILOT_PATH"); envPath != "" {
+			return envPath, nil
+		}
+		return util.CopilotSkillsPath(), nil
 	case model.Gemini:
 		if envPath := os.Getenv("SKILLSYNC_GEMINI_PATH"); envPath != "" {
 			return envPath, nil
 		}
 		return util.GeminiPath(), nil
 	case model.PiDev:
+		for _, key := range []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"} {
+			if envPath := os.Getenv(key); envPath != "" {
+				return envPath, nil
+			}
+		}
 		return util.PiDevSkillsPath(), nil
 	default:
 		return "", fmt.Errorf("unsupported platform: %s", platform)

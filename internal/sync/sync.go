@@ -13,7 +13,9 @@ import (
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -218,6 +220,10 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 		p = cursor.New(basePath)
 	case model.Codex:
 		p = codex.New(basePath)
+	case model.Copilot:
+		p = copilot.New(basePath)
+	case model.Gemini:
+		p = gemini.New(basePath)
 	case model.PiDev:
 		p = pidev.New(basePath)
 	default:
@@ -540,19 +546,36 @@ func (s *Synchronizer) processSkill(
 }
 
 func mappingWarning(skill model.Skill, target model.Platform) string {
-	if skill.Type != model.SkillTypePrompt {
-		return ""
-	}
-
 	warnings := []string{}
-	if target == model.Codex {
+	if skill.Type == model.SkillTypePrompt && target == model.Codex {
 		warnings = append(warnings, "lossy mapping: prompt trigger semantics are not guaranteed on Codex")
 	}
-	if target == model.Cursor && skill.Trigger != "" {
+	if skill.Type == model.SkillTypePrompt && target == model.Cursor && skill.Trigger != "" {
 		warnings = append(warnings, "lossy mapping: prompt trigger may require Cursor mode configuration")
 	}
 	if _, ok := skill.Metadata["argument-hint"]; ok && target != model.ClaudeCode {
 		warnings = append(warnings, "lossy mapping: argument-hint preserved as metadata only")
+	}
+	if _, ok := skill.Metadata["applyTo"]; ok && target != model.Cursor {
+		warnings = append(warnings, "lossy mapping: applyTo preserved as metadata only")
+	}
+	if _, ok := skill.Metadata["model"]; ok && target != model.ClaudeCode {
+		warnings = append(warnings, "lossy mapping: model preserved as metadata only")
+	}
+	if len(skill.Tools) > 0 && target == model.PiDev {
+		warnings = append(warnings, "lossy mapping: allowed-tools preserved as metadata only")
+	}
+	if skill.DisableModelInvocation && target != model.ClaudeCode {
+		warnings = append(warnings, "lossy mapping: disable-model-invocation preserved as metadata only")
+	}
+	if _, ok := skill.Metadata["handoffs"]; ok {
+		warnings = append(warnings, "lossy mapping: handoffs dropped without target equivalent")
+	}
+	if _, ok := skill.Metadata["target"]; ok {
+		warnings = append(warnings, "lossy mapping: target dropped without target equivalent")
+	}
+	if _, ok := skill.Metadata["mcp-servers"]; ok {
+		warnings = append(warnings, "lossy mapping: mcp-servers dropped without target equivalent")
 	}
 
 	return strings.Join(warnings, "; ")

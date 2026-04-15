@@ -301,6 +301,25 @@ Extension directories may also contain:
 | `hooks/hooks.json` | Lifecycle hooks |
 | `agents/` | Subagent definition `.md` files (preview feature) |
 
+#### First-Pass Sync Boundary
+
+Keep Gemini extension handling conservative in SkillSync:
+
+| Surface | First-pass handling |
+|---|---|
+| `skills/` | Syncable as skills. |
+| `commands/` | Syncable as prompt/command transport content. |
+| `GEMINI.md` / extension context files | Syncable as instruction/context content. |
+| `gemini-extension.json` metadata (`name`, `version`, `description`) | Preserve as metadata only where safe. |
+| `excludeTools`, `settings` | Preserve as metadata only; do not treat as equivalent runtime enforcement. |
+| `mcpServers`, `hooks/hooks.json`, `agents/`, `themes`, install/update state | Not first-pass sync targets. Re-author manually if needed. |
+
+The extension/package layer is therefore a content source, not a fully portable
+runtime surface. Skills, commands, and context are the first-pass syncable
+subset. SkillSync's first pass should extract that portable content and keep
+extension-specific runtime behavior out of the sync model unless it can be
+represented safely as metadata.
+
 #### Variable Substitution
 
 Supported in `gemini-extension.json` and `hooks/hooks.json`:
@@ -524,8 +543,11 @@ Extension settings are configured separately via `gemini extensions config`.
   `@{path}`) need representation in the unified model. `{{args}}` maps roughly
   to Claude's `$ARGUMENTS`; `!{shell}` and `@{path}` have no direct Claude
   equivalent.
-- **Extensions bundle multiple artifact types**: The parser should extract
-  skills, commands, and context from extension directories.
+- **Extensions bundle multiple artifact types**: The parser should extract only
+  the first-pass syncable subset from extension directories: skills, commands,
+  and context. Manifest/runtime surfaces such as `mcpServers`, hooks,
+  subagents, themes, and installation state should remain metadata-only or out
+  of scope.
 
 **Suggested test fixtures** (`testdata/skills/gemini/`):
 
@@ -565,6 +587,10 @@ Extension settings are configured separately via `gemini extensions config`.
 - **Hooks in extensions vs settings.json**: Hooks can be defined in both
   `settings.json` and extension `hooks/hooks.json`, but precedence and merge
   behavior between these sources is not formally documented.
+- **First-pass extension boundary needs to stay explicit**: Skills, commands,
+  and context are the syncable subset. `mcpServers`, hooks, subagents, themes,
+  and package/install provenance are runtime surfaces, not first-pass sync
+  targets.
 
 ## Sources
 
