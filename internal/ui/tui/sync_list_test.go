@@ -540,6 +540,40 @@ func TestSyncListModel_ViewIncludesDetailPanel(t *testing.T) {
 	}
 }
 
+func TestSyncListModel_HorizontalScrollChangesVisibleColumns(t *testing.T) {
+	skills := []model.Skill{
+		{
+			Name:        "alpha",
+			Description: "description",
+			Platform:    model.ClaudeCode,
+			Scope:       model.ScopeUser,
+		},
+	}
+
+	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
+	newModel, _ := m.Update(tea.WindowSizeMsg{Width: 35, Height: 20})
+	sm := newModel.(SyncListModel)
+
+	initialColumns := sm.table.Columns()
+	if len(initialColumns) >= len(sm.hScroll.columns) {
+		t.Fatalf("expected a narrowed visible column set, got %d of %d", len(initialColumns), len(sm.hScroll.columns))
+	}
+	if initialColumns[0].Title != " " {
+		t.Fatalf("expected checkbox column to be visible first, got %q", initialColumns[0].Title)
+	}
+
+	newModel, _ = sm.Update(tea.KeyMsg{Type: tea.KeyRight})
+	sm = newModel.(SyncListModel)
+
+	scrolledColumns := sm.table.Columns()
+	if scrolledColumns[0].Title == initialColumns[0].Title {
+		t.Fatalf("expected horizontal scroll to change the leading visible column, still got %q", scrolledColumns[0].Title)
+	}
+	if !strings.Contains(sm.View(), "col 1/2") {
+		t.Fatalf("expected status to report horizontal column window, got %q", sm.View())
+	}
+}
+
 func TestRunSyncList_EmptySkills(t *testing.T) {
 	result, err := RunSyncList([]model.Skill{}, model.ClaudeCode, model.Cursor, nil)
 	if err != nil {

@@ -96,6 +96,7 @@ func defaultDiscoverListKeyMap() discoverListKeyMap {
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
 	table        table.Model
+	hScroll      horizontalTableState
 	skills       []model.Skill
 	filtered     []model.Skill
 	keys         discoverListKeyMap
@@ -173,6 +174,7 @@ func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 		keys:         defaultDiscoverListKeyMap(),
 		columnWidths: columnWidths,
 		phase:        discoverListPhaseList,
+		hScroll:      newHorizontalTableState(columns),
 	}
 
 	rows := m.skillsToRows(skills)
@@ -261,7 +263,12 @@ func discoverListColumns(totalWidth int, skills []model.Skill) ([]table.Column, 
 func (m *DiscoverListModel) updateColumns(totalWidth int) {
 	columns, widths := discoverListColumns(totalWidth, m.skills)
 	m.columnWidths = widths
-	m.table.SetColumns(columns)
+	m.hScroll.SetColumns(columns)
+	m.refreshTable()
+}
+
+func (m *DiscoverListModel) refreshTable() {
+	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
 }
 
 func (m DiscoverListModel) detailPanelWidth() int {
@@ -317,7 +324,6 @@ func (m DiscoverListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newHeight := max(msg.Height-10-discoverListDetailHeight-discoverListDetailGap, 5) // Reserve space for title, help, status, detail
 		m.table.SetHeight(newHeight)
 		m.updateColumns(msg.Width)
-		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle filtering mode
@@ -348,6 +354,18 @@ func (m DiscoverListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
+		case msg.String() == "left" || msg.String() == "h":
+			if m.hScroll.MoveLeft() {
+				m.refreshTable()
+			}
+			return m, nil
+
+		case msg.String() == "right" || msg.String() == "l":
+			if m.hScroll.MoveRight(m.width) {
+				m.refreshTable()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
@@ -450,7 +468,7 @@ func (m *DiscoverListModel) applyFilter() {
 		}
 		m.filtered = filtered
 	}
-	m.table.SetRows(m.skillsToRows(m.filtered))
+	m.refreshTable()
 }
 
 func (m DiscoverListModel) getSelectedSkill() model.Skill {
@@ -500,6 +518,9 @@ func (m DiscoverListModel) View() string {
 	status := fmt.Sprintf("%d skill(s)", len(m.filtered))
 	if m.filter != "" {
 		status = fmt.Sprintf("%d of %d skill(s) (filtered)", len(m.filtered), len(m.skills))
+	}
+	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
+		status += " • " + scrollStatus
 	}
 	b.WriteString(discoverListStyles.Status.Render(status))
 	b.WriteString("\n")
@@ -614,6 +635,7 @@ func (m DiscoverListModel) buildDetailContent(width int) string {
 func (m DiscoverListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"←/→ columns",
 		"enter details",
 		"o open",
 		"c copy path",
@@ -628,6 +650,8 @@ func (m DiscoverListModel) renderFullHelp() string {
 	help := `Navigation:
   ↑/k      Move up
   ↓/j      Move down
+  ←/h      Show previous columns
+  →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
 
