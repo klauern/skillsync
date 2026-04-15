@@ -36,12 +36,12 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 			},
 			want: 2,
 		},
-		"copilot": {
+		"copilot repo root": {
 			parse: func() (int, error) {
 				skills, err := copilot.New(filepath.Join(fixtureRoot, "copilot")).Parse()
 				return len(skills), err
 			},
-			want: 3,
+			want: 5,
 		},
 		"codex": {
 			parse: func() (int, error) {
@@ -49,6 +49,13 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 				return len(skills), err
 			},
 			want: 6,
+		},
+		"copilot github root": {
+			parse: func() (int, error) {
+				skills, err := copilot.New(filepath.Join(fixtureRoot, "copilot", ".github")).Parse()
+				return len(skills), err
+			},
+			want: 5,
 		},
 		"pidev": {
 			parse: func() (int, error) {
@@ -215,7 +222,7 @@ func copyFixtureTree(t *testing.T, srcRoot, dstRoot string) {
 			return os.MkdirAll(target, 0o755)
 		}
 
-		// #nosec G304 -- fixture paths are derived from repo-controlled testdata.
+		// #nosec G304, G122 -- fixture paths are derived from repo-controlled testdata.
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err

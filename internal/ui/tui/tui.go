@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -215,6 +216,66 @@ func wrapLabeledText(label, value string, width int) string {
 	}
 
 	return b.String()
+}
+
+func truncateTableValue(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+	return runewidth.Truncate(value, width, "...")
+}
+
+func truncateTableValueFromStart(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+
+	runes := []rune(value)
+	target := width - 3
+	used := 0
+	start := len(runes)
+	for start > 0 {
+		runeWidth := runewidth.RuneWidth(runes[start-1])
+		if used+runeWidth > target && used > 0 {
+			break
+		}
+		used += runeWidth
+		start--
+		if used == target {
+			break
+		}
+	}
+
+	return "..." + string(runes[start:])
+}
+
+// hScrollIndicator returns a compact scroll position hint like "← col 2/4 →" for use in
+// status bars. Arrows are omitted when the user is already at the respective edge.
+func hScrollIndicator(offset, maxOffset int) string {
+	if maxOffset <= 0 {
+		return ""
+	}
+	left := "  "
+	right := "  "
+	if offset > 0 {
+		left = "← "
+	}
+	if offset < maxOffset {
+		right = " →"
+	}
+	return fmt.Sprintf("%scol %d/%d%s", left, offset+1, maxOffset+1, right)
 }
 
 func padLines(lines []string, count int) []string {

@@ -188,27 +188,11 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 func (m ScopeListModel) skillsToRows(skills []model.Skill) []table.Row {
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		platform := string(s.Platform)
-		if len(platform) > 12 {
-			platform = platform[:9] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 40 {
-			scope = scope[:37] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 35 {
-			desc = desc[:32] + "..."
-		}
 		rows[i] = table.Row{
-			name,
-			platform,
-			scope,
-			desc,
+			truncateTableValue(s.Name, 25),
+			truncateTableValue(string(s.Platform), 12),
+			truncateTableValue(s.DisplayScope(), 40),
+			truncateTableValue(s.Description, 35),
 		}
 	}
 	return rows

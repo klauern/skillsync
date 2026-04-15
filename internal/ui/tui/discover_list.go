@@ -203,15 +203,11 @@ func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 func (m DiscoverListModel) skillsToRows(skills []model.Skill) []table.Row {
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
-		name := truncateDiscoverListValue(s.Name, m.columnWidths.name)
-		platform := truncateDiscoverListValue(string(s.Platform), m.columnWidths.platform)
-		scope := truncateDiscoverListValue(s.DisplayScope(), m.columnWidths.scope)
-		desc := truncateDiscoverListValue(s.Description, m.columnWidths.desc)
 		rows[i] = table.Row{
-			name,
-			platform,
-			scope,
-			desc,
+			truncateTableValue(s.Name, m.columnWidths.name),
+			truncateTableValue(string(s.Platform), m.columnWidths.platform),
+			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
+			truncateTableValue(s.Description, m.columnWidths.desc),
 		}
 	}
 	return rows
@@ -266,19 +262,6 @@ func (m *DiscoverListModel) updateColumns(totalWidth int) {
 	columns, widths := discoverListColumns(totalWidth, m.skills)
 	m.columnWidths = widths
 	m.table.SetColumns(columns)
-}
-
-func truncateDiscoverListValue(value string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if len(value) <= width {
-		return value
-	}
-	if width <= 3 {
-		return value[:width]
-	}
-	return value[:width-3] + "..."
 }
 
 func (m DiscoverListModel) detailPanelWidth() int {

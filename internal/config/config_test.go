@@ -504,6 +504,14 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	if cfg.Platforms.Codex.SkillsPaths[2] != "/etc/codex/skills" {
 		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
 	}
+
+	// Check Copilot defaults (repo root only)
+	if len(cfg.Platforms.Copilot.SkillsPaths) != 1 {
+		t.Errorf("expected 1 Copilot skills path, got %d", len(cfg.Platforms.Copilot.SkillsPaths))
+	}
+	if cfg.Platforms.Copilot.SkillsPaths[0] != ".github" {
+		t.Errorf("expected Copilot path to be '.github', got %q", cfg.Platforms.Copilot.SkillsPaths[0])
+	}
 }
 
 func TestDefaultCursorPathsIncludeCommands(t *testing.T) {

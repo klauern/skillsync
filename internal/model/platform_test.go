@@ -30,8 +30,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 4 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 4", len(platforms))
+	if len(platforms) != 5 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 5", len(platforms))
 	}
 
 	for _, p := range platforms {
