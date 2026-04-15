@@ -1,11 +1,11 @@
 ---
 description: Generate tests for the active file
-argument-hint: Describe the test scenarios
-agent: agent
-model: GPT-4o
 tools:
   - read
   - search
+agent: agent
+model: GPT-4o
+argument-hint: Describe the test scenarios
 ---
 
-Write comprehensive tests for the active file.
+Generate focused tests for the current file.

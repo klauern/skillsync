@@ -42,12 +42,8 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 		logging.Path(transformed.Path),
 	)
 
-	// Transform metadata before content so target-specific frontmatter sees the
-	// filtered/mapped metadata shape.
-	transformed.Metadata = t.transformMetadata(skill, targetPlatform)
-
 	// Transform content based on target platform requirements
-	content, err := t.transformContent(transformed, targetPlatform, transformed.Path)
+	content, err := t.transformContent(skill, targetPlatform, transformed.Path)
 	if err != nil {
 		logging.Warn("content transformation failed",
 			logging.Skill(skill.Name),
@@ -56,6 +52,9 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 		return model.Skill{}, fmt.Errorf("failed to transform content: %w", err)
 	}
 	transformed.Content = content
+
+	// Transform metadata for platform-specific fields
+	transformed.Metadata = t.transformMetadata(skill, targetPlatform)
 
 	logging.Debug("skill transformation completed",
 		logging.Skill(skill.Name),
@@ -84,6 +83,10 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 			}
 			return baseName
 		}
+	}
+
+	if target == model.Copilot {
+		return transformCopilotPath(skill)
 	}
 
 	if skill.Type == model.SkillTypePrompt {
@@ -195,38 +198,42 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if len(skill.Tools) > 0 {
 			fm["tools"] = skill.Tools
 		}
-		if skill.DisableModelInvocation {
-			fm["disable-model-invocation"] = true
-		}
 
 	case model.Cursor:
 		// Cursor has specific fields like globs and alwaysApply
 		if globs, ok := skill.Metadata["globs"]; ok {
 			fm["globs"] = globs
+		} else if applyTo, ok := skill.Metadata["applyTo"]; ok && applyTo != "" {
+			fm["globs"] = applyTo
 		}
 		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
 			fm["alwaysApply"] = alwaysApply
 		}
-		if skill.Type == model.SkillTypeSkill && len(skill.Tools) > 0 {
-			fm["tools"] = skill.Tools
-		}
-
-	case model.Codex:
+	case model.Copilot:
 		if len(skill.Tools) > 0 {
-			fm["allowed-tools"] = skill.Tools
+			fm["tools"] = skill.Tools
 		}
 	}
 
 	// Include other metadata that's platform-agnostic
 	for key, val := range skill.Metadata {
 		// Skip fields we've already handled
-		if key == "globs" || key == "alwaysApply" || key == "disable-model-invocation" || key == "allowed-tools" {
+		if key == "globs" || key == "alwaysApply" {
+			continue
+		}
+		if target == model.Copilot && key == model.MetadataKeyCopilotArtifact {
 			continue
 		}
 		// Include if not already set
 		if _, exists := fm[key]; !exists {
 			fm[key] = val
 		}
+	}
+
+	if target == model.Copilot && copilotArtifactType(skill) == model.CopilotArtifactRepositoryInstructions {
+		delete(fm, "name")
+		delete(fm, "type")
+		delete(fm, "trigger")
 	}
 
 	return fm
@@ -247,32 +254,46 @@ func isSystemPromptSkill(skill model.Skill) bool {
 	return skill.Metadata["type"] == "system-prompt"
 }
 
+func transformCopilotPath(skill model.Skill) string {
+	switch copilotArtifactType(skill) {
+	case model.CopilotArtifactRepositoryInstructions:
+		return "copilot-instructions.md"
+	case model.CopilotArtifactInstructions:
+		return filepath.Join("instructions", skill.Name+".instructions.md")
+	case model.CopilotArtifactPrompt:
+		return filepath.Join("prompts", skill.Name+".prompt.md")
+	default:
+		return filepath.Join("agents", skill.Name+".agent.md")
+	}
+}
+
+func copilotArtifactType(skill model.Skill) string {
+	if artifact := skill.Metadata[model.MetadataKeyCopilotArtifact]; artifact != "" {
+		return artifact
+	}
+	if skill.Type == model.SkillTypePrompt {
+		return model.CopilotArtifactPrompt
+	}
+
+	base := strings.ToLower(filepath.Base(skill.Path))
+	switch {
+	case base == "copilot-instructions.md", base == "agents.md", base == "claude.md", base == "gemini.md":
+		return model.CopilotArtifactRepositoryInstructions
+	case strings.HasSuffix(base, ".instructions.md"):
+		return model.CopilotArtifactInstructions
+	case strings.HasSuffix(base, ".prompt.md"):
+		return model.CopilotArtifactPrompt
+	default:
+		return model.CopilotArtifactAgent
+	}
+}
+
 // transformMetadata transforms metadata for the target platform.
 func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform) map[string]string {
 	metadata := make(map[string]string)
 
 	// Copy existing metadata
 	maps.Copy(metadata, skill.Metadata)
-
-	if target == model.Cursor {
-		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
-			metadata["globs"] = applyTo
-			delete(metadata, "applyTo")
-		}
-	}
-
-	if target != model.ClaudeCode && skill.DisableModelInvocation {
-		metadata["disable-model-invocation"] = "true"
-	}
-
-	if target == model.PiDev && len(skill.Tools) > 0 {
-		metadata["allowed-tools"] = strings.Join(skill.Tools, ", ")
-	}
-
-	// Copilot-only agent orchestration fields do not have portable targets.
-	delete(metadata, "handoffs")
-	delete(metadata, "target")
-	delete(metadata, "mcp-servers")
 
 	// Add platform-specific transformations
 	switch target {
@@ -282,11 +303,17 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 		delete(metadata, "alwaysApply")
 
 	case model.Cursor:
-		// Cursor metadata is typically preserved as-is
+		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
+			metadata["globs"] = applyTo
+			delete(metadata, "applyTo")
+		}
 
 	case model.Codex:
 		// Codex metadata handling - preserve source info
 		metadata["source_platform"] = string(skill.Platform)
+		delete(metadata, "handoffs")
+		delete(metadata, "target")
+		delete(metadata, "mcp-servers")
 	}
 
 	return metadata

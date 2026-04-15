@@ -507,6 +507,7 @@ func ValidatePath(path string, _ model.Platform) error {
 //   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
 //   - SKILLSYNC_CURSOR_PATH for Cursor
 //   - SKILLSYNC_CODEX_PATH for Codex
+//   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
 //   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
