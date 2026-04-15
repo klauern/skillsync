@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - name: Verify modules
+        run: go mod verify
+      - name: Install formatters
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          go install golang.org/x/tools/cmd/goimports@latest
+      - name: Check formatting (gofumpt)
+        run: |
+          files=$(git ls-files '*.go')
+          unformatted=$(printf '%s\n' "$files" | xargs -r gofumpt -l)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files not formatted with gofumpt:"
+            echo "$unformatted"
+            printf '%s\n' "$files" | xargs -r gofumpt -d
+            exit 1
+          fi
+      - name: Check formatting (goimports)
+        run: |
+          files=$(git ls-files '*.go')
+          unformatted=$(printf '%s\n' "$files" | xargs -r goimports -l -local github.com/klauern/skillsync)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files not formatted with goimports:"
+            echo "$unformatted"
+            printf '%s\n' "$files" | xargs -r goimports -d -local github.com/klauern/skillsync
+            exit 1
+          fi
+      - name: Run go vet
+        run: go vet ./...
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Display coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 14
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build all packages
+        run: go build ./...
+      - name: Build binary
+        run: go build -o /dev/null ./cmd/skillsync
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4

@@ -1,0 +1,7 @@
+---
+description: Package architecture, dependencies, and key interfaces
+---
+# Architecture
+
+Source of truth: [docs/architecture.md](mdc:docs/architecture.md).
+Update that doc when package dependencies, interfaces, or data flow changes.

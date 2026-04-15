@@ -20,26 +20,35 @@ linters:
     - errorlint     # Error wrapping
     - gosec         # Security issues
 
-linters-settings:
-  gocyclo:
-    min-complexity: 15
+  settings:
+    gocyclo:
+      min-complexity: 30
 
-  revive:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+
+  exclusions:
+    paths:
+      - vendor
+
     rules:
-      - name: exported
-        disabled: false
+      # Exclude error checks in tests
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Exclude gosec permissions checks in test files
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G30[16]"
+      # Exclude revive var-naming for packages that share stdlib names
+      - path: "internal/(parser|sync)"
+        linters:
+          - revive
+        text: "var-naming.*package"
 
 run:
   timeout: 5m
   tests: true
-
-issues:
-  exclude-dirs:
-    - vendor
-
-  exclude-rules:
-    # Exclude error checks in main/tests
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec

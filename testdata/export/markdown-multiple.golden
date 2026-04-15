@@ -1,0 +1,55 @@
+# Exported Skills
+
+Total: 3 skill(s)
+
+## first-skill
+
+*The first skill*
+
+| Property | Value |
+|----------|-------|
+| Platform | claude-code |
+| Modified | 2024-06-15 10:30:00 |
+
+### Content
+
+```
+First skill content.
+```
+
+
+---
+
+## second-skill
+
+*The second skill*
+
+| Property | Value |
+|----------|-------|
+| Platform | cursor |
+| Modified | 2024-06-15 11:30:00 |
+
+### Content
+
+```
+Second skill content.
+```
+
+
+---
+
+## third-skill
+
+*The third skill*
+
+| Property | Value |
+|----------|-------|
+| Platform | codex |
+| Modified | 2024-06-15 12:30:00 |
+
+### Content
+
+```
+Third skill content.
+```
+

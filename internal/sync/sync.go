@@ -1,16 +1,907 @@
 package sync
 
-import "github.com/klauern/skillsync/internal/model"
+import (
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
-// Options configures synchronization behavior
+	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/parser/claude"
+	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/pidev"
+	"github.com/klauern/skillsync/internal/validation"
+)
+
+// Options configures synchronization behavior.
 type Options struct {
-	// DryRun enables preview mode without making actual changes
+	// DryRun enables preview mode without making actual changes.
 	DryRun bool
+
+	// Strategy defines how to handle conflicts (default: overwrite).
+	Strategy Strategy
+
+	// SourcePath overrides the default source path.
+	SourcePath string
+
+	// TargetPath overrides the default target path.
+	TargetPath string
+
+	// TargetScope specifies the scope to write to (repo or user).
+	// Defaults to user scope if not specified.
+	TargetScope model.SkillScope
+
+	// SkipValidation skips pre-sync validation.
+	SkipValidation bool
+
+	// Verbose enables detailed output.
+	Verbose bool
+
+	// DeleteMode enables deletion sync: deletes skills from target that match source.
+	// Instead of copying skills TO target, removes skills FROM target that exist in source.
+	DeleteMode bool
 }
 
-// Syncer defines the interface for synchronization strategies
+// DefaultOptions returns the default sync options.
+func DefaultOptions() Options {
+	return Options{
+		DryRun:   false,
+		Strategy: StrategyOverwrite,
+	}
+}
+
+// Syncer defines the interface for synchronization strategies.
 type Syncer interface {
 	// Sync performs synchronization between platforms.
 	// When opts.DryRun is true, returns a preview of changes without modifying files.
-	Sync(source, target model.Platform, opts Options) error
+	Sync(source, target model.Platform, opts Options) (*Result, error)
+}
+
+// Synchronizer implements the Syncer interface.
+type Synchronizer struct {
+	transformer      *Transformer
+	conflictDetector *ConflictDetector
+	merger           *Merger
+}
+
+// New creates a new Synchronizer.
+func New() *Synchronizer {
+	return &Synchronizer{
+		transformer:      NewTransformer(),
+		conflictDetector: NewConflictDetector(),
+		merger:           NewMerger(),
+	}
+}
+
+// Sync performs synchronization from source to target platform.
+func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Result, error) {
+	logging.Debug("starting sync operation",
+		logging.Platform(string(source)),
+		logging.Operation("sync"),
+		slog.String("target", string(target)),
+		slog.String(logging.KeyStrategy, string(opts.Strategy)),
+		slog.Bool("dry_run", opts.DryRun),
+	)
+
+	result := &Result{
+		Source:   source,
+		Target:   target,
+		Strategy: opts.Strategy,
+		DryRun:   opts.DryRun,
+		Skills:   make([]SkillResult, 0),
+	}
+
+	// Set default strategy if not specified
+	if result.Strategy == "" {
+		result.Strategy = StrategyOverwrite
+	}
+
+	// Parse source skills
+	sourceSkills, err := s.parseSkills(source, opts.SourcePath)
+	if err != nil {
+		logging.Error("failed to parse source skills",
+			logging.Platform(string(source)),
+			logging.Operation("sync"),
+			logging.Err(err),
+		)
+		return result, fmt.Errorf("failed to parse source skills: %w", err)
+	}
+
+	logging.Debug("parsed source skills",
+		logging.Platform(string(source)),
+		logging.Count(len(sourceSkills)),
+	)
+
+	if len(sourceSkills) == 0 {
+		logging.Debug("no skills to sync",
+			logging.Platform(string(source)),
+		)
+		return result, nil // Nothing to sync
+	}
+
+	// Skip nested skills when a parent directory/symlink skill is also present.
+	// The parent copy already includes nested content, so syncing both creates
+	// duplicate top-level artifacts.
+	filteredSourceSkills, nestedSkipped := filterNestedDirectorySkills(sourceSkills)
+	if len(nestedSkipped) > 0 {
+		result.Skills = append(result.Skills, nestedSkipped...)
+	}
+	sourceSkills = filteredSourceSkills
+
+	if len(sourceSkills) == 0 {
+		logging.Debug("all source skills were skipped as nested duplicates")
+		return result, nil
+	}
+
+	// Get target path
+	targetPath := opts.TargetPath
+	if targetPath == "" {
+		targetPath, err = validation.GetPlatformPath(target)
+		if err != nil {
+			return result, fmt.Errorf("failed to get target path: %w", err)
+		}
+	}
+
+	// Parse existing target skills for conflict detection
+	targetSkills, err := s.parseSkills(target, opts.TargetPath)
+	if err != nil {
+		logging.Debug("target skills not found, starting fresh",
+			logging.Platform(string(target)),
+			logging.Err(err),
+		)
+		// Target may not exist yet, which is okay
+		targetSkills = []model.Skill{}
+	} else {
+		logging.Debug("parsed target skills",
+			logging.Platform(string(target)),
+			logging.Count(len(targetSkills)),
+		)
+	}
+
+	// Build a map of existing target skills by name
+	targetSkillMap := make(map[string]model.Skill)
+	for _, skill := range targetSkills {
+		targetSkillMap[skill.Name] = skill
+	}
+
+	// Ensure target directory exists (unless dry run)
+	if !opts.DryRun {
+		if err := os.MkdirAll(targetPath, 0o750); err != nil {
+			logging.Error("failed to create target directory",
+				logging.Path(targetPath),
+				logging.Err(err),
+			)
+			return result, fmt.Errorf("failed to create target directory: %w", err)
+		}
+		logging.Debug("ensured target directory exists",
+			logging.Path(targetPath),
+		)
+	}
+
+	// Process each source skill
+	for _, sourceSkill := range sourceSkills {
+		skillResult := s.processSkill(sourceSkill, target, targetPath, targetSkillMap, opts)
+		result.Skills = append(result.Skills, skillResult)
+	}
+
+	logging.Debug("sync operation completed",
+		logging.Platform(string(source)),
+		slog.String("target", string(target)),
+		logging.Count(len(result.Skills)),
+	)
+
+	return result, nil
+}
+
+// parseSkills parses skills from the given platform.
+func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]model.Skill, error) {
+	var p parser.Parser
+
+	// If basePath is empty, get the default path which respects env var overrides
+	if basePath == "" {
+		defaultPath, err := validation.GetPlatformPath(platform)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get platform path: %w", err)
+		}
+		basePath = defaultPath
+	}
+
+	switch platform {
+	case model.ClaudeCode:
+		p = claude.New(basePath)
+	case model.Cursor:
+		p = cursor.New(basePath)
+	case model.Codex:
+		p = codex.New(basePath)
+	case model.PiDev:
+		p = pidev.New(basePath)
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	return p.Parse()
+}
+
+// filterNestedDirectorySkills removes nested directory/symlink skills that would
+// already be copied as part of a parent directory/symlink skill.
+func filterNestedDirectorySkills(skills []model.Skill) ([]model.Skill, []SkillResult) {
+	if len(skills) < 2 {
+		return skills, nil
+	}
+
+	type rootInfo struct {
+		skill      model.Skill
+		sourceType SourceType
+		rootPath   string
+	}
+
+	roots := make([]rootInfo, 0, len(skills))
+	for _, skill := range skills {
+		sourceType, rootPath := detectSourceType(skill.Path)
+		roots = append(roots, rootInfo{
+			skill:      skill,
+			sourceType: sourceType,
+			rootPath:   filepath.Clean(rootPath),
+		})
+	}
+
+	// Build skip map by index, preferring the deepest matching parent path.
+	skipParent := make(map[int]string)
+	for childIdx := range roots {
+		child := roots[childIdx]
+		bestParentDepth := -1
+		bestParentName := ""
+
+		for parentIdx := range roots {
+			if parentIdx == childIdx {
+				continue
+			}
+
+			parent := roots[parentIdx]
+			if parent.sourceType != SourceTypeDirectory && parent.sourceType != SourceTypeSymlink {
+				continue
+			}
+
+			if !isNestedPath(child.rootPath, parent.rootPath) {
+				continue
+			}
+
+			depth := pathDepth(parent.rootPath)
+			if depth > bestParentDepth {
+				bestParentDepth = depth
+				bestParentName = parent.skill.Name
+			}
+		}
+
+		if bestParentName != "" {
+			skipParent[childIdx] = bestParentName
+		}
+	}
+
+	if len(skipParent) == 0 {
+		return skills, nil
+	}
+
+	filtered := make([]model.Skill, 0, len(skills)-len(skipParent))
+	skipped := make([]SkillResult, 0, len(skipParent))
+	for idx, info := range roots {
+		parentName, shouldSkip := skipParent[idx]
+		if !shouldSkip {
+			filtered = append(filtered, info.skill)
+			continue
+		}
+
+		msg := fmt.Sprintf("nested skill already included via parent directory copy: %s", parentName)
+		skipped = append(skipped, SkillResult{
+			Skill:   info.skill,
+			Action:  ActionSkipped,
+			Message: msg,
+		})
+		logging.Debug("skipping nested skill to avoid duplicate copy",
+			logging.Skill(info.skill.Name),
+			slog.String("parent_skill", parentName),
+			logging.Path(info.rootPath),
+		)
+	}
+
+	return filtered, skipped
+}
+
+func isNestedPath(path, parent string) bool {
+	if path == parent {
+		return false
+	}
+
+	rel, err := filepath.Rel(parent, path)
+	if err != nil {
+		return false
+	}
+	if rel == "." || rel == ".." {
+		return false
+	}
+
+	parentPrefix := ".." + string(os.PathSeparator)
+	return !strings.HasPrefix(rel, parentPrefix)
+}
+
+func pathDepth(path string) int {
+	cleaned := filepath.Clean(path)
+	if cleaned == string(os.PathSeparator) || cleaned == "." {
+		return 0
+	}
+	return strings.Count(cleaned, string(os.PathSeparator))
+}
+
+// processSkill handles syncing a single skill.
+// It preserves the source structure: symlinks become symlinks, directories become directories.
+func (s *Synchronizer) processSkill(
+	source model.Skill,
+	targetPlatform model.Platform,
+	targetPath string,
+	existingSkills map[string]model.Skill,
+	opts Options,
+) SkillResult {
+	logging.Debug("processing skill",
+		logging.Skill(source.Name),
+		logging.Platform(string(source.Platform)),
+		slog.String("target", string(targetPlatform)),
+	)
+
+	result := SkillResult{
+		Skill: source,
+	}
+
+	// Detect source type and get source root path
+	sourceType, sourceRootPath := detectSourceType(source.Path)
+
+	logging.Debug("detected source type",
+		logging.Skill(source.Name),
+		slog.String("source_type", sourceType.String()),
+		logging.Path(sourceRootPath),
+	)
+
+	// For symlinks and directories, use the skill name directly.
+	// For files, use the transformed path (legacy behavior).
+	var targetEntryPath string
+	if sourceType == SourceTypeSymlink || sourceType == SourceTypeDirectory {
+		// Preserve structure: target is just the skill name in the target directory
+		targetEntryPath = filepath.Join(targetPath, source.Name)
+	} else {
+		// Legacy file behavior: transform path for target platform
+		transformed, err := s.transformer.Transform(source, targetPlatform)
+		if err != nil {
+			logging.Warn("transformation failed",
+				logging.Skill(source.Name),
+				logging.Err(err),
+			)
+			result.Action = ActionFailed
+			result.Error = fmt.Errorf("transformation failed: %w", err)
+			return result
+		}
+		targetEntryPath = filepath.Join(targetPath, transformed.Path)
+	}
+
+	result.TargetPath = targetEntryPath
+
+	// Check if skill exists in target
+	existingSkill, exists := existingSkills[source.Name]
+
+	// Determine action based on strategy
+	action, message, conflict := s.determineAction(source, existingSkill, exists, opts.Strategy)
+	result.Action = action
+	result.Message = message
+	result.Conflict = conflict
+	if warning := mappingWarning(source, targetPlatform); warning != "" {
+		if result.Message != "" {
+			result.Message += "; "
+		}
+		result.Message += warning
+	}
+
+	logging.Debug("action determined",
+		logging.Skill(source.Name),
+		slog.String("action", string(action)),
+		slog.String("message", message),
+		slog.Bool("has_conflict", conflict != nil),
+	)
+
+	// If skipping or conflict (needs external resolution), we're done
+	if action == ActionSkipped || action == ActionConflict {
+		return result
+	}
+
+	// Execute the sync (unless dry run)
+	if !opts.DryRun {
+		// Remove any existing entry at target path to avoid duplicates
+		if err := removeExisting(targetEntryPath); err != nil {
+			logging.Error("failed to remove existing entry",
+				logging.Skill(source.Name),
+				logging.Path(targetEntryPath),
+				logging.Err(err),
+			)
+			result.Action = ActionFailed
+			result.Error = fmt.Errorf("failed to remove existing entry: %w", err)
+			return result
+		}
+
+		// Create based on source type
+		switch sourceType {
+		case SourceTypeSymlink:
+			// Recreate symlink with same target
+			symlinkTarget := getSymlinkTarget(sourceRootPath)
+			if symlinkTarget == "" {
+				// Fallback: try from PluginInfo
+				if source.PluginInfo != nil && source.PluginInfo.SymlinkTarget != "" {
+					symlinkTarget = source.PluginInfo.SymlinkTarget
+				}
+			}
+
+			if symlinkTarget == "" {
+				logging.Error("failed to determine symlink target",
+					logging.Skill(source.Name),
+					logging.Path(sourceRootPath),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to determine symlink target for %q", sourceRootPath)
+				return result
+			}
+
+			if err := os.Symlink(symlinkTarget, targetEntryPath); err != nil {
+				logging.Error("failed to create symlink",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to create symlink: %w", err)
+				return result
+			}
+
+			logging.Debug("created symlink",
+				logging.Skill(source.Name),
+				logging.Path(targetEntryPath),
+				slog.String("target", symlinkTarget),
+			)
+
+		case SourceTypeDirectory:
+			// Copy directory structure
+			if err := copyDir(sourceRootPath, targetEntryPath); err != nil {
+				logging.Error("failed to copy directory",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to copy directory: %w", err)
+				return result
+			}
+
+			logging.Debug("copied directory",
+				logging.Skill(source.Name),
+				logging.Path(targetEntryPath),
+			)
+
+		case SourceTypeFile:
+			// Legacy behavior: write transformed content
+			transformed, err := s.transformer.Transform(source, targetPlatform)
+			if err != nil {
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("transformation failed: %w", err)
+				return result
+			}
+
+			content := transformed.Content
+
+			// Handle merge strategy
+			if action == ActionMerged && exists {
+				logging.Debug("merging content",
+					logging.Skill(source.Name),
+				)
+				content = s.transformer.MergeContent(transformed.Content, existingSkill.Content, source.Name)
+			}
+
+			// Ensure parent directory exists
+			if err := os.MkdirAll(filepath.Dir(targetEntryPath), 0o750); err != nil {
+				logging.Error("failed to create target subdirectory",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to create target subdirectory: %w", err)
+				return result
+			}
+
+			// #nosec G306 - skill files should be readable
+			if err := os.WriteFile(targetEntryPath, []byte(content), 0o644); err != nil {
+				logging.Error("failed to write skill file",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Err(err),
+				)
+				result.Action = ActionFailed
+				result.Error = fmt.Errorf("failed to write file: %w", err)
+				return result
+			}
+
+			logging.Debug("wrote skill file",
+				logging.Skill(source.Name),
+				logging.Path(targetEntryPath),
+			)
+		}
+	}
+
+	return result
+}
+
+func mappingWarning(skill model.Skill, target model.Platform) string {
+	if skill.Type != model.SkillTypePrompt {
+		return ""
+	}
+
+	warnings := []string{}
+	if target == model.Codex {
+		warnings = append(warnings, "lossy mapping: prompt trigger semantics are not guaranteed on Codex")
+	}
+	if target == model.Cursor && skill.Trigger != "" {
+		warnings = append(warnings, "lossy mapping: prompt trigger may require Cursor mode configuration")
+	}
+	if _, ok := skill.Metadata["argument-hint"]; ok && target != model.ClaudeCode {
+		warnings = append(warnings, "lossy mapping: argument-hint preserved as metadata only")
+	}
+
+	return strings.Join(warnings, "; ")
+}
+
+// determineAction decides what action to take based on strategy.
+func (s *Synchronizer) determineAction(
+	source model.Skill,
+	existing model.Skill,
+	exists bool,
+	strategy Strategy,
+) (Action, string, *Conflict) {
+	logging.Debug("determining action",
+		logging.Skill(source.Name),
+		slog.String(logging.KeyStrategy, string(strategy)),
+		slog.Bool("exists", exists),
+	)
+
+	if !exists {
+		return ActionCreated, "new skill", nil
+	}
+
+	switch strategy {
+	case StrategyOverwrite:
+		return ActionUpdated, "overwriting existing skill", nil
+
+	case StrategySkip:
+		return ActionSkipped, "skill already exists", nil
+
+	case StrategyNewer:
+		if source.ModifiedAt.After(existing.ModifiedAt) {
+			logging.Debug("source is newer",
+				logging.Skill(source.Name),
+				slog.Time("source_modified", source.ModifiedAt),
+				slog.Time("existing_modified", existing.ModifiedAt),
+			)
+			return ActionUpdated, fmt.Sprintf("source is newer (%s > %s)",
+				source.ModifiedAt.Format(time.RFC3339),
+				existing.ModifiedAt.Format(time.RFC3339)), nil
+		}
+		logging.Debug("target is newer or same age",
+			logging.Skill(source.Name),
+			slog.Time("source_modified", source.ModifiedAt),
+			slog.Time("existing_modified", existing.ModifiedAt),
+		)
+		return ActionSkipped, fmt.Sprintf("target is newer or same age (%s >= %s)",
+			existing.ModifiedAt.Format(time.RFC3339),
+			source.ModifiedAt.Format(time.RFC3339)), nil
+
+	case StrategyMerge:
+		return ActionMerged, "merging with existing content", nil
+
+	case StrategyThreeWay:
+		// Check for actual conflicts using the detector
+		conflict := s.conflictDetector.DetectConflict(source, existing)
+		if conflict == nil {
+			// No conflict, content is identical
+			logging.Debug("no conflict detected, content identical",
+				logging.Skill(source.Name),
+			)
+			return ActionSkipped, "content is identical", nil
+		}
+		// Attempt three-way merge
+		logging.Debug("attempting three-way merge",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
+		mergeResult := s.merger.TwoWayMerge(source, existing)
+		if mergeResult.Success {
+			logging.Debug("three-way merge successful",
+				logging.Skill(source.Name),
+			)
+			return ActionMerged, "three-way merge successful", nil
+		}
+		// Has conflicts that need resolution
+		logging.Debug("conflict requires manual resolution",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
+		return ActionConflict, "conflict detected - needs resolution", conflict
+
+	case StrategyInteractive:
+		// Always check for conflicts with interactive strategy
+		conflict := s.conflictDetector.DetectConflict(source, existing)
+		if conflict == nil {
+			return ActionUpdated, "updating (no conflicts)", nil
+		}
+		logging.Debug("conflict detected for interactive resolution",
+			logging.Skill(source.Name),
+			slog.String("conflict_type", string(conflict.Type)),
+		)
+		return ActionConflict, "conflict detected - awaiting resolution", conflict
+
+	default:
+		return ActionUpdated, "updating (default strategy)", nil
+	}
+}
+
+// SyncWithSkills syncs a specific set of skills to the target platform.
+// This is useful when you've already parsed skills and want to sync them.
+func (s *Synchronizer) SyncWithSkills(
+	skills []model.Skill,
+	target model.Platform,
+	opts Options,
+) (*Result, error) {
+	logging.Debug("starting sync with pre-parsed skills",
+		logging.Platform(string(target)),
+		logging.Operation("sync"),
+		logging.Count(len(skills)),
+		slog.String(logging.KeyStrategy, string(opts.Strategy)),
+		slog.Bool("dry_run", opts.DryRun),
+		slog.String("target_scope", string(opts.TargetScope)),
+	)
+
+	if len(skills) == 0 {
+		logging.Debug("no skills provided to sync")
+		return &Result{
+			Target:   target,
+			Strategy: opts.Strategy,
+			DryRun:   opts.DryRun,
+			Skills:   make([]SkillResult, 0),
+		}, nil
+	}
+
+	result := &Result{
+		Source:   skills[0].Platform, // Assume all skills are from same platform
+		Target:   target,
+		Strategy: opts.Strategy,
+		DryRun:   opts.DryRun,
+		Skills:   make([]SkillResult, 0),
+	}
+
+	// Set default strategy
+	if result.Strategy == "" {
+		result.Strategy = StrategyOverwrite
+	}
+
+	// Skip nested skills when a parent directory/symlink skill is also present.
+	// The parent copy already includes nested content, so syncing both creates
+	// duplicate top-level artifacts.
+	filteredSkills, nestedSkipped := filterNestedDirectorySkills(skills)
+	if len(nestedSkipped) > 0 {
+		result.Skills = append(result.Skills, nestedSkipped...)
+	}
+	skills = filteredSkills
+
+	if len(skills) == 0 {
+		logging.Debug("all pre-parsed skills were skipped as nested duplicates")
+		return result, nil
+	}
+
+	// Get target path based on scope
+	targetPath := opts.TargetPath
+	if targetPath == "" {
+		var err error
+		if opts.TargetScope != "" {
+			targetPath, err = validation.GetPlatformPathForScope(target, opts.TargetScope)
+		} else {
+			targetPath, err = validation.GetPlatformPath(target)
+		}
+		if err != nil {
+			logging.Error("failed to get target path",
+				logging.Platform(string(target)),
+				slog.String("scope", string(opts.TargetScope)),
+				logging.Err(err),
+			)
+			return result, fmt.Errorf("failed to get target path: %w", err)
+		}
+	}
+	logging.Debug("determined target path",
+		logging.Path(targetPath),
+		slog.String("scope", string(opts.TargetScope)),
+	)
+
+	// Parse existing target skills
+	targetSkills, err := s.parseSkills(target, opts.TargetPath)
+	if err != nil {
+		logging.Debug("target skills not found, starting fresh",
+			logging.Platform(string(target)),
+			logging.Err(err),
+		)
+		targetSkills = []model.Skill{}
+	} else {
+		logging.Debug("parsed existing target skills",
+			logging.Platform(string(target)),
+			logging.Count(len(targetSkills)),
+		)
+	}
+
+	targetSkillMap := make(map[string]model.Skill)
+	for _, skill := range targetSkills {
+		targetSkillMap[skill.Name] = skill
+	}
+
+	// Ensure target directory exists
+	if !opts.DryRun {
+		if err := os.MkdirAll(targetPath, 0o750); err != nil {
+			logging.Error("failed to create target directory",
+				logging.Path(targetPath),
+				logging.Err(err),
+			)
+			return result, fmt.Errorf("failed to create target directory: %w", err)
+		}
+	}
+
+	// Process each skill
+	for _, skill := range skills {
+		skillResult := s.processSkill(skill, target, targetPath, targetSkillMap, opts)
+		result.Skills = append(result.Skills, skillResult)
+	}
+
+	logging.Debug("sync with skills completed",
+		logging.Platform(string(target)),
+		logging.Count(len(result.Skills)),
+	)
+
+	return result, nil
+}
+
+// DeleteWithSkills deletes skills from target that match the source skills.
+// This is the inverse of sync: instead of copying skills TO target, it removes skills FROM target
+// that exist in the source. Useful for cleaning up test skills or removing deprecated skills.
+func (s *Synchronizer) DeleteWithSkills(
+	sourceSkills []model.Skill,
+	target model.Platform,
+	opts Options,
+) (*Result, error) {
+	logging.Debug("starting delete sync operation",
+		logging.Platform(string(target)),
+		logging.Operation("delete-sync"),
+		logging.Count(len(sourceSkills)),
+		slog.Bool("dry_run", opts.DryRun),
+		slog.String("target_scope", string(opts.TargetScope)),
+	)
+
+	if len(sourceSkills) == 0 {
+		logging.Debug("no skills provided to delete")
+		return &Result{
+			Target:   target,
+			Strategy: opts.Strategy,
+			DryRun:   opts.DryRun,
+			Skills:   make([]SkillResult, 0),
+		}, nil
+	}
+
+	result := &Result{
+		Source:   sourceSkills[0].Platform,
+		Target:   target,
+		Strategy: opts.Strategy,
+		DryRun:   opts.DryRun,
+		Skills:   make([]SkillResult, 0),
+	}
+
+	// Get target path based on scope
+	targetPath := opts.TargetPath
+	if targetPath == "" {
+		var err error
+		if opts.TargetScope != "" {
+			targetPath, err = validation.GetPlatformPathForScope(target, opts.TargetScope)
+		} else {
+			targetPath, err = validation.GetPlatformPath(target)
+		}
+		if err != nil {
+			logging.Error("failed to get target path",
+				logging.Platform(string(target)),
+				slog.String("scope", string(opts.TargetScope)),
+				logging.Err(err),
+			)
+			return result, fmt.Errorf("failed to get target path: %w", err)
+		}
+	}
+	logging.Debug("determined target path",
+		logging.Path(targetPath),
+		slog.String("scope", string(opts.TargetScope)),
+	)
+
+	// Parse existing target skills
+	targetSkills, err := s.parseSkills(target, opts.TargetPath)
+	if err != nil {
+		logging.Debug("target skills not found, nothing to delete",
+			logging.Platform(string(target)),
+			logging.Err(err),
+		)
+		return result, nil
+	}
+
+	logging.Debug("parsed existing target skills",
+		logging.Platform(string(target)),
+		logging.Count(len(targetSkills)),
+	)
+
+	// Build a map of source skill names for quick lookup
+	sourceSkillNames := make(map[string]model.Skill)
+	for _, skill := range sourceSkills {
+		sourceSkillNames[skill.Name] = skill
+	}
+
+	// Find target skills that match source skills and delete them
+	for _, targetSkill := range targetSkills {
+		sourceSkill, exists := sourceSkillNames[targetSkill.Name]
+		if !exists {
+			// Skill not in source list, skip it
+			logging.Debug("skill not in source list, skipping",
+				logging.Skill(targetSkill.Name),
+			)
+			continue
+		}
+
+		skillResult := SkillResult{
+			Skill:      sourceSkill,
+			TargetPath: targetSkill.Path,
+		}
+
+		// Delete the skill file
+		if !opts.DryRun {
+			if err := os.Remove(targetSkill.Path); err != nil {
+				logging.Error("failed to delete skill file",
+					logging.Skill(targetSkill.Name),
+					logging.Path(targetSkill.Path),
+					logging.Err(err),
+				)
+				skillResult.Action = ActionFailed
+				skillResult.Error = fmt.Errorf("failed to delete file: %w", err)
+				result.Skills = append(result.Skills, skillResult)
+				continue
+			}
+
+			// Try to remove parent directory if empty (for Codex SKILL.md files)
+			parentDir := filepath.Dir(targetSkill.Path)
+			if parentDir != targetPath {
+				// Attempt to remove parent dir - will fail silently if not empty
+				_ = os.Remove(parentDir)
+			}
+
+			logging.Debug("deleted skill file",
+				logging.Skill(targetSkill.Name),
+				logging.Path(targetSkill.Path),
+			)
+		}
+
+		skillResult.Action = ActionDeleted
+		skillResult.Message = "deleted from target"
+		result.Skills = append(result.Skills, skillResult)
+	}
+
+	logging.Debug("delete sync operation completed",
+		logging.Platform(string(target)),
+		logging.Count(len(result.Skills)),
+	)
+
+	return result, nil
 }

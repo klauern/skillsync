@@ -1,9 +1,36 @@
 package util
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/klauern/skillsync/internal/model"
 )
+
+func TestSkillsyncConfigPath_UsesEnvOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("SKILLSYNC_HOME", tmp)
+
+	if got := SkillsyncConfigPath(); got != tmp {
+		t.Fatalf("expected %q, got %q", tmp, got)
+	}
+}
+
+func TestClaudePluginPaths_FromHome(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	cachePath := ClaudePluginCachePath()
+	installedPath := ClaudeInstalledPluginsPath()
+
+	if cachePath != filepath.Join(tmp, ".claude", "plugins", "cache") {
+		t.Fatalf("unexpected cache path: %q", cachePath)
+	}
+	if installedPath != filepath.Join(tmp, ".claude", "plugins", "installed_plugins.json") {
+		t.Fatalf("unexpected installed path: %q", installedPath)
+	}
+}
 
 func TestHomeDir(t *testing.T) {
 	home := HomeDir()
@@ -26,22 +53,588 @@ func TestClaudeCodeSkillsPath(t *testing.T) {
 	}
 }
 
-func TestCursorRulesPath(t *testing.T) {
-	projectDir := "/test/project"
-	path := CursorRulesPath(projectDir)
-
-	expected := "/test/project/.cursor/rules"
-	if path != expected {
-		t.Errorf("CursorRulesPath(%q) = %q, want %q", projectDir, path, expected)
-	}
-}
-
 func TestCodexConfigPath(t *testing.T) {
 	projectDir := "/test/project"
 	path := CodexConfigPath(projectDir)
 
-	expected := "/test/project/.codex"
+	expected := "/test/project/.codex/skills"
 	if path != expected {
 		t.Errorf("CodexConfigPath(%q) = %q, want %q", projectDir, path, expected)
 	}
+}
+
+func TestCodexSkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".codex", "skills")
+	got := CodexSkillsPath()
+	if got != expected {
+		t.Errorf("CodexSkillsPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestGetRepoRoot(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) string // Returns start dir
+		cleanup  func(t *testing.T, dir string)
+		wantRoot bool // Whether we expect to find a root
+	}{
+		{
+			name: "finds git repo root",
+			setup: func(t *testing.T) string {
+				// Create temp dir with .git
+				tmpDir := t.TempDir()
+				gitDir := filepath.Join(tmpDir, ".git")
+				if err := os.Mkdir(gitDir, 0o750); err != nil {
+					t.Fatalf("failed to create .git dir: %v", err)
+				}
+				// Create a subdirectory to start from
+				subDir := filepath.Join(tmpDir, "sub", "dir")
+				if err := os.MkdirAll(subDir, 0o750); err != nil {
+					t.Fatalf("failed to create sub dir: %v", err)
+				}
+				return subDir
+			},
+			wantRoot: true,
+		},
+		{
+			name: "handles git worktree (file instead of dir)",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				gitFile := filepath.Join(tmpDir, ".git")
+				// Git worktrees use a file pointing to the main repo
+				if err := os.WriteFile(gitFile, []byte("gitdir: /some/path"), 0o600); err != nil {
+					t.Fatalf("failed to create .git file: %v", err)
+				}
+				return tmpDir
+			},
+			wantRoot: true,
+		},
+		{
+			name: "returns empty when no git repo",
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			wantRoot: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			startDir := tt.setup(t)
+
+			got := GetRepoRoot(startDir)
+
+			if tt.wantRoot && got == "" {
+				t.Error("GetRepoRoot() returned empty, expected to find root")
+			}
+			if !tt.wantRoot && got != "" {
+				t.Errorf("GetRepoRoot() = %q, expected empty", got)
+			}
+		})
+	}
+}
+
+func TestGetTieredPaths(t *testing.T) {
+	home := HomeDir()
+
+	tests := []struct {
+		name       string
+		cfg        TieredPathConfig
+		checkScope model.SkillScope
+		wantPaths  bool // At minimum we expect some paths
+	}{
+		{
+			name: "claude code with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.ClaudeCode,
+			},
+			checkScope: model.ScopeUser,
+			wantPaths:  true,
+		},
+		{
+			name: "cursor with admin path",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.Cursor,
+				AdminPath:  "/opt/cursor/skills",
+			},
+			checkScope: model.ScopeAdmin,
+			wantPaths:  true,
+		},
+		{
+			name: "codex with system path",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.Codex,
+				SystemPath: "/etc/codex/skills",
+			},
+			checkScope: model.ScopeSystem,
+			wantPaths:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := GetTieredPaths(tt.cfg)
+
+			// Check that we got paths for the expected scope
+			scopePaths, ok := paths[tt.checkScope]
+			if tt.wantPaths && (!ok || len(scopePaths) == 0) {
+				t.Errorf("GetTieredPaths() missing paths for scope %s", tt.checkScope)
+			}
+
+			// Verify user scope path format
+			if userPaths, ok := paths[model.ScopeUser]; ok && len(userPaths) > 0 {
+				expectedPrefix := filepath.Join(home, ".")
+				if userPaths[0][:len(expectedPrefix)] != expectedPrefix {
+					t.Errorf("User path %q doesn't start with expected prefix %q", userPaths[0], expectedPrefix)
+				}
+			}
+		})
+	}
+}
+
+func TestGetAllSearchPaths(t *testing.T) {
+	cfg := TieredPathConfig{
+		WorkingDir: "/test/project",
+		Platform:   model.ClaudeCode,
+		AdminPath:  "/opt/claude/skills",
+	}
+
+	paths := GetAllSearchPaths(cfg)
+
+	// Verify paths are in precedence order (highest first: repo, user, admin, system, builtin)
+	if len(paths) == 0 {
+		t.Fatal("GetAllSearchPaths() returned empty slice")
+	}
+
+	// First path should be repo scope
+	if paths[0].Scope != model.ScopeRepo {
+		t.Errorf("First path has scope %s, expected %s", paths[0].Scope, model.ScopeRepo)
+	}
+
+	// Check that we have expected scopes in order
+	seenScopes := make(map[model.SkillScope]int)
+	for i, sp := range paths {
+		if _, ok := seenScopes[sp.Scope]; !ok {
+			seenScopes[sp.Scope] = i
+		}
+	}
+
+	// Repo should come before User
+	if repoIdx, ok := seenScopes[model.ScopeRepo]; ok {
+		if userIdx, ok := seenScopes[model.ScopeUser]; ok {
+			if repoIdx > userIdx {
+				t.Error("Repo scope paths should come before User scope paths")
+			}
+		}
+	}
+}
+
+func TestPlatformDirName(t *testing.T) {
+	tests := []struct {
+		platform model.Platform
+		expected string
+	}{
+		{model.ClaudeCode, ".claude"},
+		{model.Cursor, ".cursor"},
+		{model.Codex, ".codex"},
+		{model.Copilot, ".github"},
+		{model.PiDev, ".pi/agent"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.platform), func(t *testing.T) {
+			got := platformDirName(tt.platform)
+			if got != tt.expected {
+				t.Errorf("platformDirName(%s) = %q, want %q", tt.platform, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPlatformSkillsPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create pi.dev skills dir: %v", err)
+	}
+
+	tests := []struct {
+		platform model.Platform
+		expected string
+	}{
+		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
+		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
+		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.Copilot, filepath.Join(home, ".github")},
+		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.platform), func(t *testing.T) {
+			got := PlatformSkillsPath(tt.platform)
+			if got != tt.expected {
+				t.Errorf("PlatformSkillsPath(%s) = %q, want %q", tt.platform, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRepoSkillsPath(t *testing.T) {
+	tests := []struct {
+		platform model.Platform
+		repoRoot string
+		expected string
+	}{
+		{model.ClaudeCode, "/test/repo", "/test/repo/.claude/skills"},
+		{model.Cursor, "/test/repo", "/test/repo/.cursor/skills"},
+		{model.Codex, "/test/repo", "/test/repo/.codex/skills"},
+		{model.Copilot, "/test/repo", "/test/repo/.github"},
+		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.platform), func(t *testing.T) {
+			got := RepoSkillsPath(tt.platform, tt.repoRoot)
+			if got != tt.expected {
+				t.Errorf("RepoSkillsPath(%s, %s) = %q, want %q", tt.platform, tt.repoRoot, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPiDevPathsPreferAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	agentsRoot := filepath.Join(home, ".agents")
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents prompts dir: %v", err)
+	}
+
+	if got := PiDevSkillsPath(); got != filepath.Join(agentsRoot, "skills") {
+		t.Fatalf("PiDevSkillsPath() = %q, want %q", got, filepath.Join(agentsRoot, "skills"))
+	}
+	if got := PiDevPromptsPath(); got != filepath.Join(agentsRoot, "prompts") {
+		t.Fatalf("PiDevPromptsPath() = %q, want %q", got, filepath.Join(agentsRoot, "prompts"))
+	}
+}
+
+func TestPiDevPathsFallBackToPiAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	piAgentRoot := filepath.Join(home, ".pi", "agent")
+	if err := os.MkdirAll(filepath.Join(piAgentRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .pi/agent skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(piAgentRoot, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create .pi/agent prompts dir: %v", err)
+	}
+
+	if got := PiDevSkillsPath(); got != filepath.Join(piAgentRoot, "skills") {
+		t.Fatalf("PiDevSkillsPath() = %q, want %q", got, filepath.Join(piAgentRoot, "skills"))
+	}
+	if got := PiDevPromptsPath(); got != filepath.Join(piAgentRoot, "prompts") {
+		t.Fatalf("PiDevPromptsPath() = %q, want %q", got, filepath.Join(piAgentRoot, "prompts"))
+	}
+}
+
+func TestFilterExistingPaths(t *testing.T) {
+	// Create temp dirs for testing
+	tmpDir := t.TempDir()
+	existingPath := filepath.Join(tmpDir, "exists")
+	if err := os.Mkdir(existingPath, 0o750); err != nil {
+		t.Fatalf("failed to create test dir: %v", err)
+	}
+
+	paths := []ScopedPath{
+		{Path: existingPath, Scope: model.ScopeRepo},
+		{Path: filepath.Join(tmpDir, "does-not-exist"), Scope: model.ScopeUser},
+	}
+
+	filtered := FilterExistingPaths(paths)
+
+	if len(filtered) != 1 {
+		t.Errorf("FilterExistingPaths() returned %d paths, expected 1", len(filtered))
+	}
+
+	if len(filtered) > 0 && filtered[0].Path != existingPath {
+		t.Errorf("FilterExistingPaths() returned wrong path: %s", filtered[0].Path)
+	}
+}
+
+func TestCursorSkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".cursor", "skills")
+	got := CursorSkillsPath()
+	if got != expected {
+		t.Errorf("CursorSkillsPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestCursorProjectSkillsPath(t *testing.T) {
+	projectDir := "/test/project"
+	expected := "/test/project/.cursor/skills"
+	got := CursorProjectSkillsPath(projectDir)
+	if got != expected {
+		t.Errorf("CursorProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
+	}
+}
+
+func TestGetTieredPaths_NoLegacyPaths(t *testing.T) {
+	// Verify that all platforms only have skills paths (no legacy rules paths)
+	platforms := model.AllPlatforms()
+
+	for _, platform := range platforms {
+		t.Run(string(platform), func(t *testing.T) {
+			cfg := TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   platform,
+			}
+
+			paths := GetTieredPaths(cfg)
+
+			// Repo scope should only have skills directory
+			repoPaths := paths[model.ScopeRepo]
+			for _, p := range repoPaths {
+				if filepath.Base(p) == "rules" {
+					t.Errorf("GetTieredPaths() for %s should not include rules path: %s", platform, p)
+				}
+			}
+
+			// User scope should only have skills directory
+			userPaths := paths[model.ScopeUser]
+			if len(userPaths) != 1 {
+				t.Errorf("GetTieredPaths() for %s should have exactly 1 user path, got %d", platform, len(userPaths))
+			}
+		})
+	}
+}
+
+func TestExpandPath(t *testing.T) {
+	home := HomeDir()
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name     string
+		path     string
+		baseDir  string
+		expected string
+	}{
+		{
+			name:     "empty path returns empty",
+			path:     "",
+			baseDir:  tmpDir,
+			expected: "",
+		},
+		{
+			name:     "tilde only",
+			path:     "~",
+			baseDir:  tmpDir,
+			expected: home,
+		},
+		{
+			name:     "tilde with path",
+			path:     "~/.cursor/skills",
+			baseDir:  tmpDir,
+			expected: filepath.Join(home, ".cursor", "skills"),
+		},
+		{
+			name:     "absolute path unchanged",
+			path:     "/absolute/path/to/skills",
+			baseDir:  tmpDir,
+			expected: "/absolute/path/to/skills",
+		},
+		{
+			name:     "relative path expanded from baseDir",
+			path:     ".cursor/skills",
+			baseDir:  tmpDir,
+			expected: filepath.Join(tmpDir, ".cursor", "skills"),
+		},
+		{
+			name:     "relative path with dots",
+			path:     "../other/skills",
+			baseDir:  tmpDir,
+			expected: filepath.Clean(filepath.Join(tmpDir, "../other/skills")),
+		},
+		{
+			name:     "single dot relative path",
+			path:     "./skills",
+			baseDir:  tmpDir,
+			expected: filepath.Join(tmpDir, "skills"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExpandPath(tt.path, tt.baseDir)
+			if result != tt.expected {
+				t.Errorf("ExpandPath(%q, %q) = %q, want %q", tt.path, tt.baseDir, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExpandPath_EmptyBaseDir(t *testing.T) {
+	// When baseDir is empty, relative paths should resolve from cwd
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
+	result := ExpandPath("relative/path", "")
+	expected := filepath.Join(wd, "relative/path")
+
+	if result != expected {
+		t.Errorf("ExpandPath with empty baseDir = %q, want %q", result, expected)
+	}
+}
+
+func TestExpandPaths(t *testing.T) {
+	home := HomeDir()
+	tmpDir := t.TempDir()
+
+	paths := []string{
+		"~/.cursor/skills",
+		".cursor/skills",
+		"/absolute/path",
+		"",
+	}
+
+	result := ExpandPaths(paths, tmpDir)
+
+	if len(result) != 3 {
+		t.Errorf("ExpandPaths() returned %d paths, expected 3 (empty should be filtered)", len(result))
+	}
+
+	expected := []string{
+		filepath.Join(home, ".cursor", "skills"),
+		filepath.Join(tmpDir, ".cursor", "skills"),
+		"/absolute/path",
+	}
+
+	for i, exp := range expected {
+		if i < len(result) && result[i] != exp {
+			t.Errorf("ExpandPaths()[%d] = %q, want %q", i, result[i], exp)
+		}
+	}
+}
+
+func TestExpandPaths_EmptyInput(t *testing.T) {
+	result := ExpandPaths([]string{}, "/base")
+	if len(result) != 0 {
+		t.Errorf("ExpandPaths([]) returned %d paths, expected 0", len(result))
+	}
+
+	result = ExpandPaths(nil, "/base")
+	if len(result) != 0 {
+		t.Errorf("ExpandPaths(nil) returned %d paths, expected 0", len(result))
+	}
+}
+
+func TestSkillsyncConfigPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		// Ensure env var is unset
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncConfigPath()
+		expected := filepath.Join(HomeDir(), ".skillsync")
+
+		if got != expected {
+			t.Errorf("SkillsyncConfigPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync/path"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncConfigPath()
+
+		if got != customPath {
+			t.Errorf("SkillsyncConfigPath() = %q, want %q", got, customPath)
+		}
+	})
+}
+
+func TestSkillsyncBackupsPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncBackupsPath()
+		expected := filepath.Join(HomeDir(), ".skillsync", "backups")
+
+		if got != expected {
+			t.Errorf("SkillsyncBackupsPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncBackupsPath()
+		expected := filepath.Join(customPath, "backups")
+
+		if got != expected {
+			t.Errorf("SkillsyncBackupsPath() = %q, want %q", got, expected)
+		}
+	})
+}
+
+func TestSkillsyncMetadataPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncMetadataPath()
+		expected := filepath.Join(HomeDir(), ".skillsync", "metadata")
+
+		if got != expected {
+			t.Errorf("SkillsyncMetadataPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncMetadataPath()
+		expected := filepath.Join(customPath, "metadata")
+
+		if got != expected {
+			t.Errorf("SkillsyncMetadataPath() = %q, want %q", got, expected)
+		}
+	})
+}
+
+func TestSkillsyncPluginsPath(t *testing.T) {
+	t.Run("default path without SKILLSYNC_HOME", func(t *testing.T) {
+		t.Setenv("SKILLSYNC_HOME", "")
+
+		got := SkillsyncPluginsPath()
+		expected := filepath.Join(HomeDir(), ".skillsync", "plugins")
+
+		if got != expected {
+			t.Errorf("SkillsyncPluginsPath() = %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("custom path with SKILLSYNC_HOME", func(t *testing.T) {
+		customPath := "/custom/skillsync"
+		t.Setenv("SKILLSYNC_HOME", customPath)
+
+		got := SkillsyncPluginsPath()
+		expected := filepath.Join(customPath, "plugins")
+
+		if got != expected {
+			t.Errorf("SkillsyncPluginsPath() = %q, want %q", got, expected)
+		}
+	})
 }

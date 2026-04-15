@@ -16,7 +16,7 @@ func TestNew(t *testing.T) {
 	}{
 		"empty path uses default": {
 			basePath: "",
-			want:     filepath.Join(os.Getenv("HOME"), ".cursor", "rules"),
+			want:     filepath.Join(os.Getenv("HOME"), ".cursor", "skills"),
 		},
 		"custom path preserved": {
 			basePath: "/custom/path",
@@ -43,7 +43,7 @@ func TestParser_Platform(t *testing.T) {
 
 func TestParser_DefaultPath(t *testing.T) {
 	p := New("")
-	want := filepath.Join(os.Getenv("HOME"), ".cursor", "rules")
+	want := filepath.Join(os.Getenv("HOME"), ".cursor", "skills")
 	if got := p.DefaultPath(); got != want {
 		t.Errorf("DefaultPath() = %q, want %q", got, want)
 	}
@@ -548,4 +548,554 @@ func findSkillByName(t *testing.T, skills []model.Skill, name string) model.Skil
 	}
 	t.Fatalf("skill %q not found", name)
 	return model.Skill{}
+}
+
+// makeCommandsFixture creates a directory layout for command tests:
+//
+//	tmpDir/
+//	  skills/   <- basePath (passed to New)
+//	  commands/ <- sibling, auto-discovered by parseCommandFiles
+//
+// Files map is relative to tmpDir (e.g., "commands/review.md").
+func makeCommandsFixture(t *testing.T, files map[string]string) (skillsDir string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	skillsDir = filepath.Join(tmpDir, "skills")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatalf("failed to create skills dir: %v", err)
+	}
+	for rel, content := range files {
+		fullPath := filepath.Join(tmpDir, rel)
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("failed to create directory for %q: %v", rel, err)
+		}
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write %q: %v", rel, err)
+		}
+	}
+	return skillsDir
+}
+
+func TestParser_parseCommandFile(t *testing.T) {
+	tests := map[string]struct {
+		filename    string
+		content     string
+		wantName    string
+		wantTrigger string
+		wantDesc    string
+		wantMeta    map[string]string
+		wantType    model.SkillType
+		wantErr     bool
+	}{
+		"no frontmatter derives name and trigger from filename": {
+			filename:    "review.md",
+			content:     "Review the selected code for correctness.",
+			wantName:    "review",
+			wantTrigger: "/review",
+			wantType:    model.SkillTypePrompt,
+			wantMeta:    map[string]string{},
+		},
+		"frontmatter with description": {
+			filename: "refactor.md",
+			content: `---
+description: Refactor selected code
+mode: edit
+---
+
+Refactor the selected code to improve readability.`,
+			wantName:    "refactor",
+			wantTrigger: "/refactor",
+			wantDesc:    "Refactor selected code",
+			wantType:    model.SkillTypePrompt,
+			wantMeta:    map[string]string{"mode": "edit"},
+		},
+		"explicit name in frontmatter": {
+			filename: "my-cmd.md",
+			content: `---
+name: custom-name
+description: A custom command
+---
+Content.`,
+			wantName:    "custom-name",
+			wantTrigger: "/my-cmd",
+			wantDesc:    "A custom command",
+			wantType:    model.SkillTypePrompt,
+			wantMeta:    map[string]string{},
+		},
+		"mode metadata is preserved": {
+			filename: "ask.md",
+			content: `---
+description: Ask a question
+mode: ask
+allowed-tools: [Read, Grep]
+---
+Ask about the codebase.`,
+			wantName:    "ask",
+			wantTrigger: "/ask",
+			wantDesc:    "Ask a question",
+			wantType:    model.SkillTypePrompt,
+			wantMeta: map[string]string{
+				"mode":          "ask",
+				"allowed-tools": "[Read Grep]",
+			},
+		},
+		"invalid name in file stem": {
+			filename: "bad name.md",
+			content:  "Content.",
+			wantErr:  true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			filePath := filepath.Join(tmpDir, tt.filename)
+			// #nosec G306 - test file permissions
+			if err := os.WriteFile(filePath, []byte(tt.content), 0o644); err != nil {
+				t.Fatalf("failed to write file: %v", err)
+			}
+
+			p := New(tmpDir)
+			skill, err := p.parseCommandFile(filePath)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseCommandFile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if skill.Name != tt.wantName {
+				t.Errorf("Name = %q, want %q", skill.Name, tt.wantName)
+			}
+			if skill.Trigger != tt.wantTrigger {
+				t.Errorf("Trigger = %q, want %q", skill.Trigger, tt.wantTrigger)
+			}
+			if skill.Type != tt.wantType {
+				t.Errorf("Type = %v, want %v", skill.Type, tt.wantType)
+			}
+			if skill.Platform != model.Cursor {
+				t.Errorf("Platform = %v, want %v", skill.Platform, model.Cursor)
+			}
+			if tt.wantDesc != "" && skill.Description != tt.wantDesc {
+				t.Errorf("Description = %q, want %q", skill.Description, tt.wantDesc)
+			}
+			for key, want := range tt.wantMeta {
+				if got, ok := skill.Metadata[key]; !ok {
+					t.Errorf("Metadata missing key %q", key)
+				} else if got != want {
+					t.Errorf("Metadata[%q] = %q, want %q", key, got, want)
+				}
+			}
+			if skill.ModifiedAt.IsZero() {
+				t.Error("ModifiedAt should be set")
+			}
+		})
+	}
+}
+
+func TestParser_Parse_CommandDiscovery(t *testing.T) {
+	tests := map[string]struct {
+		// files are relative to tmpDir (which is the parent of skills/)
+		files     map[string]string
+		wantCmds  int // expected commands (SkillTypePrompt from commands/)
+		wantRules int // expected legacy rules
+	}{
+		"commands directory discovered": {
+			files: map[string]string{
+				"commands/review.md": "Review the code.",
+			},
+			wantCmds:  1,
+			wantRules: 0,
+		},
+		"multiple commands": {
+			files: map[string]string{
+				"commands/review.md":   "Review.",
+				"commands/refactor.md": "Refactor.",
+				"commands/explain.md":  "Explain.",
+			},
+			wantCmds:  3,
+			wantRules: 0,
+		},
+		"commands and rules coexist": {
+			files: map[string]string{
+				"skills/go-rule.md": `---
+globs: ["*.go"]
+---
+Go rule.`,
+				"commands/review.md": "Review the code.",
+			},
+			wantCmds:  1,
+			wantRules: 1,
+		},
+		"no commands directory": {
+			files: map[string]string{
+				"skills/go-rule.md": `---
+globs: ["*.go"]
+---
+Go rule.`,
+			},
+			wantCmds:  0,
+			wantRules: 1,
+		},
+		"SKILL.md takes precedence over same-named command": {
+			files: map[string]string{
+				"skills/review/SKILL.md": `---
+name: review
+description: Agent Skills Standard version
+---
+Content.`,
+				"commands/review.md": "Command version.",
+			},
+			wantCmds:  0,
+			wantRules: 1, // SKILL.md version is a SkillTypeSkill, command is deduped
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Create all files relative to tmpDir
+			for rel, content := range tt.files {
+				fullPath := filepath.Join(tmpDir, rel)
+				// #nosec G301 - test directory permissions
+				if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+					t.Fatalf("failed to create dir for %q: %v", rel, err)
+				}
+				// #nosec G306 - test file permissions
+				if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+					t.Fatalf("failed to write %q: %v", rel, err)
+				}
+			}
+
+			// skills/ is the basePath; commands/ is its sibling
+			skillsDir := filepath.Join(tmpDir, "skills")
+			// #nosec G301 - test directory permissions
+			if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+				t.Fatalf("failed to create skills dir: %v", err)
+			}
+
+			p := New(skillsDir)
+			skills, err := p.Parse()
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			var cmds, rules int
+			for _, s := range skills {
+				if s.Type == model.SkillTypePrompt {
+					cmds++
+				} else {
+					rules++
+				}
+			}
+
+			if cmds != tt.wantCmds {
+				t.Errorf("command count = %d, want %d", cmds, tt.wantCmds)
+			}
+			if rules != tt.wantRules {
+				t.Errorf("rule count = %d, want %d", rules, tt.wantRules)
+			}
+		})
+	}
+}
+
+func TestParser_Parse_CommandTrigger(t *testing.T) {
+	skillsDir := makeCommandsFixture(t, map[string]string{
+		"commands/review.md": `---
+description: Code review command
+---
+Review the selected code.`,
+	})
+
+	p := New(skillsDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("Parse() returned %d skills, want 1", len(skills))
+	}
+
+	cmd := skills[0]
+	if cmd.Type != model.SkillTypePrompt {
+		t.Errorf("Type = %v, want %v", cmd.Type, model.SkillTypePrompt)
+	}
+	if cmd.Trigger != "/review" {
+		t.Errorf("Trigger = %q, want %q", cmd.Trigger, "/review")
+	}
+	if cmd.Name != "review" {
+		t.Errorf("Name = %q, want %q", cmd.Name, "review")
+	}
+	if cmd.Description != "Code review command" {
+		t.Errorf("Description = %q, want %q", cmd.Description, "Code review command")
+	}
+}
+
+func TestParser_Parse_SkillMD(t *testing.T) {
+	// Test parsing SKILL.md files in Agent Skills Standard format
+	tmpDir := t.TempDir()
+
+	// Create a SKILL.md file in a subdirectory
+	skillDir := filepath.Join(tmpDir, "my-cursor-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	skillContent := `---
+name: my-cursor-skill
+description: A test skill for Cursor
+tools: ["read", "write"]
+disable-model-invocation: true
+---
+
+# My Cursor Skill
+
+This is a skill for Cursor that follows the Agent Skills Standard.
+`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("Parse() returned %d skills, want 1", len(skills))
+	}
+
+	skill := skills[0]
+	if skill.Name != "my-cursor-skill" {
+		t.Errorf("Name = %q, want %q", skill.Name, "my-cursor-skill")
+	}
+	if skill.Description != "A test skill for Cursor" {
+		t.Errorf("Description = %q, want %q", skill.Description, "A test skill for Cursor")
+	}
+	if skill.Platform != model.Cursor {
+		t.Errorf("Platform = %v, want %v", skill.Platform, model.Cursor)
+	}
+	if len(skill.Tools) != 2 || skill.Tools[0] != "read" || skill.Tools[1] != "write" {
+		t.Errorf("Tools = %v, want [read write]", skill.Tools)
+	}
+	if !skill.DisableModelInvocation {
+		t.Error("DisableModelInvocation should be true")
+	}
+}
+
+func TestParser_Parse_MixedFormats(t *testing.T) {
+	// Test that both legacy .md/.mdc files and SKILL.md files are discovered
+	tmpDir := t.TempDir()
+
+	// Create a legacy .md file
+	legacyContent := `---
+globs: ["*.go"]
+alwaysApply: true
+---
+
+# Legacy Rule
+
+This is a legacy Cursor rule.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(tmpDir, "legacy-rule.md"), []byte(legacyContent), 0o644); err != nil {
+		t.Fatalf("failed to write legacy file: %v", err)
+	}
+
+	// Create a SKILL.md file
+	skillDir := filepath.Join(tmpDir, "agent-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	skillContent := `---
+name: agent-skill
+description: An Agent Skills Standard skill
+---
+
+# Agent Skill
+
+This follows the Agent Skills Standard.`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	if len(skills) != 2 {
+		t.Fatalf("Parse() returned %d skills, want 2", len(skills))
+	}
+
+	// Verify both skills are present
+	_ = findSkillByName(t, skills, "legacy-rule")
+	_ = findSkillByName(t, skills, "agent-skill")
+}
+
+func TestParser_Parse_SkillMDPrecedence(t *testing.T) {
+	// Test that SKILL.md takes precedence over legacy files with the same name
+	tmpDir := t.TempDir()
+
+	// Create a legacy .md file with name "my-skill"
+	legacyContent := `---
+globs: ["*.old"]
+---
+
+# Legacy Content`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(tmpDir, "my-skill.md"), []byte(legacyContent), 0o644); err != nil {
+		t.Fatalf("failed to write legacy file: %v", err)
+	}
+
+	// Create a SKILL.md file with the same name
+	skillDir := filepath.Join(tmpDir, "my-skill")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	skillContent := `---
+name: my-skill
+description: SKILL.md version
+---
+
+# Agent Skills Standard Content`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	// Should only return 1 skill (SKILL.md takes precedence)
+	if len(skills) != 1 {
+		t.Fatalf("Parse() returned %d skills, want 1", len(skills))
+	}
+
+	skill := skills[0]
+	if skill.Name != "my-skill" {
+		t.Errorf("Name = %q, want %q", skill.Name, "my-skill")
+	}
+	if skill.Description != "SKILL.md version" {
+		t.Errorf("Description = %q, want SKILL.md version (SKILL.md should take precedence)", skill.Description)
+	}
+}
+
+// TestParser_SkillDirectoryExclusion tests that files inside skill directories are excluded from legacy parsing
+func TestParser_SkillDirectoryExclusion(t *testing.T) {
+	t.Run("files in subdirectories of skill directories are excluded", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a skill directory with SKILL.md
+		skillDir := filepath.Join(tmpDir, "my-skill")
+		patternsDir := filepath.Join(skillDir, "patterns")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(patternsDir, 0o755); err != nil {
+			t.Fatalf("failed to create patterns directory: %v", err)
+		}
+
+		skillMd := `---
+name: my-skill
+description: Test skill
+---
+# My Skill
+
+Main content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		// Create reference files that should NOT be treated as skills
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(patternsDir, "accessibility.md"), []byte("# Accessibility Patterns"), 0o644); err != nil {
+			t.Fatalf("failed to write reference file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should only have 1 skill (my-skill), not 2
+		if len(skills) != 1 {
+			t.Errorf("expected 1 skill, got %d", len(skills))
+			for _, s := range skills {
+				t.Logf("  found skill: %s at %s", s.Name, s.Path)
+			}
+		}
+
+		if skills[0].Name != "my-skill" {
+			t.Errorf("expected my-skill, got %s", skills[0].Name)
+		}
+	})
+
+	t.Run("legacy files outside skill directories are still parsed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a SKILL.md skill
+		skillDir := filepath.Join(tmpDir, "modern-skill")
+		// #nosec G301 - test directory permissions
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatalf("failed to create skill directory: %v", err)
+		}
+
+		skillMd := `---
+name: modern-skill
+description: Modern skill
+---
+Content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMd), 0o644); err != nil {
+			t.Fatalf("failed to write SKILL.md: %v", err)
+		}
+
+		// Create a legacy file at root level (NOT inside skill directory)
+		legacyContent := `---
+globs: ["*.go"]
+---
+Legacy content.`
+		// #nosec G306 - test file permissions
+		if err := os.WriteFile(filepath.Join(tmpDir, "legacy-rule.md"), []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("failed to write legacy file: %v", err)
+		}
+
+		p := New(tmpDir)
+		skills, err := p.Parse()
+		if err != nil {
+			t.Fatalf("Parse() error = %v", err)
+		}
+
+		// Should have 2 skills
+		if len(skills) != 2 {
+			t.Errorf("expected 2 skills, got %d", len(skills))
+		}
+
+		// Verify both skills are present
+		names := make(map[string]bool)
+		for _, s := range skills {
+			names[s.Name] = true
+		}
+		if !names["modern-skill"] {
+			t.Error("missing modern-skill")
+		}
+		if !names["legacy-rule"] {
+			t.Error("missing legacy-rule")
+		}
+	})
 }

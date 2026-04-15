@@ -1,0 +1,714 @@
+# SkillSync Platform Schema
+# Machine-readable encoding of platform definitions, frontmatter schemas, and mapping rules.
+# Used for parser development, validation, and cross-platform conversion.
+
+platforms:
+  claude:
+    name: Claude Code
+    config_dir: .claude
+    global_dir: ~/.claude
+    artifact_types:
+      skill:
+        location:
+          - ".claude/skills/*/SKILL.md"
+          - "~/.claude/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: false
+            description: "Display name and /slash-command trigger. Defaults to directory name."
+          description:
+            type: string
+            required: false
+            description: "What the skill does; used for automatic invocation matching."
+          allowed-tools:
+            type: "string | string[]"
+            required: false
+            aliases: ["tools"]
+            description: "Comma-separated or array of tools allowed without permission."
+          argument-hint:
+            type: string
+            required: false
+            description: "Hint shown during autocomplete for expected arguments."
+          disable-model-invocation:
+            type: bool
+            required: false
+            description: "Prevent automatic invocation by Claude."
+          user-invocable:
+            type: bool
+            required: false
+            description: "Whether skill appears in the / menu."
+          model:
+            type: string
+            required: false
+            description: "Model override when skill is active."
+          context:
+            type: string
+            required: false
+            description: "Set to 'fork' for subagent context."
+          agent:
+            type: string
+            required: false
+            description: "Subagent type when context is fork."
+          hooks:
+            type: object
+            required: false
+            description: "Hooks scoped to skill lifecycle."
+      command:
+        location:
+          - ".claude/commands/*.md"
+          - "~/.claude/commands/*.md"
+        frontmatter:
+          description:
+            type: string
+            required: false
+            description: "Human-readable description of the command."
+          allowed-tools:
+            type: "string[]"
+            required: false
+            description: "Tools allowed when command is active."
+          argument-hint:
+            type: string
+            required: false
+            description: "Hint for expected arguments."
+          model:
+            type: string
+            required: false
+            description: "Model override for this command."
+        argument_syntax:
+          - "$ARGUMENTS"
+          - "$ARGUMENTS[N]"
+          - "$N"
+      instructions:
+        location:
+          - "CLAUDE.md"
+          - ".claude/CLAUDE.md"
+          - "~/.claude/CLAUDE.md"
+        frontmatter: null  # no frontmatter
+        loading: hierarchical  # global > project, merged
+
+  codex:
+    name: Codex (OpenAI CLI)
+    config_dir: .codex
+    global_dir: ~/.codex
+    unsupported_artifact_surfaces:
+      - command
+      - agent
+    artifact_types:
+      skill:
+        location:
+          - ".codex/skills/*/SKILL.md"
+          - "~/.codex/skills/*/SKILL.md"
+          - "/etc/codex/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+            description: "Unique skill identifier."
+          description:
+            type: string
+            required: true
+            description: "Describes when the skill triggers; drives implicit matching."
+          version:
+            type: string
+            required: false
+            description: "Skill version (semver recommended)."
+          allowed-tools:
+            type: "string[]"
+            required: false
+            description: "Tool/permission allow-list."
+      instructions:
+        location:
+          - "AGENTS.md"
+          - "**/AGENTS.md"
+          - "~/.codex/AGENTS.md"
+        frontmatter: null
+        loading: concatenated  # root-to-cwd, nearest wins
+      config:
+        location:
+          - "~/.codex/config.toml"
+          - ".codex/config.toml"
+        format: toml
+        instruction_fields:
+          - developer_instructions
+          - model_instructions_file
+      prompts:
+        location:
+          - "~/.codex/prompts/*.md"
+        # User-scoped only; invoked as /prompts:<name> in the slash command menu (deprecated)
+        notes:
+          - Compatibility-only surface; SkillSync does not treat this as a first-class Codex runtime model.
+          - The current parser does not read this path by default.
+        frontmatter:
+          description:
+            type: string
+            required: false
+          argument-hint:
+            type: string
+            required: false
+        argument_syntax:
+          - "$ARGUMENTS"
+          - "$1 .. $9"
+          - "$NAME (named placeholders)"
+
+  copilot:
+    name: GitHub Copilot (VS Code)
+    config_dir: .github
+    global_dir: null  # VS Code profile (OS-dependent)
+    artifact_types:
+      repository_instructions:
+        location:
+          - ".github/copilot-instructions.md"
+        frontmatter:
+          applyTo:
+            type: string
+            required: false
+            description: "Optional glob; usually omitted for always-on."
+        loading: always_on
+      instruction:
+        location:
+          - ".github/instructions/*.instructions.md"
+        file_extension: ".instructions.md"
+        frontmatter:
+          name:
+            type: string
+            required: false
+            description: "Display name; defaults to filename."
+          description:
+            type: string
+            required: false
+            description: "Short hover text in Chat view."
+          applyTo:
+            type: string
+            required: false
+            description: "Glob pattern for automatic application."
+          excludeAgent:
+            type: string
+            required: false
+            description: "Exclude from specific agent (GitHub.com feature)."
+      prompt:
+        location:
+          - ".github/prompts/*.prompt.md"
+        file_extension: ".prompt.md"
+        frontmatter:
+          description:
+            type: string
+            required: false
+            description: "Brief explanation of prompt purpose."
+          name:
+            type: string
+            required: false
+            description: "Display name after / in chat."
+          argument-hint:
+            type: string
+            required: false
+            description: "Hint text in chat input."
+          agent:
+            type: string
+            required: false
+            description: "Agent context (ask, agent, plan, or custom)."
+          model:
+            type: string
+            required: false
+            description: "Language model to use."
+          tools:
+            type: "string[]"
+            required: false
+            description: "Available tools for this prompt."
+        argument_syntax:
+          - "${file}"
+          - "${input:var}"
+          - "#file:path"
+          - "#tool:name"
+      agent:
+        location:
+          - ".github/agents/*.agent.md"
+        file_extension: ".agent.md"
+        frontmatter:
+          name:
+            type: string
+            required: false
+            description: "Display name for the agent."
+          description:
+            type: string
+            required: true
+            description: "Purpose and capabilities."
+          tools:
+            type: "string[]"
+            required: false
+            description: "Available tools; defaults to all."
+          model:
+            type: "string | string[]"
+            required: false
+            description: "Language model(s); array provides fallback."
+          agents:
+            type: "string[]"
+            required: false
+            description: "Subagents available for delegation."
+          argument-hint:
+            type: string
+            required: false
+            description: "Guidance text in chat input."
+          user-invokable:
+            type: bool
+            required: false
+            description: "Appears in agents dropdown."
+          disable-model-invocation:
+            type: bool
+            required: false
+            description: "Prevents automatic delegation."
+          target:
+            type: string
+            required: false
+            description: "Environment: vscode or github-copilot."
+          handoffs:
+            type: "object[]"
+            required: false
+            description: "Workflow transitions between agents."
+          mcp-servers:
+            type: object
+            required: false
+            description: "MCP server configs scoped to agent."
+      mcp:
+        location:
+          - ".vscode/mcp.json"
+        format: json
+
+  cursor:
+    name: Cursor
+    config_dir: .cursor
+    global_dir: ~/.cursor
+    artifact_types:
+      skill:
+        location:
+          - ".cursor/skills/*/SKILL.md"
+          - "~/.cursor/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+            description: "Skill identifier."
+          description:
+            type: string
+            required: true
+            description: "Human-readable description."
+          tools:
+            type: "string[]"
+            required: false
+            description: "Tool permissions (Agent Skills Standard)."
+      rule:
+        location:
+          - ".cursor/rules/*.md"
+          - ".cursor/rules/*.mdc"
+          - "~/.cursor/rules/*.md"
+          - "~/.cursor/rules/*.mdc"
+        file_extensions: [".md", ".mdc"]
+        frontmatter:
+          description:
+            type: string
+            required: false
+            description: "Human-readable description of the rule."
+          globs:
+            type: "string[]"
+            required: false
+            description: "Glob patterns for file matching."
+          alwaysApply:
+            type: bool
+            required: false
+            description: "Apply to all files regardless of globs."
+      command:
+        location:
+          - ".cursor/commands/*.md"
+          - "~/.cursor/commands/*.md"
+        frontmatter: null  # not formally documented
+      modes:
+        location:
+          - "~/.cursor/modes.json"
+        format: json
+
+  gemini:
+    name: Gemini CLI
+    config_dir: .gemini
+    global_dir: ~/.gemini
+    alternate_dir: .agents  # takes precedence over .gemini for skills
+    artifact_types:
+      skill:
+        location:
+          - ".gemini/skills/*/SKILL.md"
+          - ".agents/skills/*/SKILL.md"
+          - "~/.gemini/skills/*/SKILL.md"
+          - "~/.agents/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+            description: "Unique skill identifier; should match directory name."
+          description:
+            type: string
+            required: true
+            description: "Describes purpose; drives progressive disclosure."
+        # Gemini skills have only 2 frontmatter fields (simplest schema)
+      context:
+        location:
+          - ".gemini/GEMINI.md"
+          - "~/.gemini/GEMINI.md"
+        frontmatter: null
+        loading: concatenated  # three-tier (global + workspace + JIT)
+        import_syntax: "@path"
+        configurable_filename: true  # via settings.json context.fileName
+      command:
+        location:
+          - ".gemini/commands/*.toml"
+          - "~/.gemini/commands/*.toml"
+        format: toml  # unique: TOML format, not markdown
+        schema:
+          prompt:
+            type: string
+            required: true
+            description: "Text sent to the model."
+          description:
+            type: string
+            required: false
+            description: "One-line summary for /help."
+        argument_syntax:
+          - "{{args}}"
+          - "!{shell}"
+          - "@{path}"
+        namespacing: "subdirectory -> colon (git/commit.toml -> /git:commit)"
+      extension:
+        location:
+          - "~/.gemini/extensions/*/gemini-extension.json"
+        format: json
+        schema:
+          name:
+            type: string
+            required: true
+            description: "Unique extension identifier."
+          version:
+            type: string
+            required: false
+          description:
+            type: string
+            required: false
+          excludeTools:
+            type: "string[]"
+            required: false
+            description: "Tools to block; supports argument-level granularity."
+          mcpServers:
+            type: object
+            required: false
+          settings:
+            type: "object[]"
+            required: false
+      settings:
+        location:
+          - ".gemini/settings.json"
+          - "~/.gemini/settings.json"
+        format: json
+      hooks:
+        location:
+          - ".gemini/settings.json"  # hooks key
+          - "extensions/*/hooks/hooks.json"
+        format: json
+        event_types:
+          - SessionStart
+          - BeforeAgent
+          - BeforeToolSelection
+          - BeforeTool
+          - AfterTool
+          - BeforeModel
+          - AfterModel
+          - AfterAgent
+          - SessionEnd
+          - Notification
+          - PreCompress
+      subagent:
+        location:
+          - ".gemini/agents/*.md"
+          - "~/.gemini/agents/*.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+          description:
+            type: string
+            required: true
+          kind:
+            type: string
+            required: false
+            description: "local (default) or remote"
+          tools:
+            type: "string[]"
+            required: false
+          model:
+            type: string
+            required: false
+
+  pidev:
+    name: Pi.dev
+    config_dir: .pi
+    global_dir: ~/.pi/agent
+    unsupported_artifact_surfaces:
+      - package
+      - extension
+      - theme
+      - agent
+    artifact_types:
+      skill:
+        location:
+          - ".pi/skills/*/SKILL.md"
+          - "~/.pi/agent/skills/*/SKILL.md"
+        frontmatter:
+          name:
+            type: string
+            required: true
+            description: "Unique skill identifier."
+          description:
+            type: string
+            required: true
+            description: "Purpose and trigger guidance."
+      prompt:
+        location:
+          - ".pi/prompts/*.md"
+          - "~/.pi/agent/prompts/*.md"
+        format: markdown
+        trigger: "filename stem -> /name"
+        argument_syntax:
+          - "{{name}}"
+      instructions:
+        location:
+          - "AGENTS.md"
+          - "**/AGENTS.md"
+          - "~/.pi/agent/AGENTS.md"
+        frontmatter: null
+        loading: concatenated  # global + parent directories + cwd
+      system_prompt:
+        location:
+          - ".pi/SYSTEM.md"
+          - "~/.pi/agent/SYSTEM.md"
+          - ".pi/APPEND_SYSTEM.md"
+          - "~/.pi/agent/APPEND_SYSTEM.md"
+        frontmatter: null
+        loading: replace_or_append
+      settings:
+        location:
+          - ".pi/settings.json"
+          - "~/.pi/agent/settings.json"
+        format: json
+
+# Cross-platform field mappings
+mappings:
+  field_mappings:
+    - source_field: name
+      platforms:
+        claude: "name"
+        codex: "name"
+        copilot: "name"
+        cursor: "name"
+        gemini: "name"
+        pidev: "name"
+      lossy: []
+
+    - source_field: description
+      platforms:
+        claude: "description"
+        codex: "description"
+        copilot: "description"
+        cursor: "description"
+        gemini: "description"
+        pidev: "description"
+      lossy: []
+
+    - source_field: tools
+      platforms:
+        claude: "allowed-tools"
+        codex: "allowed-tools"
+        copilot: "tools"
+        cursor: "tools"
+        gemini: null
+        pidev: null
+      lossy: ["gemini", "pidev"]
+
+    - source_field: argument-hint
+      platforms:
+        claude: "argument-hint"
+        codex: null
+        copilot: "argument-hint"
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
+
+    - source_field: model
+      platforms:
+        claude: "model"
+        codex: null
+        copilot: "model"
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
+
+    - source_field: disable-model-invocation
+      platforms:
+        claude: "disable-model-invocation"
+        codex: null
+        copilot: "disable-model-invocation"
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
+
+    - source_field: user-invocable
+      platforms:
+        claude: "user-invocable"
+        codex: null
+        copilot: "user-invokable"
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["codex", "cursor", "gemini", "pidev"]
+      note: "Claude uses 'user-invocable', Copilot uses 'user-invokable' (different spelling)"
+
+    - source_field: globs
+      platforms:
+        claude: null
+        codex: null
+        copilot: "applyTo"
+        cursor: "globs"
+        gemini: null
+        pidev: null
+      lossy: ["claude", "codex", "gemini", "pidev"]
+
+    - source_field: version
+      platforms:
+        claude: null
+        codex: "version"
+        copilot: null
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["claude", "copilot", "cursor", "gemini", "pidev"]
+
+    - source_field: target
+      platforms:
+        claude: null
+        codex: null
+        copilot: "target"
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["claude", "codex", "cursor", "gemini", "pidev"]
+
+    - source_field: handoffs
+      platforms:
+        claude: null
+        codex: null
+        copilot: "handoffs"
+        cursor: null
+        gemini: null
+        pidev: null
+      lossy: ["claude", "codex", "cursor", "gemini", "pidev"]
+
+  type_mappings:
+    skill:
+      claude: "skill"
+      codex: "skill"
+      copilot: "agent"
+      cursor: "skill"
+      gemini: "skill"
+      pidev: "skill"
+    prompt:
+      claude: "command"
+      codex: null
+      copilot: "prompt"
+      cursor: "command"
+      gemini: "command"
+      pidev: "prompt"
+    rule:
+      claude: null
+      codex: null
+      copilot: "instruction"
+      cursor: "rule"
+      gemini: null
+      pidev: null
+    instructions:
+      claude: "CLAUDE.md"
+      codex: "AGENTS.md"
+      copilot: "copilot-instructions.md"
+      cursor: "rule (alwaysApply)"
+      gemini: "GEMINI.md"
+      pidev: "AGENTS.md + SYSTEM.md"
+
+  path_defaults:
+    skills:
+      claude: [".claude/skills/", "~/.claude/skills/"]
+      codex: [".codex/skills/", "~/.codex/skills/", "/etc/codex/skills/"]
+      copilot: [".github/agents/"]
+      cursor: [".cursor/skills/", "~/.cursor/skills/"]
+      gemini: [".gemini/skills/", ".agents/skills/", "~/.gemini/skills/", "~/.agents/skills/"]
+      pidev: [".pi/skills/", "~/.pi/agent/skills/"]
+    commands:
+      claude: [".claude/commands/", "~/.claude/commands/"]
+      codex: null
+      copilot: [".github/prompts/"]
+      cursor: [".cursor/commands/", "~/.cursor/commands/"]
+      gemini: [".gemini/commands/", "~/.gemini/commands/"]
+      pidev: [".pi/prompts/", "~/.pi/agent/prompts/"]
+    instructions:
+      claude: ["CLAUDE.md", ".claude/CLAUDE.md", "~/.claude/CLAUDE.md"]
+      codex: ["AGENTS.md", "~/.codex/AGENTS.md"]
+      copilot: [".github/copilot-instructions.md"]
+      cursor: [".cursor/rules/", "~/.cursor/rules/"]
+      gemini: [".gemini/GEMINI.md", "~/.gemini/GEMINI.md"]
+      pidev: ["AGENTS.md", "~/.pi/agent/AGENTS.md", ".pi/SYSTEM.md", "~/.pi/agent/SYSTEM.md"]
+
+# Lossy conversion details
+lossy_conversions:
+  - field: argument-hint
+    supported: [claude, copilot]
+    behavior: "Preserved as metadata on unsupported platforms; no runtime effect."
+
+  - field: "$ARGUMENTS interpolation"
+    supported: [claude]
+    behavior: "Kept as literal text. Gemini uses {{args}}, Copilot uses ${input:var}, and Pi.dev uses {{name}}-style placeholders. Not auto-converted."
+
+  - field: "tools / allowed-tools"
+    supported: [claude, codex, copilot, cursor]
+    behavior: "Gemini and Pi.dev have no first-pass per-skill tool field here. Preserved in metadata."
+
+  - field: "disable-model-invocation"
+    supported: [claude, copilot]
+    behavior: "Preserved as metadata. No equivalent toggle on other platforms."
+
+  - field: "user-invocable"
+    supported: [claude, copilot]
+    behavior: "Preserved as metadata. Spelling differs (invocable vs invokable)."
+
+  - field: "globs / applyTo (pattern rules)"
+    supported: [copilot, cursor]
+    behavior: "No conversion target on Claude, Codex, Gemini, or Pi.dev. Pattern rules are a distinct concept."
+
+  - field: "model (per-skill)"
+    supported: [claude, copilot]
+    behavior: "Codex handles at config/profile level. Preserved as metadata elsewhere."
+
+  - field: "handoffs"
+    supported: [copilot]
+    behavior: "Copilot-unique feature. No cross-platform equivalent. Dropped on conversion."
+
+  - field: "target"
+    supported: [copilot]
+    behavior: "Copilot-unique (vscode/github-copilot). Dropped on conversion."
+
+  - field: "TOML command format"
+    supported: [gemini]
+    behavior: "Gemini commands use TOML; all other platforms use markdown. Requires format conversion."
+
+  - field: "plugin namespacing"
+    supported: [claude]
+    behavior: "plugin-name:skill-name format has no equivalent. Namespace prefix dropped on conversion."
+
+  - field: "SYSTEM.md / APPEND_SYSTEM.md"
+    supported: [pidev]
+    behavior: "Pi.dev-specific system-prompt replacement/append layer. Preserve as instruction metadata or re-author manually."

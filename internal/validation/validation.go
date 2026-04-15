@@ -303,11 +303,11 @@ func validateFileExtension(skill model.Skill) error {
 			}
 		}
 	case model.Codex:
-		// Codex typically uses .json
-		if ext != ".json" {
+		// Codex parser produces .md files (AGENTS.md, SKILL.md, *.md) and .toml (config.toml)
+		if ext != ".md" && ext != ".toml" {
 			return &Error{
 				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .json)", ext),
+				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
 			}
 		}
 	}
@@ -364,10 +364,21 @@ func validateWritePermission(platform model.Platform) error {
 			Err:     err,
 		}
 	}
-	_ = f.Close()
-
-	// Clean up test file
-	_ = os.Remove(testFile)
+	if err := f.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return &Error{
+			Field:   "write permission",
+			Message: fmt.Sprintf("failed to close write-test file: %s", testFile),
+			Err:     err,
+		}
+	}
+	if err := os.Remove(testFile); err != nil {
+		return &Error{
+			Field:   "write permission",
+			Message: fmt.Sprintf("failed to remove write-test file: %s", testFile),
+			Err:     err,
+		}
+	}
 
 	return nil
 }
@@ -476,20 +487,61 @@ func ValidatePath(path string, _ model.Platform) error {
 }
 
 // GetPlatformPath returns the default path for a platform.
+// It respects environment variable overrides:
+//   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
+//   - SKILLSYNC_CURSOR_PATH for Cursor
+//   - SKILLSYNC_CODEX_PATH for Codex
 func GetPlatformPath(platform model.Platform) (string, error) {
 	switch platform {
 	case model.ClaudeCode:
+		if envPath := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); envPath != "" {
+			return envPath, nil
+		}
 		return util.ClaudeCodeSkillsPath(), nil
 	case model.Cursor:
+		if envPath := os.Getenv("SKILLSYNC_CURSOR_PATH"); envPath != "" {
+			return envPath, nil
+		}
 		return util.CursorSkillsPath(), nil
 	case model.Codex:
-		// Codex is project-specific, use current directory
+		if envPath := os.Getenv("SKILLSYNC_CODEX_PATH"); envPath != "" {
+			return envPath, nil
+		}
+		// Default to user-level Codex skills directory
+		return util.CodexSkillsPath(), nil
+	case model.PiDev:
+		return util.PiDevSkillsPath(), nil
+	default:
+		return "", fmt.Errorf("unsupported platform: %s", platform)
+	}
+}
+
+// GetPlatformPathForScope returns the path for a platform and specific scope.
+// If scope is empty, defaults to user scope.
+// For user scope, it respects environment variable overrides (same as GetPlatformPath).
+func GetPlatformPathForScope(platform model.Platform, scope model.SkillScope) (string, error) {
+	// Default to user scope if not specified
+	if scope == "" {
+		scope = model.ScopeUser
+	}
+
+	switch scope {
+	case model.ScopeUser:
+		// For user scope, use GetPlatformPath which respects env var overrides
+		return GetPlatformPath(platform)
+	case model.ScopeRepo:
+		// Get repo root from current working directory
 		cwd, err := os.Getwd()
 		if err != nil {
 			return "", fmt.Errorf("cannot get current directory: %w", err)
 		}
-		return util.CodexConfigPath(cwd), nil
+		repoRoot := util.GetRepoRoot(cwd)
+		if repoRoot == "" {
+			// Not in a git repo, use current directory
+			repoRoot = cwd
+		}
+		return util.RepoSkillsPath(platform, repoRoot), nil
 	default:
-		return "", fmt.Errorf("unsupported platform: %s", platform)
+		return "", fmt.Errorf("unsupported target scope %q (only 'repo' or 'user' allowed)", scope)
 	}
 }

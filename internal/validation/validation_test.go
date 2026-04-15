@@ -153,15 +153,27 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "Codex .json",
+			name:     "Codex .md (AGENTS.md / SKILL.md)",
 			platform: model.Codex,
-			path:     "/skills/test.json",
+			path:     "/skills/AGENTS.md",
 			wantErr:  false,
 		},
 		{
-			name:     "Codex invalid extension",
+			name:     "Codex .md flat skill",
 			platform: model.Codex,
 			path:     "/skills/test.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Codex .toml (config.toml)",
+			platform: model.Codex,
+			path:     "/skills/config.toml",
+			wantErr:  false,
+		},
+		{
+			name:     "Codex invalid extension .json",
+			platform: model.Codex,
+			path:     "/skills/test.json",
 			wantErr:  true,
 		},
 	}
@@ -436,6 +448,11 @@ func TestGetPlatformPath(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "Pi.dev",
+			platform: model.PiDev,
+			wantErr:  false,
+		},
+		{
 			name:     "Invalid platform",
 			platform: model.Platform("invalid"),
 			wantErr:  true,
@@ -454,6 +471,41 @@ func TestGetPlatformPath(t *testing.T) {
 				t.Error("expected non-empty path")
 			}
 		})
+	}
+}
+
+func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_CODEX_PATH", "")
+
+	got, err := GetPlatformPath(model.Codex)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".codex", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_PiDevPrefersAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+
+	got, err := GetPlatformPath(model.PiDev)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".agents", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
 	}
 }
 
@@ -498,5 +550,181 @@ func TestValidateWritePermission(t *testing.T) {
 
 		// This would require mocking platform path
 		t.Skip("requires platform path mocking - tested via integration")
+	})
+}
+
+func TestValidatePlatform_SourceRequiresExistingPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	missing := filepath.Join(tmpDir, "missing")
+	t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", missing)
+
+	err := validatePlatform(model.ClaudeCode, "source", true)
+	if err == nil {
+		t.Error("expected error for missing source path")
+	}
+}
+
+func TestValidatePlatform_TargetAllowsMissingPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	missing := filepath.Join(tmpDir, "missing")
+	t.Setenv("SKILLSYNC_CURSOR_PATH", missing)
+
+	err := validatePlatform(model.Cursor, "target", false)
+	if err != nil {
+		t.Errorf("expected no error for missing target path, got %v", err)
+	}
+}
+
+func TestCheckConflicts_TargetFileExists(t *testing.T) {
+	targetDir := t.TempDir()
+	t.Setenv("SKILLSYNC_CURSOR_PATH", targetDir)
+
+	sourceDir := t.TempDir()
+	skillPath := filepath.Join(sourceDir, "skill.md")
+	// #nosec G306 - test file permissions are acceptable
+	if err := os.WriteFile(skillPath, []byte("content"), 0o644); err != nil {
+		t.Fatalf("failed to create source file: %v", err)
+	}
+	targetFile := filepath.Join(targetDir, "skill.md")
+	// #nosec G306 - test file permissions are acceptable
+	if err := os.WriteFile(targetFile, []byte("existing"), 0o644); err != nil {
+		t.Fatalf("failed to create target file: %v", err)
+	}
+
+	skills := []model.Skill{
+		{
+			Name:     "skill",
+			Platform: model.ClaudeCode,
+			Path:     skillPath,
+		},
+	}
+
+	err := checkConflicts(model.ClaudeCode, model.Cursor, skills)
+	if err == nil {
+		t.Error("expected conflict error when target file exists")
+	}
+}
+
+func TestValidateWritePermission_WithEnvOverrides(t *testing.T) {
+	t.Run("writable directory", func(t *testing.T) {
+		writable := t.TempDir()
+		t.Setenv("SKILLSYNC_CURSOR_PATH", writable)
+
+		if err := validateWritePermission(model.Cursor); err != nil {
+			t.Errorf("expected writable dir to pass, got %v", err)
+		}
+	})
+
+	t.Run("read-only directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		readOnlyDir := filepath.Join(tmpDir, "readonly")
+		// #nosec G301 - test directory permissions are acceptable
+		if err := os.MkdirAll(readOnlyDir, 0o755); err != nil {
+			t.Fatalf("failed to create read-only dir: %v", err)
+		}
+		// #nosec G302 - test directory permissions are acceptable
+		if err := os.Chmod(readOnlyDir, 0o500); err != nil {
+			t.Fatalf("failed to set read-only permissions: %v", err)
+		}
+		t.Setenv("SKILLSYNC_CURSOR_PATH", readOnlyDir)
+
+		if err := validateWritePermission(model.Cursor); err == nil {
+			t.Error("expected error for read-only dir")
+		}
+	})
+}
+
+func TestGetPlatformPathForScope(t *testing.T) {
+	t.Run("user scope uses env override", func(t *testing.T) {
+		path := t.TempDir()
+		t.Setenv("SKILLSYNC_CLAUDE_CODE_PATH", path)
+
+		got, err := GetPlatformPathForScope(model.ClaudeCode, model.ScopeUser)
+		if err != nil {
+			t.Fatalf("GetPlatformPathForScope() error = %v", err)
+		}
+		if got != path {
+			t.Errorf("expected %q, got %q", path, got)
+		}
+	})
+
+	t.Run("repo scope uses repo root", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		// #nosec G301 - test directory permissions are acceptable
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+			t.Fatalf("failed to create repo root: %v", err)
+		}
+		subDir := filepath.Join(repoRoot, "subdir")
+		// #nosec G301 - test directory permissions are acceptable
+		if err := os.MkdirAll(subDir, 0o755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = os.Chdir(cwd)
+		})
+		if err := os.Chdir(subDir); err != nil {
+			t.Fatalf("failed to chdir: %v", err)
+		}
+
+		got, err := GetPlatformPathForScope(model.ClaudeCode, model.ScopeRepo)
+		if err != nil {
+			t.Fatalf("GetPlatformPathForScope() error = %v", err)
+		}
+		resolvedRoot, err := filepath.EvalSymlinks(repoRoot)
+		if err != nil {
+			t.Fatalf("failed to resolve repo root: %v", err)
+		}
+		expected := filepath.Join(resolvedRoot, ".claude", "skills")
+		if filepath.Clean(got) != expected {
+			t.Errorf("expected %q, got %q", expected, got)
+		}
+	})
+
+	t.Run("Pi.dev repo scope uses preferred project root", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+			t.Fatalf("failed to create .git dir: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".agents", "skills"), 0o755); err != nil {
+			t.Fatalf("failed to create .agents skills: %v", err)
+		}
+		subDir := filepath.Join(repoRoot, "pkg")
+		if err := os.MkdirAll(subDir, 0o755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chdir(cwd) })
+		if err := os.Chdir(subDir); err != nil {
+			t.Fatalf("failed to chdir: %v", err)
+		}
+
+		got, err := GetPlatformPathForScope(model.PiDev, model.ScopeRepo)
+		if err != nil {
+			t.Fatalf("GetPlatformPathForScope() error = %v", err)
+		}
+		resolvedRoot, err := filepath.EvalSymlinks(repoRoot)
+		if err != nil {
+			t.Fatalf("failed to resolve repo root: %v", err)
+		}
+		expected := filepath.Join(resolvedRoot, ".agents", "skills")
+		if filepath.Clean(got) != expected {
+			t.Errorf("expected %q, got %q", expected, got)
+		}
+	})
+
+	t.Run("invalid scope returns error", func(t *testing.T) {
+		_, err := GetPlatformPathForScope(model.ClaudeCode, model.SkillScope("invalid"))
+		if err == nil {
+			t.Error("expected error for invalid scope")
+		}
 	})
 }

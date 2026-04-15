@@ -1,0 +1,103 @@
+// Package tiered provides factory functions for creating tiered parsers.
+package tiered
+
+import (
+	"os"
+
+	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/parser/claude"
+	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/copilot"
+	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/pidev"
+)
+
+// claudePluginParserFor returns the CachePluginsParser for use as the plugin-scope
+// provider in a ClaudeCode tiered parser. Returns nil for all other platforms.
+func claudePluginParserFor(platform model.Platform) parser.Parser {
+	if platform == model.ClaudeCode {
+		return claude.NewCachePluginsParser("")
+	}
+	return nil
+}
+
+// ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
+func ClaudeCodeParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return claude.New(basePath)
+	}
+}
+
+// CursorParserFactory returns a ParserFactory for Cursor.
+func CursorParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return cursor.New(basePath)
+	}
+}
+
+// CodexParserFactory returns a ParserFactory for Codex.
+func CodexParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return codex.New(basePath)
+	}
+}
+
+// CopilotParserFactory returns a ParserFactory for GitHub Copilot.
+func CopilotParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return copilot.New(basePath)
+	}
+}
+
+// PiDevParserFactory returns a ParserFactory for Pi.dev.
+func PiDevParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return pidev.New(basePath)
+	}
+}
+
+// ParserFactoryFor returns the appropriate ParserFactory for a platform.
+func ParserFactoryFor(platform model.Platform) ParserFactory {
+	switch platform {
+	case model.ClaudeCode:
+		return ClaudeCodeParserFactory()
+	case model.Cursor:
+		return CursorParserFactory()
+	case model.Codex:
+		return CodexParserFactory()
+	case model.Copilot:
+		return CopilotParserFactory()
+	case model.PiDev:
+		return PiDevParserFactory()
+	default:
+		// Return a factory that creates Claude parsers as a fallback
+		return ClaudeCodeParserFactory()
+	}
+}
+
+// NewForPlatform creates a TieredParser for the given platform with sensible defaults.
+// It uses the current working directory for repo-level discovery.
+func NewForPlatform(platform model.Platform) (*Parser, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	return New(Config{
+		Platform:      platform,
+		WorkingDir:    cwd,
+		ParserFactory: ParserFactoryFor(platform),
+		PluginParser:  claudePluginParserFor(platform),
+	}), nil
+}
+
+// NewForPlatformWithDir creates a TieredParser for the given platform and working directory.
+func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
+	return New(Config{
+		Platform:      platform,
+		WorkingDir:    workingDir,
+		ParserFactory: ParserFactoryFor(platform),
+		PluginParser:  claudePluginParserFor(platform),
+	})
+}

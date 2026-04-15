@@ -1,0 +1,8 @@
+---
+description: Implementing new platform parsers
+---
+# Parser Development
+
+Primary guidance lives in [docs/parser.md](mdc:docs/parser.md). Keep that
+document updated when adding new platforms, wiring parsers, or changing
+fixture expectations.
