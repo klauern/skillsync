@@ -44,6 +44,7 @@ func TestValidateSourceTarget_Valid(t *testing.T) {
 	// Mock platform paths - we'll validate paths exist
 	opts := DefaultOptions()
 	opts.CheckConflicts = false // Skip conflict check for this test
+	opts.RequireWritePermission = false
 
 	// For now, test with paths that exist
 	sourcePlatform := model.ClaudeCode
@@ -175,6 +176,18 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			platform: model.Codex,
 			path:     "/skills/test.json",
 			wantErr:  true,
+		},
+		{
+			name:     "Copilot .md",
+			platform: model.Copilot,
+			path:     "/skills/copilot-instructions.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Copilot .json",
+			platform: model.Copilot,
+			path:     "/skills/mcp.json",
+			wantErr:  false,
 		},
 	}
 
@@ -448,6 +461,11 @@ func TestGetPlatformPath(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "Copilot",
+			platform: model.Copilot,
+			wantErr:  false,
+		},
+		{
 			name:     "Pi.dev",
 			platform: model.PiDev,
 			wantErr:  false,
@@ -487,6 +505,22 @@ func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
 	expected := filepath.Join(home, ".codex", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_CopilotDefaultsToGitHubRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_COPILOT_PATH", "")
+
+	got, err := GetPlatformPath(model.Copilot)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".github")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Copilot) = %q, want %q", got, expected)
 	}
 }
 

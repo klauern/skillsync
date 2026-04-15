@@ -36,13 +36,6 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 			},
 			want: 2,
 		},
-		"copilot repo root": {
-			parse: func() (int, error) {
-				skills, err := copilot.New(filepath.Join(fixtureRoot, "copilot")).Parse()
-				return len(skills), err
-			},
-			want: 5,
-		},
 		"codex": {
 			parse: func() (int, error) {
 				skills, err := codex.New(filepath.Join(fixtureRoot, "codex")).Parse()
@@ -50,12 +43,12 @@ func TestFixtureDiscoveryCountsByPlatform(t *testing.T) {
 			},
 			want: 6,
 		},
-		"copilot github root": {
+		"copilot": {
 			parse: func() (int, error) {
 				skills, err := copilot.New(filepath.Join(fixtureRoot, "copilot", ".github")).Parse()
 				return len(skills), err
 			},
-			want: 5,
+			want: 6,
 		},
 		"pidev": {
 			parse: func() (int, error) {
