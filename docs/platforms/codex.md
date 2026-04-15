@@ -24,6 +24,20 @@ frontmatter field drives matching. Codex also has a **custom prompts** system
 at `~/.codex/prompts/*.md` (invoked as `/prompts:<name>`), but this feature is
 **deprecated** in favor of Skills.
 
+## Portability Stance
+
+When this repo talks about Codex portability, the intended meaning is:
+
+- **Portable**: `SKILL.md` skills and their supporting directories.
+- **Partially portable**: `AGENTS.md` content, `config.toml` instruction text,
+  and deprecated custom prompt content.
+- **Non-portable**: any claim that Codex has a first-class file-backed command
+  or subagent model equivalent to Claude commands or Claude agents.
+
+That distinction matters because SkillSync may preserve markdown and metadata
+without preserving slash-trigger behavior, prompt interpolation rules, or
+platform-native routing semantics.
+
 ## Directory Structure
 
 ```text
@@ -148,6 +162,10 @@ instead.
 SkillSync documents this surface for compatibility only. It does not imply a
 Codex-native command model equivalent to Claude slash commands, and it does not
 introduce a separate first-class agent artifact type.
+
+Treat these prompts as **partially portable content only**. They are useful as
+transport references, but they should not be described elsewhere in the repo as
+behavior-preserving command targets.
 
 #### Frontmatter Schema
 

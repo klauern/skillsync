@@ -42,8 +42,12 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 		logging.Path(transformed.Path),
 	)
 
+	// Transform metadata before content so target-specific frontmatter sees the
+	// filtered/mapped metadata shape.
+	transformed.Metadata = t.transformMetadata(skill, targetPlatform)
+
 	// Transform content based on target platform requirements
-	content, err := t.transformContent(skill, targetPlatform, transformed.Path)
+	content, err := t.transformContent(transformed, targetPlatform, transformed.Path)
 	if err != nil {
 		logging.Warn("content transformation failed",
 			logging.Skill(skill.Name),
@@ -52,9 +56,6 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 		return model.Skill{}, fmt.Errorf("failed to transform content: %w", err)
 	}
 	transformed.Content = content
-
-	// Transform metadata for platform-specific fields
-	transformed.Metadata = t.transformMetadata(skill, targetPlatform)
 
 	logging.Debug("skill transformation completed",
 		logging.Skill(skill.Name),
@@ -194,6 +195,9 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if len(skill.Tools) > 0 {
 			fm["tools"] = skill.Tools
 		}
+		if skill.DisableModelInvocation {
+			fm["disable-model-invocation"] = true
+		}
 
 	case model.Cursor:
 		// Cursor has specific fields like globs and alwaysApply
@@ -203,12 +207,20 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
 			fm["alwaysApply"] = alwaysApply
 		}
+		if skill.Type == model.SkillTypeSkill && len(skill.Tools) > 0 {
+			fm["tools"] = skill.Tools
+		}
+
+	case model.Codex:
+		if len(skill.Tools) > 0 {
+			fm["allowed-tools"] = skill.Tools
+		}
 	}
 
 	// Include other metadata that's platform-agnostic
 	for key, val := range skill.Metadata {
 		// Skip fields we've already handled
-		if key == "globs" || key == "alwaysApply" {
+		if key == "globs" || key == "alwaysApply" || key == "disable-model-invocation" || key == "allowed-tools" {
 			continue
 		}
 		// Include if not already set
@@ -241,6 +253,26 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 
 	// Copy existing metadata
 	maps.Copy(metadata, skill.Metadata)
+
+	if target == model.Cursor {
+		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
+			metadata["globs"] = applyTo
+			delete(metadata, "applyTo")
+		}
+	}
+
+	if target != model.ClaudeCode && skill.DisableModelInvocation {
+		metadata["disable-model-invocation"] = "true"
+	}
+
+	if target == model.PiDev && len(skill.Tools) > 0 {
+		metadata["allowed-tools"] = strings.Join(skill.Tools, ", ")
+	}
+
+	// Copilot-only agent orchestration fields do not have portable targets.
+	delete(metadata, "handoffs")
+	delete(metadata, "target")
+	delete(metadata, "mcp-servers")
 
 	// Add platform-specific transformations
 	switch target {

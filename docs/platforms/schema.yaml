@@ -331,6 +331,23 @@ platforms:
     config_dir: .gemini
     global_dir: ~/.gemini
     alternate_dir: .agents  # takes precedence over .gemini for skills
+    first_pass_sync:
+      supported_artifact_types:
+        - skill
+        - context
+        - command
+      metadata_only_surfaces:
+        - extension.name
+        - extension.version
+        - extension.description
+        - extension.excludeTools
+        - extension.settings
+      unsupported_runtime_surfaces:
+        - package
+        - theme
+        - extension.mcpServers
+        - hooks
+        - subagent
     artifact_types:
       skill:
         location:
@@ -676,6 +693,10 @@ lossy_conversions:
   - field: "tools / allowed-tools"
     supported: [claude, codex, copilot, cursor]
     behavior: "Gemini and Pi.dev have no first-pass per-skill tool field here. Preserved in metadata."
+
+  - field: "Gemini extension runtime surfaces"
+    supported: [gemini]
+    behavior: "Only skills, commands, and context are first-pass syncable. Manifest/runtime fields stay metadata-only or out of scope."
 
   - field: "disable-model-invocation"
     supported: [claude, copilot]

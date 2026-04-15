@@ -126,6 +126,8 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 - Sync strategies: `docs/strategies.md`
 - Portability assessment: `docs/platforms/portability-assessment.md`
 - Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
+- Implemented platform support today: Claude Code, Cursor, Codex
+- Reference-only platform docs today: Copilot, Gemini, Pi.dev
 - Claude Code reference: `docs/platforms/claude.md`
 - Codex reference: `docs/platforms/codex.md`
 - Cursor reference: `docs/platforms/cursor.md`
