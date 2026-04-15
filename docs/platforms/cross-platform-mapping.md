@@ -19,6 +19,19 @@ What each platform calls equivalent concepts:
 | Agent definitions | `.claude/agents/*.md` | -- | `.github/agents/*.agent.md` | Modes (`modes.json`) | `.gemini/agents/*.md` | -- |
 | MCP config | `.claude/settings.json` | `config.toml` (`mcp_servers`) | `.vscode/mcp.json` | Mode/settings | `settings.json` (`mcpServers`) | -- |
 
+## Portability Stance By Artifact Type
+
+This table is the shortest way to read the repo's portability contract before
+digging into the full mapping details below.
+
+| Artifact type | Portability class | Why |
+|---|---|---|
+| Skills (`SKILL.md`) | Portable | Shared Agent Skills shape and supporting directory layout survive across platforms. |
+| Commands / prompts | Partially portable | Markdown content survives, but trigger syntax, arguments, and runtime controls diverge. |
+| Instructions (`CLAUDE.md`, `AGENTS.md`, system-prompt layers) | Partially portable | Persistent guidance transfers, but loading order and prompt-construction semantics do not. |
+| Agents / subagents / modes | Non-portable | Platform runtimes do not expose a common agent-definition file model. |
+| Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
+
 ## Artifact Type Equivalences
 
 Detailed mapping of which artifact types serve the same purpose across platforms.
@@ -53,6 +66,10 @@ Modular instruction packages that the AI can invoke based on task relevance.
 
 User-invocable prompt templates triggered by a name or filename.
 
+These should be read as **partially portable prompt content**, not as a claim
+that one platform's slash command becomes a native runtime equivalent on
+another platform.
+
 | Platform | Location | Format | Arguments | Trigger |
 |---|---|---|---|---|
 | Claude | `.claude/commands/*.md` | Markdown + frontmatter | `$ARGUMENTS`, `$1`, `$ARGUMENTS[N]` | Filename stem -> `/name` |
@@ -65,6 +82,10 @@ User-invocable prompt templates triggered by a name or filename.
 ### Pattern-Based Rules
 
 Instructions that activate conditionally based on file patterns.
+
+These are **non-portable as runtime behavior** outside the platforms that natively
+support them. They may be restated as prose, but they do not map 1:1 onto
+skills or always-on instruction files.
 
 | Platform | Location | Pattern Field | Description |
 |---|---|---|---|

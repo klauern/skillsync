@@ -50,6 +50,24 @@ with this assessment.
 - The structured portability snapshot records these claims explicitly so they
   can be checked mechanically later instead of being inferred only from prose.
 
+## Portability Classes Used In This Repo
+
+SkillSync uses three portability classes in the docs and transport model:
+
+| Class | Meaning | Typical examples |
+|---|---|---|
+| Portable | The destination can usually keep both the content shape and the core author intent with limited adaptation. | `SKILL.md` skill body, shared skill directories |
+| Partially portable | The content can move, but runtime behavior, invocation, precedence, or interpolation semantics change. | Commands/prompts, `AGENTS.md`/`CLAUDE.md`, tool restrictions |
+| Non-portable | The source behavior depends on a platform-specific runtime surface that has no direct equivalent. | Claude subagents, plugin/package provenance, Pi.dev system-prompt replacement semantics |
+
+The rest of this note uses those labels deliberately:
+
+- **Portable** means "safe to move as a first-pass artifact."
+- **Partially portable** means "safe to transport, unsafe to claim runtime
+  parity."
+- **Non-portable** means "preserve as metadata, flatten into another artifact,
+  or re-author manually."
+
 ## Artifact Portability Matrix
 
 | Artifact | Claude Code | Codex CLI | Pi.dev | Portability |
