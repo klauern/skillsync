@@ -253,11 +253,11 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_CODEX_SKILLS_PATHS"); v != "" {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
+	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_SKILLS_PATHS", "SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
+		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
+	}
 	if v := os.Getenv("SKILLSYNC_COPILOT_SKILLS_PATHS"); v != "" {
 		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
-	}
-	if v := os.Getenv("SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
-		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
 	}
 
 	// Deprecated: single path environment variables (for backward compatibility)
@@ -270,11 +270,11 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_CODEX_PATH"); v != "" {
 		c.Platforms.Codex.SkillsPath = v
 	}
+	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"); v != "" {
+		c.Platforms.PiDev.SkillsPath = v
+	}
 	if v := os.Getenv("SKILLSYNC_COPILOT_PATH"); v != "" {
 		c.Platforms.Copilot.SkillsPath = v
-	}
-	if v := os.Getenv("SKILLSYNC_PIDEV_PATH"); v != "" {
-		c.Platforms.PiDev.SkillsPath = v
 	}
 
 	// Similarity settings
@@ -306,6 +306,15 @@ func splitPaths(s string) []string {
 		}
 	}
 	return result
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // GetStrategy returns the sync strategy from config, validating it.

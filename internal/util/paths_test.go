@@ -72,6 +72,22 @@ func TestCodexSkillsPath(t *testing.T) {
 	}
 }
 
+func TestPiDevProjectSkillsPath(t *testing.T) {
+	projectDir := "/test/project"
+	expected := "/test/project/.pi/skills"
+	if got := PiDevProjectSkillsPath(projectDir); got != expected {
+		t.Errorf("PiDevProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
+	}
+}
+
+func TestPiDevSkillsPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	if got := PiDevSkillsPath(); got != expected {
+		t.Errorf("PiDevSkillsPath() = %q, want %q", got, expected)
+	}
+}
+
 func TestGetRepoRoot(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -173,6 +189,15 @@ func TestGetTieredPaths(t *testing.T) {
 			checkScope: model.ScopeSystem,
 			wantPaths:  true,
 		},
+		{
+			name: "pi.dev with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.PiDev,
+			},
+			checkScope: model.ScopeRepo,
+			wantPaths:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -258,8 +283,11 @@ func TestPlatformDirName(t *testing.T) {
 func TestPlatformSkillsPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
 	if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", "skills"), 0o750); err != nil {
-		t.Fatalf("failed to create pi.dev skills dir: %v", err)
+		t.Fatalf("failed to create pi.dev fallback skills dir: %v", err)
 	}
 
 	tests := []struct {
@@ -270,7 +298,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".codex", "skills")},
 		{model.Copilot, filepath.Join(home, ".github")},
-		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
+		{model.PiDev, filepath.Join(home, ".agents", "skills")},
 	}
 
 	for _, tt := range tests {

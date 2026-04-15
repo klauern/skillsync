@@ -180,14 +180,26 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 		{
 			name:     "Copilot .md",
 			platform: model.Copilot,
-			path:     "/skills/copilot-instructions.md",
+			path:     "/skills/test.md",
 			wantErr:  false,
 		},
 		{
-			name:     "Copilot .json",
+			name:     "Copilot invalid extension .txt",
 			platform: model.Copilot,
-			path:     "/skills/mcp.json",
+			path:     "/skills/test.txt",
+			wantErr:  true,
+		},
+		{
+			name:     "Pi.dev .md",
+			platform: model.PiDev,
+			path:     "/skills/SKILL.md",
 			wantErr:  false,
+		},
+		{
+			name:     "Pi.dev invalid extension .json",
+			platform: model.PiDev,
+			path:     "/skills/test.json",
+			wantErr:  true,
 		},
 	}
 
@@ -508,6 +520,23 @@ func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
 	}
 }
 
+func TestGetPlatformPath_PiDevDefaultsToUserSkills(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_PI_DEV_PATH", "")
+	t.Setenv("SKILLSYNC_PIDEV_PATH", "")
+
+	got, err := GetPlatformPath(model.PiDev)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
+	}
+}
+
 func TestGetPlatformPath_CopilotDefaultsToGitHubRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -531,16 +560,44 @@ func TestGetPlatformPath_PiDevPrefersAgents(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
 		t.Fatalf("failed to create .agents skills dir: %v", err)
 	}
-
+	expected := filepath.Join(home, ".agents", "skills")
 	got, err := GetPlatformPath(model.PiDev)
 	if err != nil {
 		t.Fatalf("GetPlatformPath() error = %v", err)
 	}
-
-	expected := filepath.Join(home, ".agents", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
 	}
+}
+
+func TestGetPlatformPath_PiDevEnvOverrides(t *testing.T) {
+	t.Run("legacy pi_dev env", func(t *testing.T) {
+		override := t.TempDir()
+		t.Setenv("SKILLSYNC_PI_DEV_PATH", override)
+		t.Setenv("SKILLSYNC_PIDEV_PATH", "")
+
+		got, err := GetPlatformPath(model.PiDev)
+		if err != nil {
+			t.Fatalf("GetPlatformPath() error = %v", err)
+		}
+		if got != override {
+			t.Fatalf("GetPlatformPath(PiDev) = %q, want %q", got, override)
+		}
+	})
+
+	t.Run("normalized pidev env", func(t *testing.T) {
+		override := t.TempDir()
+		t.Setenv("SKILLSYNC_PI_DEV_PATH", "")
+		t.Setenv("SKILLSYNC_PIDEV_PATH", override)
+
+		got, err := GetPlatformPath(model.PiDev)
+		if err != nil {
+			t.Fatalf("GetPlatformPath() error = %v", err)
+		}
+		if got != override {
+			t.Fatalf("GetPlatformPath(PiDev) = %q, want %q", got, override)
+		}
+	})
 }
 
 func TestValidationError_Error(t *testing.T) {

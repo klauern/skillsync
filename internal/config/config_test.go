@@ -102,6 +102,18 @@ func TestEnvironmentOverrides(t *testing.T) {
 			envValue: "/custom/claude/path",
 			check:    func(c *Config) bool { return c.Platforms.ClaudeCode.SkillsPath == "/custom/claude/path" },
 		},
+		{
+			name:     "copilot path",
+			envKey:   "SKILLSYNC_COPILOT_PATH",
+			envValue: "/custom/copilot/path",
+			check:    func(c *Config) bool { return c.Platforms.Copilot.SkillsPath == "/custom/copilot/path" },
+		},
+		{
+			name:     "pi.dev path alias",
+			envKey:   "SKILLSYNC_PIDEV_PATH",
+			envValue: "/custom/pi/path",
+			check:    func(c *Config) bool { return c.Platforms.PiDev.SkillsPath == "/custom/pi/path" },
+		},
 	}
 
 	for _, tt := range tests {
@@ -438,6 +450,16 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 					c.Platforms.Codex.SkillsPaths[1] == "/opt/codex/skills"
 			},
 		},
+		{
+			name:     "pi.dev skills paths",
+			envKey:   "SKILLSYNC_PI_DEV_SKILLS_PATHS",
+			envValue: ".pi/skills:~/.pi/agent/skills",
+			check: func(c *Config) bool {
+				return len(c.Platforms.PiDev.SkillsPaths) == 2 &&
+					c.Platforms.PiDev.SkillsPaths[0] == ".pi/skills" &&
+					c.Platforms.PiDev.SkillsPaths[1] == "~/.pi/agent/skills"
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -511,6 +533,23 @@ func TestDefaultSkillsPaths(t *testing.T) {
 	}
 	if cfg.Platforms.Copilot.SkillsPaths[0] != ".github" {
 		t.Errorf("expected Copilot path to be '.github', got %q", cfg.Platforms.Copilot.SkillsPaths[0])
+	}
+
+	// Check Pi.dev defaults (preferred .agents roots with .pi fallbacks)
+	if len(cfg.Platforms.PiDev.SkillsPaths) != 4 {
+		t.Errorf("expected 4 Pi.dev skills paths, got %d", len(cfg.Platforms.PiDev.SkillsPaths))
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[0] != ".agents/skills" {
+		t.Errorf("expected first Pi.dev path to be '.agents/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[0])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[1] != ".pi/skills" {
+		t.Errorf("expected second Pi.dev path to be '.pi/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[1])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[2] != "~/.agents/skills" {
+		t.Errorf("expected third Pi.dev path to be '~/.agents/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[2])
+	}
+	if cfg.Platforms.PiDev.SkillsPaths[3] != "~/.pi/agent/skills" {
+		t.Errorf("expected fourth Pi.dev path to be '~/.pi/agent/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[3])
 	}
 }
 

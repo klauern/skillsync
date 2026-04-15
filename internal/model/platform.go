@@ -22,7 +22,7 @@ const (
 	PiDev Platform = "pi.dev"
 )
 
-// IsValid returns true if the platform is recognized
+// IsValid returns true if the platform is recognized.
 func (p Platform) IsValid() bool {
 	switch p {
 	case ClaudeCode, Cursor, Codex, Copilot, PiDev:
@@ -33,7 +33,6 @@ func (p Platform) IsValid() bool {
 }
 
 // ConfigDir returns the platform's config directory name (without leading dot).
-// Returns "claude" for ClaudeCode, "cursor" for Cursor, "codex" for Codex.
 func (p Platform) ConfigDir() string {
 	switch p {
 	case ClaudeCode:
@@ -52,7 +51,6 @@ func (p Platform) ConfigDir() string {
 }
 
 // Short returns an abbreviated platform name for compact display.
-// Returns "cc" for ClaudeCode, "cur" for Cursor, "cdx" for Codex.
 func (p Platform) Short() string {
 	switch p {
 	case ClaudeCode:
@@ -81,13 +79,13 @@ func AllPlatforms() []Platform {
 func ParsePlatform(s string) (Platform, error) {
 	normalized := strings.ToLower(strings.TrimSpace(s))
 
-	// Try exact match first
+	// Try exact match first.
 	p := Platform(normalized)
 	if p.IsValid() {
 		return p, nil
 	}
 
-	// Try normalized formats
+	// Try normalized formats.
 	switch normalized {
 	case "claudecode", "claude":
 		return ClaudeCode, nil

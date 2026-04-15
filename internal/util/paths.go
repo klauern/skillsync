@@ -121,6 +121,11 @@ func CodexSkillsPath() string {
 	return filepath.Join(HomeDir(), ".codex", "skills")
 }
 
+// PiDevProjectSkillsPath returns the Pi.dev skills directory for a project.
+func PiDevProjectSkillsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".pi", "skills")
+}
+
 // SkillsyncConfigPath returns the skillsync configuration directory
 // Supports SKILLSYNC_HOME environment variable override
 func SkillsyncConfigPath() string {

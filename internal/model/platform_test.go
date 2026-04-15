@@ -20,8 +20,7 @@ func TestPlatformValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := tt.platform.IsValid()
 			if got != tt.valid {
-				t.Errorf("Platform(%q).IsValid() = %v, want %v",
-					tt.platform, got, tt.valid)
+				t.Errorf("Platform(%q).IsValid() = %v, want %v", tt.platform, got, tt.valid)
 			}
 		})
 	}
@@ -58,8 +57,7 @@ func TestPlatformShort(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := tt.platform.Short()
 			if got != tt.want {
-				t.Errorf("Platform(%q).Short() = %q, want %q",
-					tt.platform, got, tt.want)
+				t.Errorf("Platform(%q).Short() = %q, want %q", tt.platform, got, tt.want)
 			}
 		})
 	}
@@ -83,8 +81,7 @@ func TestPlatformConfigDir(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := tt.platform.ConfigDir()
 			if got != tt.want {
-				t.Errorf("Platform(%q).ConfigDir() = %q, want %q",
-					tt.platform, got, tt.want)
+				t.Errorf("Platform(%q).ConfigDir() = %q, want %q", tt.platform, got, tt.want)
 			}
 		})
 	}
@@ -104,6 +101,7 @@ func TestParsePlatform(t *testing.T) {
 		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
 		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
+		"pi-dev alias":          {input: "pi-dev", want: PiDev, wantErr: false},
 		"pidev normalized":      {input: "pidev", want: PiDev, wantErr: false},
 		"uppercase normalized":  {input: "CURSOR", want: Cursor, wantErr: false},
 		"mixed case":            {input: "ClaudeCode", want: ClaudeCode, wantErr: false},
