@@ -330,6 +330,21 @@ func isValidNameChar(r rune) bool {
 		r == '-' || r == '_' || r == ':' || r == '/'
 }
 
+// IsCommandFile reports whether path is a Claude Code command file.
+// Command files live inside a directory segment named "commands" and have a .md extension.
+func IsCommandFile(path string) bool {
+	if !strings.EqualFold(filepath.Ext(path), ".md") {
+		return false
+	}
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	for _, p := range parts {
+		if strings.EqualFold(p, "commands") {
+			return true
+		}
+	}
+	return false
+}
+
 // NormalizeContent trims excessive whitespace from content.
 func NormalizeContent(content string) string {
 	// Trim leading/trailing whitespace
