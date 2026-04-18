@@ -62,3 +62,7 @@ sync-branch: "beads-sync"
 # - github.repo
 
 dolt.shared-server: true
+
+federation.remote: "https://github.com/klauern/skillsync.git"
+
+dolt.auto-push: false
