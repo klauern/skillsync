@@ -225,7 +225,7 @@ lossy_field_mappings:
       - cursor
       - gemini
       - pidev
-    behavior: Claude-specific lifecycle hooks; do not treat as portable
+    behavior: preserve the Claude hook object as metadata only; lifecycle timing and runtime behavior remain Claude-specific
   - field: applyTo
     supported_by:
       - copilot
