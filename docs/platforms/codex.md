@@ -6,6 +6,8 @@
 
 Codex is OpenAI's CLI-based coding agent. It stores skills, instructions, and
 configuration under the `.codex/` (project) and `~/.codex/` (user) directories.
+SkillSync also treats `~/.agents/skills` as an alternate user-level Codex skill
+root when both locations exist, with `.agents` preferred for local dedupe.
 Skills follow the Agent Skills Standard (`SKILL.md` in a named subdirectory),
 while broader instructions are delivered through hierarchical `AGENTS.md` files
 and `config.toml` settings.
@@ -185,6 +187,37 @@ behavior-preserving command targets.
 
 The SkillSync Codex parser does not currently parse this path.
 
+### Hooks (`hooks.json`)
+
+Codex hook events are runtime behavior, not portable file content. SkillSync
+documents them so the portability model can preserve lifecycle boundaries while
+still distinguishing behavior from markdown or frontmatter that can move across
+platforms.
+
+The Codex hook event set tracked by SkillSync is:
+
+| Event | Scope | Meaning | Portability |
+|---|---|---|---|
+| `SessionStart` | Thread | Session begins, resumes, or clears. | Partially portable as lifecycle metadata only. |
+| `PreToolUse` | Turn | Before a tool runs. | Non-portable runtime behavior. |
+| `PostToolUse` | Turn | After a tool runs. | Non-portable runtime behavior. |
+| `UserPromptSubmit` | Turn | User prompt submission boundary. | Non-portable runtime behavior. |
+| `Stop` | Turn | Session stop / cleanup boundary. | Non-portable runtime behavior. |
+
+Notes:
+
+- `SessionStart` is the only Codex hook event with a thread boundary. Preserve
+  it as metadata when you want to keep lifecycle intent, but do not treat it as
+  a portable file-backed feature.
+- `UserPromptSubmit` and `Stop` are turn-scoped control-plane events. Their
+  semantics are runtime-only and do not map 1:1 onto other platforms' files or
+  prompts.
+- `PreToolUse` and `PostToolUse` are tool lifecycle hooks. They are useful for
+  policy checks and instrumentation, but the behavior itself remains
+  platform-specific.
+- Codex hook configuration lives in `hooks.json` at the config layer, separate
+  from `AGENTS.md`, skills, and deprecated prompt files.
+
 ## Scope Levels
 
 Codex searches for skills across multiple scope levels, highest precedence
@@ -192,10 +225,10 @@ first:
 
 | Priority | Scope | Path | Description |
 |---|---|---|---|
-| 1 | Project (cwd) | `.agents/skills` / `.codex/skills` | Current working directory skills. |
-| 2 | Project (parent) | `$CWD/../.agents/skills` | Parent directory skills (nested repos). |
-| 3 | Project (root) | `$REPO_ROOT/.agents/skills` | Repository root skills. |
-| 4 | User | `~/.codex/skills` | User-wide skills. |
+| 1 | Project (cwd) | `.codex/skills` | Current working directory skills. |
+| 2 | Project (parent) | `$CWD/../.codex/skills` | Parent directory skills (nested repos). |
+| 3 | Project (root) | `$REPO_ROOT/.codex/skills` | Repository root skills. |
+| 4 | User | `~/.agents/skills` / `~/.codex/skills` | User-wide skills; `.agents` wins when both exist. |
 | 5 | Admin | `/etc/codex/skills` | System-administered skills. |
 | 6 | System | (bundled) | Skills shipped with Codex. |
 
@@ -206,7 +239,9 @@ rather than merging.
 
 **Skills**: Searched in scope order (project > user > admin > system). Custom
 directories can be configured via the config system. Name collisions across
-scopes surface both versions rather than silently shadowing.
+scopes surface both versions rather than silently shadowing. When both
+`~/.agents/skills` and `~/.codex/skills` exist, SkillSync treats them as one
+logical Codex user scope with `.agents` taking precedence.
 
 **Instructions**: `AGENTS.md` files are concatenated root-to-cwd. Later entries
 (deeper directories) override earlier guidance by appearing later in the prompt.
@@ -273,6 +308,7 @@ The parser does **not** currently handle:
 - OpenAI Codex Skills docs: https://developers.openai.com/codex/skills/ (accessed 2026-02-22)
 - OpenAI Codex AGENTS.md guide: https://developers.openai.com/codex/guides/agents-md (accessed 2026-02-22)
 - OpenAI Codex config reference: https://developers.openai.com/codex/config-reference (accessed 2026-02-22)
+- Codex hook lifecycle discussions: https://github.com/openai/codex/issues/14754, https://github.com/openai/codex/issues/15490, https://github.com/openai/codex/issues/15497, https://github.com/openai/codex/issues/16226, https://github.com/openai/codex/issues/16933
 - SkillSync portability assessment: `docs/platforms/portability-assessment.md`
 - SkillSync cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
 - Parser source: `internal/parser/codex/codex.go`, `internal/parser/skills/skills.go`

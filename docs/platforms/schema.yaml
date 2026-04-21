@@ -98,6 +98,7 @@ platforms:
       skill:
         location:
           - ".codex/skills/*/SKILL.md"
+          - "~/.agents/skills/*/SKILL.md"
           - "~/.codex/skills/*/SKILL.md"
           - "/etc/codex/skills/*/SKILL.md"
         frontmatter:
@@ -132,6 +133,19 @@ platforms:
         instruction_fields:
           - developer_instructions
           - model_instructions_file
+      hooks:
+        location:
+          - "~/.codex/hooks.json"
+          - ".codex/hooks.json"
+        format: json
+        event_types:
+          - SessionStart
+          - PreToolUse
+          - PostToolUse
+          - UserPromptSubmit
+          - Stop
+        notes:
+          - Runtime lifecycle hooks are behavior-only; SkillSync keeps the event names for portability analysis but does not treat them as portable file-backed content.
       prompts:
         location:
           - "~/.codex/prompts/*.md"
