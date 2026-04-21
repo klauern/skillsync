@@ -126,7 +126,7 @@ Field-by-field comparison showing which platform supports which fields.
 | `alwaysApply` | -- | -- | -- | Rules | -- | -- |
 | `context` | Skills (`fork`) | -- | -- | -- | -- | -- |
 | `agent` | Skills | -- | Prompts, Agents (`agents`) | -- | -- | -- |
-| `hooks` | Skills | -- | -- | -- | -- (settings-level) | -- |
+| `hooks` | Skills (metadata only on export) | -- | -- | -- | -- (settings-level) | -- |
 | `version` | -- | Skills | -- | -- | -- | -- |
 | `target` | -- | -- | Agents | -- | -- | -- |
 | `handoffs` | -- | -- | Agents | -- | -- | -- |
@@ -219,7 +219,7 @@ When converting artifacts between platforms, some information is lost or require
 | `user-invocable` | Claude, Copilot (agents) | Codex, Cursor, Gemini, Pi.dev | Preserved in `Metadata`; no equivalent toggle |
 | `globs` / `applyTo` | Copilot, Cursor | Claude, Codex, Gemini, Pi.dev | No conversion target; pattern rules do not map to instruction/context files |
 | `alwaysApply` | Cursor | Claude, Codex, Copilot, Gemini, Pi.dev | Maps to always-on instruction semantics but not 1:1 |
-| `hooks` | Claude skill frontmatter | Codex, Copilot, Cursor, Gemini (settings), Pi.dev | Claude-specific per-skill object; Codex runtime hooks are documented separately as lifecycle events |
+| `hooks` | Claude skill frontmatter | Codex, Copilot, Cursor, Gemini (settings), Pi.dev | Claude-specific per-skill object; preserve the declared data as metadata only. Re-author any destination hook behavior manually because Codex and Gemini expose different runtime scopes and event models |
 | `handoffs` | Copilot (agents) | All others | Copilot-unique; no cross-platform equivalent |
 | `target` | Copilot (agents) | All others | Copilot-unique (`vscode` / `github-copilot`) |
 | `mcp-servers` (per-agent) | Copilot (agents) | All others | Copilot-unique at agent level |
@@ -248,6 +248,7 @@ These are not interchangeable. Each uses different delimiters and supports diffe
 | Cursor legacy `.mdc` format | Functionally identical to `.md` but extension is Cursor-specific |
 | Claude plugin namespacing | `plugin-name:skill-name` format has no equivalent on other platforms |
 | Gemini extension runtime surfaces | Gemini extension-only runtime surfaces such as `mcpServers`, extension hooks, subagents, themes, and install state are not first-pass sync targets; settings-level hook intent is preserved as metadata only |
+| Claude skill hooks | The frontmatter object can be preserved as metadata, but trigger timing, lifecycle scope, and handler semantics are Claude-only and must be re-authored on destination platforms |
 | Pi.dev package ecosystem | Packages, extensions, and themes are runtime surfaces, not first-pass sync targets |
 
 ## SkillSync Unified Model Mapping

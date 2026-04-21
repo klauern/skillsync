@@ -53,7 +53,7 @@ platforms:
           hooks:
             type: object
             required: false
-            description: "Hooks scoped to skill lifecycle."
+            description: "Claude skill hook declarations. Preserve as metadata only when syncing; execution semantics remain Claude-specific."
       command:
         location:
           - ".claude/commands/*.md"
@@ -729,6 +729,10 @@ lossy_conversions:
   - field: "model (per-skill)"
     supported: [claude, copilot]
     behavior: "Codex handles at config/profile level. Preserved as metadata elsewhere."
+
+  - field: "hooks"
+    supported: [claude]
+    behavior: "Preserve the Claude skill hook object as metadata only. Event timing, lifecycle scope, and runtime side effects are Claude-specific and must be re-authored for destination platforms."
 
   - field: "handoffs"
     supported: [copilot]
