@@ -356,11 +356,12 @@ platforms:
         - extension.description
         - extension.excludeTools
         - extension.settings
+        - settings.hooks
       unsupported_runtime_surfaces:
         - package
         - theme
         - extension.mcpServers
-        - hooks
+        - extension.hooks
         - subagent
     artifact_types:
       skill:
@@ -438,9 +439,10 @@ platforms:
         format: json
       hooks:
         location:
-          - ".gemini/settings.json"  # hooks key
-          - "extensions/*/hooks/hooks.json"
+          - ".gemini/settings.json"  # hooks key: user/workspace policy intent
+          - "extensions/*/hooks/hooks.json"  # extension-owned runtime behavior
         format: json
+        note: "settings.json hooks are scope-bound intent; extension hooks are runtime-owned and must be re-authored for portability"
         event_types:
           - SessionStart
           - BeforeAgent

@@ -40,6 +40,7 @@ digging into the full mapping details below.
 | Skills (`SKILL.md`) | Portable | Shared Agent Skills shape and supporting directory layout survive across platforms. |
 | Commands / prompts | Partially portable | Markdown content survives, but trigger syntax, arguments, and runtime controls diverge. |
 | Instructions (`CLAUDE.md`, `AGENTS.md`, system-prompt layers) | Partially portable | Persistent guidance transfers, but loading order and prompt-construction semantics do not. |
+| Gemini hook surfaces | Partially portable | `settings.json` hook intent can be preserved as config metadata, but extension `hooks/hooks.json` remains runtime-owned and must be re-authored manually. |
 | Agents / subagents / modes | Non-portable | Platform runtimes do not expose a common agent-definition file model. |
 | Lifecycle hook events | Non-portable | Runtime boundaries such as `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, and `Stop` are control-plane behavior, not shared file-backed content. |
 | Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
@@ -180,7 +181,7 @@ Default paths side-by-side for all 6 documented platforms.
 | Codex | `/etc/codex/skills/` | System-wide admin skills |
 | Copilot | GitHub.com org settings | Org-level instructions (not file-based) |
 | Cursor | -- | No system-level path |
-| Gemini | Extension directory | Extension-bundled content; first-pass sync extracts portable content only, not extension runtime behavior |
+| Gemini | Extension directory | Extension-bundled content; first-pass sync extracts portable content only, while runtime surfaces like hooks, subagents, themes, and install state stay out of scope |
 | Pi.dev | -- | Packages, extensions, and themes exist, but they are out of scope for first-pass sync |
 
 ## Scope Level Comparison
@@ -192,7 +193,7 @@ How global/user/project/extension maps across platforms.
 | Organization / Enterprise | Enterprise (highest) | Admin (`/etc/`) | Organization (lowest) | -- | -- | -- |
 | User / Personal | Personal | User (`~/.codex/`) | Personal (VS Code profile, highest) | Global (`~/.cursor/`) | User (`~/.gemini/`) | User (`~/.pi/agent/`) |
 | Project / Repository | Project | Project (`.codex/`) | Repository | Project (`.cursor/`) | Workspace (`.gemini/`) | Project (`.pi/` + repo `AGENTS.md`) |
-| Plugin / Extension | Namespaced | -- | -- | -- | Extension bundle (portable content only; runtime surfaces are not first-pass sync targets) | Packages / themes / extensions (not first-pass sync targets) |
+| Plugin / Extension | Namespaced | -- | -- | -- | Extension bundle (portable content only; runtime hook surfaces are not first-pass sync targets) | Packages / themes / extensions (not first-pass sync targets) |
 
 **Precedence direction varies by platform:**
 - Claude: Enterprise > Personal > Project
@@ -246,7 +247,7 @@ These are not interchangeable. Each uses different delimiters and supports diffe
 | Copilot uses multiple file extensions | `.instructions.md`, `.prompt.md`, `.agent.md` each have different schemas |
 | Cursor legacy `.mdc` format | Functionally identical to `.md` but extension is Cursor-specific |
 | Claude plugin namespacing | `plugin-name:skill-name` format has no equivalent on other platforms |
-| Gemini extension runtime surfaces | Gemini extension-only runtime surfaces such as `mcpServers`, hooks, subagents, themes, and install state are not first-pass sync targets |
+| Gemini extension runtime surfaces | Gemini extension-only runtime surfaces such as `mcpServers`, extension hooks, subagents, themes, and install state are not first-pass sync targets; settings-level hook intent is preserved as metadata only |
 | Pi.dev package ecosystem | Packages, extensions, and themes are runtime surfaces, not first-pass sync targets |
 
 ## SkillSync Unified Model Mapping

@@ -16,6 +16,14 @@ context files across three tiers, TOML-based custom commands with injection
 syntax, a rich hooks lifecycle system, and an extension packaging format that
 bundles all artifact types together.
 
+Gemini hook surfaces are split across two layers:
+
+- `settings.json` hook entries describe workspace/user intent at the config
+  layer and follow the normal Gemini scope precedence rules.
+- Extension `hooks/hooks.json` entries are extension-owned runtime behavior and
+  should be treated as non-portable unless they are re-authored for the target
+  environment.
+
 ## Directory Structure
 
 ```text
@@ -311,7 +319,7 @@ Keep Gemini extension handling conservative in SkillSync:
 | `commands/` | Syncable as prompt/command transport content. |
 | `GEMINI.md` / extension context files | Syncable as instruction/context content. |
 | `gemini-extension.json` metadata (`name`, `version`, `description`) | Preserve as metadata only where safe. |
-| `excludeTools`, `settings` | Preserve as metadata only; do not treat as equivalent runtime enforcement. |
+| `excludeTools`, `settings`, `settings.json` hook intent | Preserve as metadata only; do not treat as equivalent runtime enforcement. |
 | `mcpServers`, `hooks/hooks.json`, `agents/`, `themes`, install/update state | Not first-pass sync targets. Re-author manually if needed. |
 
 The extension/package layer is therefore a content source, not a fully portable
@@ -408,6 +416,14 @@ Hooks intercept lifecycle events for validation, context injection, auditing,
 and security gating. Defined in the `hooks` key of `settings.json` (or in
 `hooks/hooks.json` within extensions).
 
+Treat the two locations differently:
+
+- `settings.json` hook definitions express user or workspace policy. Workspace
+  settings override user settings, so this layer is the portable intent surface.
+- `hooks/hooks.json` inside an extension is bundled runtime behavior. It may
+  ship with the extension, but SkillSync should not flatten it into a portable
+  runtime contract.
+
 #### Event Types
 
 | Event | Phase | Description |
@@ -462,6 +478,13 @@ emergency block.
 - `AfterAgent`: validate response quality with retry logic
 - `BeforeToolSelection`: filter available toolset (whitelists combined across hooks)
 - `BeforeModel`: override or mock LLM requests/responses
+
+**Migration note:**
+
+- If a hook is expressed only in `settings.json`, preserve the policy intent
+  and re-emit it for the target platform where possible.
+- If the behavior lives in `hooks/hooks.json`, treat it as extension runtime
+  logic and re-author it manually on the destination platform.
 
 ### Subagents (`.gemini/agents/*.md`)
 
