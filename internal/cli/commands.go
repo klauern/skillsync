@@ -3618,6 +3618,7 @@ func runCompareTUI() error {
 	if err != nil {
 		return fmt.Errorf("failed to find similar skills: %w", err)
 	}
+	comparisons = filterComparisonResultsByPlatform(comparisons, false)
 
 	if len(comparisons) == 0 {
 		ui.Info("No similar skills found to compare")

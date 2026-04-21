@@ -64,7 +64,8 @@ func TestCodexConfigPath(t *testing.T) {
 }
 
 func TestCodexSkillsPath(t *testing.T) {
-	home := HomeDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	expected := filepath.Join(home, ".codex", "skills")
 	got := CodexSkillsPath()
 	if got != expected {
@@ -316,7 +317,7 @@ func TestPlatformSkillsPath(t *testing.T) {
 	}{
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
-		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.Codex, filepath.Join(home, ".agents", "skills")},
 		{model.Copilot, filepath.Join(home, ".github")},
 		{model.Gemini, filepath.Join(home, ".gemini")},
 		{model.PiDev, filepath.Join(home, ".agents", "skills")},
@@ -396,6 +397,23 @@ func TestPiDevPathsFallBackToPiAgent(t *testing.T) {
 	}
 }
 
+func TestCodexSkillsPathPrefersAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	agentsRoot := filepath.Join(home, ".agents")
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .codex skills dir: %v", err)
+	}
+
+	if got := CodexSkillsPath(); got != filepath.Join(agentsRoot, "skills") {
+		t.Fatalf("CodexSkillsPath() = %q, want %q", got, filepath.Join(agentsRoot, "skills"))
+	}
+}
+
 func TestFilterExistingPaths(t *testing.T) {
 	// Create temp dirs for testing
 	tmpDir := t.TempDir()
@@ -461,8 +479,12 @@ func TestGetTieredPaths_NoLegacyPaths(t *testing.T) {
 
 			// User scope should only have skills directory
 			userPaths := paths[model.ScopeUser]
-			if len(userPaths) != 1 {
-				t.Errorf("GetTieredPaths() for %s should have exactly 1 user path, got %d", platform, len(userPaths))
+			wantUserPaths := 1
+			if platform == model.Codex {
+				wantUserPaths = 2
+			}
+			if len(userPaths) != wantUserPaths {
+				t.Errorf("GetTieredPaths() for %s should have exactly %d user path(s), got %d", platform, wantUserPaths, len(userPaths))
 			}
 		})
 	}

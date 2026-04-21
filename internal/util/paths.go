@@ -116,9 +116,19 @@ func CodexConfigPath(projectDir string) string {
 	return filepath.Join(projectDir, ".codex", "skills")
 }
 
-// CodexSkillsPath returns the default Codex skills directory (user-level)
+// codexUserRootCandidates returns the preferred Codex user roots in priority order.
+func codexUserRootCandidates(home string) []string {
+	return []string{
+		filepath.Join(home, ".agents"),
+		filepath.Join(home, ".codex"),
+	}
+}
+
+// CodexSkillsPath returns the preferred Codex skills directory (user-level).
+// When ~/.agents exists, it is preferred over ~/.codex to avoid duplicate sync roots.
 func CodexSkillsPath() string {
-	return filepath.Join(HomeDir(), ".codex", "skills")
+	root := firstExistingDir(codexUserRootCandidates(HomeDir())...)
+	return filepath.Join(root, "skills")
 }
 
 // GeminiPath returns the default Gemini CLI config directory (user-level).
@@ -289,13 +299,19 @@ func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 	}
 
 	// User scope: ~/.{platform}/skills
-	var userPath string
-	if cfg.Platform == model.PiDev {
-		userPath = PiDevSkillsPath()
+	if cfg.Platform == model.Codex {
+		for _, root := range codexUserRootCandidates(HomeDir()) {
+			paths[model.ScopeUser] = append(paths[model.ScopeUser], filepath.Join(root, "skills"))
+		}
 	} else {
-		userPath = filepath.Join(HomeDir(), platformDir, "skills")
+		var userPath string
+		if cfg.Platform == model.PiDev {
+			userPath = PiDevSkillsPath()
+		} else {
+			userPath = filepath.Join(HomeDir(), platformDir, "skills")
+		}
+		paths[model.ScopeUser] = []string{userPath}
 	}
-	paths[model.ScopeUser] = []string{userPath}
 
 	// Admin scope: optional, typically /opt/{platform}/skills
 	if cfg.AdminPath != "" {
@@ -371,6 +387,8 @@ func PlatformSkillsPath(p model.Platform) string {
 		return CopilotSkillsPath()
 	case model.Gemini:
 		return GeminiPath()
+	case model.Codex:
+		return CodexSkillsPath()
 	case model.PiDev:
 		return PiDevSkillsPath()
 	default:

@@ -533,7 +533,7 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 		if envPath := os.Getenv("SKILLSYNC_CODEX_PATH"); envPath != "" {
 			return envPath, nil
 		}
-		// Default to user-level Codex skills directory
+		// Default to the preferred user-level Codex skills directory.
 		return util.CodexSkillsPath(), nil
 	case model.Copilot:
 		if envPath := os.Getenv("SKILLSYNC_COPILOT_PATH"); envPath != "" {

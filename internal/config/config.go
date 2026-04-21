@@ -98,6 +98,7 @@ func Default() *Config {
 			Codex: PlatformConfig{
 				SkillsPaths: []string{
 					".codex/skills",     // Project (relative)
+					"~/.agents/skills",  // User alternate (preferred when present)
 					"~/.codex/skills",   // User (absolute)
 					"/etc/codex/skills", // Admin (system-wide)
 				},
