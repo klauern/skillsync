@@ -324,7 +324,7 @@ func (e *configError) Error() string {
 	return e.msg
 }
 
-func TestFindSimilarSkillsSamePlatformFilter(t *testing.T) {
+func TestFindSimilarSkillsCrossPlatformFilter(t *testing.T) {
 	// Create test skills - two from same platform, one from different
 	skills := []model.Skill{
 		{
@@ -348,31 +348,31 @@ func TestFindSimilarSkillsSamePlatformFilter(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		samePlatform bool
-		wantMinPairs int // minimum expected pairs (depends on similarity thresholds)
-		wantAllSame  bool
+		name                 string
+		includeCrossPlatform bool
+		wantCrossPlatform    bool
+		wantMinPairs         int // minimum expected pairs (depends on similarity thresholds)
 	}{
 		{
-			name:         "without same-platform filter includes cross-platform",
-			samePlatform: false,
-			wantMinPairs: 1,
-			wantAllSame:  false,
+			name:                 "default excludes cross-platform",
+			includeCrossPlatform: false,
+			wantMinPairs:         1,
+			wantCrossPlatform:    false,
 		},
 		{
-			name:         "with same-platform filter only same platform",
-			samePlatform: true,
-			wantMinPairs: 0, // might be 0 if no same-platform pairs meet threshold
-			wantAllSame:  true,
+			name:                 "opt-in includes cross-platform",
+			includeCrossPlatform: true,
+			wantMinPairs:         1,
+			wantCrossPlatform:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &compareConfig{
-				nameThreshold:    0.5, // Lower threshold to find more matches
-				contentThreshold: 0.5,
-				samePlatform:     tt.samePlatform,
+				nameThreshold:        0.5, // Lower threshold to find more matches
+				contentThreshold:     0.5,
+				includeCrossPlatform: tt.includeCrossPlatform,
 			}
 
 			results, err := findSimilarSkills(skills, cfg)
@@ -384,30 +384,30 @@ func TestFindSimilarSkillsSamePlatformFilter(t *testing.T) {
 				t.Errorf("findSimilarSkills() got %d pairs, want at least %d", len(results), tt.wantMinPairs)
 			}
 
-			if tt.wantAllSame {
-				for _, r := range results {
-					if r.Skill1.Platform != r.Skill2.Platform {
-						t.Errorf("findSimilarSkills() with samePlatform=true returned cross-platform pair: %s (%s) vs %s (%s)",
-							r.Skill1.Name, r.Skill1.Platform,
-							r.Skill2.Name, r.Skill2.Platform)
-					}
+			hasCrossPlatform := false
+			for _, r := range results {
+				if r.Skill1.Platform != r.Skill2.Platform {
+					hasCrossPlatform = true
 				}
+			}
+			if hasCrossPlatform != tt.wantCrossPlatform {
+				t.Errorf("findSimilarSkills() cross-platform presence = %v, want %v", hasCrossPlatform, tt.wantCrossPlatform)
 			}
 		})
 	}
 }
 
-func TestSamePlatformConfigParsing(t *testing.T) {
-	// Test that samePlatform is correctly included in config
+func TestIncludeCrossPlatformConfigParsing(t *testing.T) {
+	// Test that includeCrossPlatform is correctly included in config
 	cfg := &compareConfig{
-		nameThreshold:    0.7,
-		contentThreshold: 0.6,
-		format:           "table",
-		samePlatform:     true,
+		nameThreshold:        0.7,
+		contentThreshold:     0.6,
+		format:               "table",
+		includeCrossPlatform: true,
 	}
 
 	err := validateCompareConfig(cfg)
 	if err != nil {
-		t.Errorf("validateCompareConfig() should accept samePlatform=true, got error: %v", err)
+		t.Errorf("validateCompareConfig() should accept includeCrossPlatform=true, got error: %v", err)
 	}
 }

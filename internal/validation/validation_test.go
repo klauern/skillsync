@@ -537,6 +537,29 @@ func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
 	}
 }
 
+func TestGetPlatformPath_CodexPrefersAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_CODEX_PATH", "")
+
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .codex skills dir: %v", err)
+	}
+
+	got, err := GetPlatformPath(model.Codex)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".agents", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
+	}
+}
+
 func TestGetPlatformPath_PiDevDefaultsToUserSkills(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

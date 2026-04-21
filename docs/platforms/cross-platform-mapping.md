@@ -41,6 +41,7 @@ digging into the full mapping details below.
 | Commands / prompts | Partially portable | Markdown content survives, but trigger syntax, arguments, and runtime controls diverge. |
 | Instructions (`CLAUDE.md`, `AGENTS.md`, system-prompt layers) | Partially portable | Persistent guidance transfers, but loading order and prompt-construction semantics do not. |
 | Agents / subagents / modes | Non-portable | Platform runtimes do not expose a common agent-definition file model. |
+| Lifecycle hook events | Non-portable | Runtime boundaries such as `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, and `Stop` are control-plane behavior, not shared file-backed content. |
 | Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
 
 ## Artifact Type Equivalences
@@ -131,6 +132,24 @@ Field-by-field comparison showing which platform supports which fields.
 | `mcp-servers` | -- | -- | Agents | -- | -- | -- |
 | `excludeAgent` | -- | -- | Instructions | -- | -- | -- |
 
+## Codex Hook Semantics
+
+Codex lifecycle hooks are documented here as runtime behavior so the portability
+model can distinguish metadata that can travel from behavior that cannot.
+
+| Event | Scope | Meaning | Portability stance |
+|---|---|---|---|
+| `SessionStart` | Thread | Fires on startup, resume, or clear. | Partially portable as lifecycle metadata only. |
+| `PreToolUse` | Turn | Fires before an individual tool invocation. | Non-portable runtime behavior. |
+| `PostToolUse` | Turn | Fires after an individual tool invocation. | Non-portable runtime behavior. |
+| `UserPromptSubmit` | Turn | Fires when the user submits a prompt. | Non-portable runtime behavior. |
+| `Stop` | Turn | Fires when the session is stopping. | Non-portable runtime behavior. |
+
+`SessionStart` preserves the idea of a session boundary, but the execution
+semantics still belong to Codex. `UserPromptSubmit` and `Stop` are especially
+important to keep in the non-portable bucket: they describe turn-boundary
+runtime behavior, not a content artifact that can be replayed elsewhere.
+
 ## Path Convention Reference
 
 Default paths side-by-side for all 6 documented platforms.
@@ -148,7 +167,7 @@ Default paths side-by-side for all 6 documented platforms.
 
 | Purpose | Claude | Codex | Copilot | Cursor | Gemini | Pi.dev |
 |---|---|---|---|---|---|---|
-| Skills | `~/.claude/skills/` | `~/.codex/skills/` | VS Code profile | `~/.cursor/skills/` | `~/.gemini/skills/` (or `~/.agents/skills/`) | `~/.pi/agent/skills/` |
+| Skills | `~/.claude/skills/` | `~/.agents/skills/` or `~/.codex/skills/` | VS Code profile | `~/.cursor/skills/` | `~/.gemini/skills/` (or `~/.agents/skills/`) | `~/.pi/agent/skills/` |
 | Instructions | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | VS Code profile | `~/.cursor/rules/` | `~/.gemini/GEMINI.md` | `~/.pi/agent/AGENTS.md` + `~/.pi/agent/SYSTEM.md` |
 | Commands | `~/.claude/commands/` | `~/.codex/prompts/` (deprecated) | VS Code profile (`prompts/`) | `~/.cursor/commands/` | `~/.gemini/commands/` | `~/.pi/agent/prompts/` |
 | Config | `~/.claude/config.json` | `~/.codex/config.toml` | VS Code settings | `~/.cursor/modes.json` | `~/.gemini/settings.json` | `~/.pi/agent/settings.json` |
@@ -199,7 +218,7 @@ When converting artifacts between platforms, some information is lost or require
 | `user-invocable` | Claude, Copilot (agents) | Codex, Cursor, Gemini, Pi.dev | Preserved in `Metadata`; no equivalent toggle |
 | `globs` / `applyTo` | Copilot, Cursor | Claude, Codex, Gemini, Pi.dev | No conversion target; pattern rules do not map to instruction/context files |
 | `alwaysApply` | Cursor | Claude, Codex, Copilot, Gemini, Pi.dev | Maps to always-on instruction semantics but not 1:1 |
-| `hooks` | Claude | Codex, Copilot, Cursor, Gemini (settings), Pi.dev | Claude-specific object; no per-skill hooks elsewhere |
+| `hooks` | Claude skill frontmatter | Codex, Copilot, Cursor, Gemini (settings), Pi.dev | Claude-specific per-skill object; Codex runtime hooks are documented separately as lifecycle events |
 | `handoffs` | Copilot (agents) | All others | Copilot-unique; no cross-platform equivalent |
 | `target` | Copilot (agents) | All others | Copilot-unique (`vscode` / `github-copilot`) |
 | `mcp-servers` (per-agent) | Copilot (agents) | All others | Copilot-unique at agent level |

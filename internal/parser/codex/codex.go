@@ -68,8 +68,8 @@ type MCPServer struct {
 	Args    []string `toml:"args"`
 }
 
-// New creates a new Codex parser
-// If basePath is empty, uses the default Codex skills directory (~/.codex/skills)
+// New creates a new Codex parser.
+// If basePath is empty, uses the preferred Codex skills directory.
 func New(basePath string) *Parser {
 	if basePath == "" {
 		basePath = util.CodexSkillsPath()

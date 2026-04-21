@@ -871,3 +871,142 @@ func TestCachePluginsParser_DeduplicatesCrossPlatformPluginEntries(t *testing.T)
 		t.Fatalf("expected 1 deduplicated skill across cross-platform plugin entries, got %d", len(skills))
 	}
 }
+
+// TestCachePluginsParser_ParseCommandFiles verifies that plugins using the
+// commands/*.md format (no SKILL.md) are discovered and parsed as prompt-type skills.
+func TestCachePluginsParser_ParseCommandFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, "marketplace", "pull-requests", "1.1.1")
+	commandsDir := filepath.Join(pluginDir, "commands")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+
+	// Write a plugin manifest
+	claudePluginDir := filepath.Join(pluginDir, ".claude-plugin")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(claudePluginDir, 0o755); err != nil {
+		t.Fatalf("failed to create .claude-plugin dir: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(claudePluginDir, "plugin.json"),
+		[]byte(`{"name":"pull-requests","description":"PR tools","version":"1.1.1"}`), 0o644); err != nil {
+		t.Fatalf("write plugin.json: %v", err)
+	}
+
+	// Write a command file (no name field — trigger derived from filename)
+	commandContent := `---
+allowed-tools: Bash
+description: Review PR comments and build actionable task list
+---
+# /pr-comment-review
+
+Review all comments on a pull request.
+`
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(commandsDir, "pr-comment-review.md"), []byte(commandContent), 0o644); err != nil {
+		t.Fatalf("write command file: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "pull-requests@marketplace",
+				PluginName:  "pull-requests",
+				Marketplace: "marketplace",
+				Version:     "1.1.1",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	p := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 command skill, got %d", len(skills))
+	}
+
+	skill := skills[0]
+
+	if skill.Name != "pr-comment-review" {
+		t.Errorf("expected name 'pr-comment-review', got %q", skill.Name)
+	}
+	if skill.Description != "Review PR comments and build actionable task list" {
+		t.Errorf("unexpected description: %q", skill.Description)
+	}
+	if skill.Type != model.SkillTypePrompt {
+		t.Errorf("expected type %q, got %q", model.SkillTypePrompt, skill.Type)
+	}
+	if skill.Trigger != "/pr-comment-review" {
+		t.Errorf("expected trigger '/pr-comment-review', got %q", skill.Trigger)
+	}
+	if skill.Scope != model.ScopePlugin {
+		t.Errorf("expected scope %q, got %q", model.ScopePlugin, skill.Scope)
+	}
+	if len(skill.Tools) != 1 || skill.Tools[0] != "Bash" {
+		t.Errorf("expected tools [Bash], got %v", skill.Tools)
+	}
+}
+
+// TestCachePluginsParser_CommandFiles_SkippedWhenSkillMdPresent verifies that command
+// files inside a directory that already has a SKILL.md are not double-parsed.
+func TestCachePluginsParser_CommandFiles_SkippedWhenSkillMdPresent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, "marketplace", "my-plugin", "1.0.0")
+	commandsDir := filepath.Join(pluginDir, "commands")
+	// #nosec G301 - test directory
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+
+	// Write both a SKILL.md and a command in the same directory (shouldn't happen
+	// in practice, but the parser should prefer SKILL.md and skip the command).
+	skillContent := `---
+name: my-skill
+description: A skill with SKILL.md
+---
+Content
+`
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(commandsDir, "SKILL.md"), []byte(skillContent), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+	// #nosec G306 - test file
+	if err := os.WriteFile(filepath.Join(commandsDir, "my-cmd.md"),
+		[]byte("---\ndescription: a command\n---\nContent"), 0o644); err != nil {
+		t.Fatalf("write command: %v", err)
+	}
+
+	index := &PluginIndex{
+		byInstallPath: map[string]*PluginIndexEntry{
+			pluginDir: {
+				PluginKey:   "my-plugin@marketplace",
+				PluginName:  "my-plugin",
+				Marketplace: "marketplace",
+				Version:     "1.0.0",
+				InstallPath: pluginDir,
+			},
+		},
+	}
+
+	p := NewCachePluginsParserWithIndex(tmpDir, index)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only the SKILL.md skill should be returned; the command file should be skipped.
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill (SKILL.md takes precedence), got %d", len(skills))
+	}
+	if skills[0].Name != "my-skill" {
+		t.Errorf("expected SKILL.md skill 'my-skill', got %q", skills[0].Name)
+	}
+}

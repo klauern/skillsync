@@ -25,6 +25,8 @@ func TestNew(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
 			p := New(tt.basePath)
 			if tt.basePath == "" {
 				// For empty path, just verify it contains .codex/skills
@@ -53,6 +55,8 @@ func TestParser_Platform(t *testing.T) {
 }
 
 func TestParser_DefaultPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	p := New("")
 	got := p.DefaultPath()
 	if !containsPathSubstring(got, ".codex/skills") {

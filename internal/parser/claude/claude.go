@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
@@ -354,12 +353,7 @@ func extractTools(fm map[string]any, key string) []string {
 }
 
 func isClaudeCommandFile(path string) bool {
-	if !strings.EqualFold(filepath.Ext(path), ".md") {
-		return false
-	}
-
-	parts := strings.Split(filepath.ToSlash(path), "/")
-	return slices.Contains(parts, "commands")
+	return parser.IsCommandFile(path)
 }
 
 // isInsideSkillDir checks if a file path is inside any of the skill directories.

@@ -480,8 +480,8 @@ skillsync compare --content-only
 # Adjust similarity thresholds
 skillsync compare --name-threshold 0.8 --content-threshold 0.7
 
-# Find duplicates within same platform only
-skillsync compare --same-platform
+# Include cross-platform matches explicitly
+skillsync compare --include-cross-platform
 
 # Export results
 skillsync compare --format json > duplicates.json
@@ -510,7 +510,7 @@ Skills can exist at different scope levels (from highest to lowest priority):
 
 1. **plugin** - Claude Code plugin skills (`~/.claude/plugins/cache/*`) - *read-only*
 2. **repo** - Repository-level (`.claude/skills`, `.cursor/skills`, `.codex/skills`)
-3. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`)
+3. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.agents/skills`, `~/.codex/skills`)
 4. **admin** - Administrator-defined
 5. **system** - System-wide installations
 6. **builtin** - Built-in platform skills
@@ -796,6 +796,7 @@ platforms:
   codex:
     skills_paths:
       - .codex/skills
+      - ~/.agents/skills
       - ~/.codex/skills
       - /etc/codex/skills
 

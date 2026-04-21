@@ -519,18 +519,21 @@ func TestDefaultSkillsPaths(t *testing.T) {
 		t.Errorf("expected fourth Cursor path to be '~/.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[3])
 	}
 
-	// Check Codex defaults (3 paths: project, user, admin)
-	if len(cfg.Platforms.Codex.SkillsPaths) != 3 {
-		t.Errorf("expected 3 Codex skills paths, got %d", len(cfg.Platforms.Codex.SkillsPaths))
+	// Check Codex defaults (4 paths: project, alternate user, user, admin)
+	if len(cfg.Platforms.Codex.SkillsPaths) != 4 {
+		t.Errorf("expected 4 Codex skills paths, got %d", len(cfg.Platforms.Codex.SkillsPaths))
 	}
 	if cfg.Platforms.Codex.SkillsPaths[0] != ".codex/skills" {
 		t.Errorf("expected first Codex path to be '.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[0])
 	}
-	if cfg.Platforms.Codex.SkillsPaths[1] != "~/.codex/skills" {
-		t.Errorf("expected second Codex path to be '~/.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[1])
+	if cfg.Platforms.Codex.SkillsPaths[1] != "~/.agents/skills" {
+		t.Errorf("expected second Codex path to be '~/.agents/skills', got %q", cfg.Platforms.Codex.SkillsPaths[1])
 	}
-	if cfg.Platforms.Codex.SkillsPaths[2] != "/etc/codex/skills" {
-		t.Errorf("expected third Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
+	if cfg.Platforms.Codex.SkillsPaths[2] != "~/.codex/skills" {
+		t.Errorf("expected third Codex path to be '~/.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
+	}
+	if cfg.Platforms.Codex.SkillsPaths[3] != "/etc/codex/skills" {
+		t.Errorf("expected fourth Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[3])
 	}
 
 	// Check Copilot defaults (repo root only)
