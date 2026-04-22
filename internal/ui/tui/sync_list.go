@@ -516,6 +516,7 @@ func (m *SyncListModel) applyFilter() {
 		lowerFilter := strings.ToLower(m.filter)
 		for _, s := range m.skills {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
 				filtered = append(filtered, s)
