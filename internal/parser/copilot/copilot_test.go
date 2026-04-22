@@ -134,6 +134,7 @@ func assertPrompt(t *testing.T, skill model.Skill) {
 		t.Fatalf("prompt metadata artifact = %q, want %q", skill.Metadata[model.MetadataKeyCopilotArtifact], model.CopilotArtifactPrompt)
 	}
 }
+
 func assertAgent(t *testing.T, skill model.Skill) {
 	t.Helper()
 

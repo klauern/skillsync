@@ -78,7 +78,7 @@ audit: tidy fmt vet lint test
 
 [group("quality"), doc("Check portability docs against the structured snapshot")]
 portability-check:
-  go test ./internal/validation -run TestPortabilitySnapshotFreshness -count=1
+  go run ./cmd/skillsync portability-check
 
 [group("build"), doc("Build and run the binary")]
 run: build
