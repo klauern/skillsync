@@ -43,6 +43,8 @@ type discoverListKeyMap struct {
 	Copy     key.Binding
 	Filter   key.Binding
 	ClearFlt key.Binding
+	NextPlat key.Binding
+	PrevPlat key.Binding
 	Help     key.Binding
 	Back     key.Binding
 	Quit     key.Binding
@@ -78,6 +80,14 @@ func defaultDiscoverListKeyMap() discoverListKeyMap {
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "clear filter"),
 		),
+		NextPlat: key.NewBinding(
+			key.WithKeys("tab", "l"),
+			key.WithHelp("tab/l", "next platform"),
+		),
+		PrevPlat: key.NewBinding(
+			key.WithKeys("shift+tab", "h"),
+			key.WithHelp("S-tab/h", "prev platform"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -103,15 +113,17 @@ type DiscoverListModel struct {
 	result       DiscoverListResult
 	filter       string
 	filtering    bool
-	showHelp     bool
-	width        int
-	height       int
-	columnWidths discoverListColumnWidths
-	phase        discoverListPhase
-	detailSkill  model.Skill
-	viewport     viewport.Model
-	ready        bool
-	quitting     bool
+	platformOptions []model.Platform
+	platformIndex   int // Index into platformOptions (-1 = all)
+	showHelp        bool
+	width           int
+	height          int
+	columnWidths    discoverListColumnWidths
+	phase           discoverListPhase
+	detailSkill     model.Skill
+	viewport        viewport.Model
+	ready           bool
+	quitting        bool
 }
 
 // Styles for the discover list TUI.
@@ -121,16 +133,20 @@ var discoverListStyles = struct {
 	Filter      lipgloss.Style
 	FilterInput lipgloss.Style
 	Status      lipgloss.Style
-	DetailBox   lipgloss.Style
-	DetailTitle lipgloss.Style
+	DetailBox    lipgloss.Style
+	DetailTitle  lipgloss.Style
+	PlatformTab  lipgloss.Style
+	PlatformActive lipgloss.Style
 }{
 	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
 	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	DetailBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
-	DetailTitle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
+	DetailBox:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
+	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
+	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
 }
 
 type discoverListPhase int
@@ -163,18 +179,34 @@ type discoverListColumnWidths struct {
 func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 	columns, columnWidths := discoverListColumns(0, skills)
 
+	// Collect unique platforms from skills
+	platformSet := make(map[model.Platform]bool)
+	for _, s := range skills {
+		platformSet[s.Platform] = true
+	}
+
+	// Build platform options in precedence order
+	platformOptions := []model.Platform{}
+	for _, platform := range model.AllPlatforms() {
+		if platformSet[platform] {
+			platformOptions = append(platformOptions, platform)
+		}
+	}
+
 	// Sort skills alphabetically by name (case-insensitive)
 	sort.Slice(skills, func(i, j int) bool {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
 
 	m := DiscoverListModel{
-		skills:       skills,
-		filtered:     skills,
-		keys:         defaultDiscoverListKeyMap(),
-		columnWidths: columnWidths,
-		phase:        discoverListPhaseList,
-		hScroll:      newHorizontalTableState(columns),
+		skills:          skills,
+		filtered:        skills,
+		keys:            defaultDiscoverListKeyMap(),
+		columnWidths:    columnWidths,
+		phase:           discoverListPhaseList,
+		hScroll:         newHorizontalTableState(columns),
+		platformOptions: platformOptions,
+		platformIndex:   -1, // -1 means "all"
 	}
 
 	rows := m.skillsToRows(skills)
@@ -383,6 +415,26 @@ func (m DiscoverListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyFilter()
 			return m, nil
 
+		case key.Matches(msg, m.keys.NextPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex++
+				if m.platformIndex >= len(m.platformOptions) {
+					m.platformIndex = -1 // Wrap to "all"
+				}
+				m.applyFilter()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PrevPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex--
+				if m.platformIndex < -1 {
+					m.platformIndex = len(m.platformOptions) - 1 // Wrap to last platform
+				}
+				m.applyFilter()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Detail):
 			if len(m.filtered) > 0 {
 				m.detailSkill = m.getSelectedSkill()
@@ -453,21 +505,37 @@ func (m DiscoverListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *DiscoverListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.skills
-	} else {
-		var filtered []model.Skill
+	// Start with all skills
+	filtered := m.skills
+
+	// Apply platform filter if not "all"
+	if m.platformIndex >= 0 && m.platformIndex < len(m.platformOptions) {
+		selectedPlatform := m.platformOptions[m.platformIndex]
+		var platformFiltered []model.Skill
+		for _, s := range filtered {
+			if s.Platform == selectedPlatform {
+				platformFiltered = append(platformFiltered, s)
+			}
+		}
+		filtered = platformFiltered
+	}
+
+	// Apply text filter
+	if m.filter != "" {
+		var textFiltered []model.Skill
 		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.skills {
+		for _, s := range filtered {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
 				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
+				textFiltered = append(textFiltered, s)
 			}
 		}
-		m.filtered = filtered
+		filtered = textFiltered
 	}
+
+	m.filtered = filtered
 	m.refreshTable()
 }
 
@@ -494,6 +562,10 @@ func (m DiscoverListModel) View() string {
 	// Title
 	title := discoverListStyles.Title.Render("🔍 Skillsync Skills")
 	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	// Platform tabs
+	b.WriteString(m.renderPlatformTabs())
 	b.WriteString("\n\n")
 
 	// Filter indicator
@@ -632,10 +704,33 @@ func (m DiscoverListModel) buildDetailContent(width int) string {
 	return b.String()
 }
 
+func (m DiscoverListModel) renderPlatformTabs() string {
+	var tabs []string
+
+	// "All" tab
+	if m.platformIndex == -1 {
+		tabs = append(tabs, discoverListStyles.PlatformActive.Render("[All]"))
+	} else {
+		tabs = append(tabs, discoverListStyles.PlatformTab.Render(" All "))
+	}
+
+	// Individual platform tabs
+	for i, platform := range m.platformOptions {
+		if i == m.platformIndex {
+			tabs = append(tabs, discoverListStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
+		} else {
+			tabs = append(tabs, discoverListStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
+		}
+	}
+
+	return strings.Join(tabs, "")
+}
+
 func (m DiscoverListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
 		"←/→ columns",
+		"tab/S-tab platform",
 		"enter details",
 		"o open",
 		"c copy path",
@@ -654,6 +749,10 @@ func (m DiscoverListModel) renderFullHelp() string {
   →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
+
+Platform Filtering:
+  Tab/l       Next platform
+  Shift-Tab/h Previous platform
 
 Actions:
   Enter/v  View details
