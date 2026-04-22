@@ -42,6 +42,8 @@ type deleteListKeyMap struct {
 	Confirm     key.Binding
 	Filter      key.Binding
 	ClearFlt    key.Binding
+	NextPlat    key.Binding
+	PrevPlat    key.Binding
 	Help        key.Binding
 	Quit        key.Binding
 	Back        key.Binding
@@ -83,6 +85,14 @@ func defaultDeleteListKeyMap() deleteListKeyMap {
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "clear filter"),
 		),
+		NextPlat: key.NewBinding(
+			key.WithKeys("tab", "l"),
+			key.WithHelp("tab/l", "next platform"),
+		),
+		PrevPlat: key.NewBinding(
+			key.WithKeys("shift+tab", "h"),
+			key.WithHelp("S-tab/h", "prev platform"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -115,51 +125,57 @@ const (
 
 // DeleteListModel is the BubbleTea model for interactive skill deletion.
 type DeleteListModel struct {
-	table        table.Model
-	hScroll      horizontalTableState
-	skills       []model.Skill
-	filtered     []model.Skill
-	selected     map[string]bool // map of skill key to selected state
-	keys         deleteListKeyMap
-	result       DeleteListResult
-	filter       string
-	filtering    bool
-	showHelp     bool
-	confirmMode  bool
-	width        int
-	height       int
-	quitting     bool
-	columnWidths deleteListColumnWidths
-	phase        deleteListPhase
-	viewport     viewport.Model
-	ready        bool
-	detailSkill  model.Skill
-	hOffset      int // horizontal column scroll offset (0 = show all)
+	table           table.Model
+	hScroll         horizontalTableState
+	skills          []model.Skill
+	filtered        []model.Skill
+	selected        map[string]bool // map of skill key to selected state
+	keys            deleteListKeyMap
+	result          DeleteListResult
+	filter          string
+	filtering       bool
+	platformOptions []model.Platform
+	platformIndex   int // Index into platformOptions (-1 = all)
+	showHelp        bool
+	confirmMode     bool
+	width           int
+	height          int
+	quitting        bool
+	columnWidths    deleteListColumnWidths
+	phase           deleteListPhase
+	viewport        viewport.Model
+	ready           bool
+	detailSkill     model.Skill
+	hOffset         int // horizontal column scroll offset (0 = show all)
 }
 
 // Styles for the delete list TUI.
 var deleteListStyles = struct {
-	Title       lipgloss.Style
-	Help        lipgloss.Style
-	Filter      lipgloss.Style
-	FilterInput lipgloss.Style
-	Confirm     lipgloss.Style
-	Status      lipgloss.Style
-	Warning     lipgloss.Style
-	Checkbox    lipgloss.Style
-	DetailBox   lipgloss.Style
-	DetailTitle lipgloss.Style
+	Title          lipgloss.Style
+	Help           lipgloss.Style
+	Filter         lipgloss.Style
+	FilterInput    lipgloss.Style
+	Confirm        lipgloss.Style
+	Status         lipgloss.Style
+	Warning        lipgloss.Style
+	Checkbox       lipgloss.Style
+	DetailBox      lipgloss.Style
+	DetailTitle    lipgloss.Style
+	PlatformTab    lipgloss.Style
+	PlatformActive lipgloss.Style
 }{
-	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")).Padding(0, 1),
-	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true).Padding(1, 2),
-	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	Warning:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
-	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	DetailBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
-	DetailTitle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")),
+	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")).Padding(0, 1),
+	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Filter:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	FilterInput:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Confirm:        lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true).Padding(1, 2),
+	Status:         lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Warning:        lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+	Checkbox:       lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	DetailBox:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
+	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")),
+	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("52")).Bold(true).Padding(0, 1),
 }
 
 const (
@@ -276,19 +292,33 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		return strings.ToLower(deletableSkills[i].Name) < strings.ToLower(deletableSkills[j].Name)
 	})
 
+	platformSet := make(map[model.Platform]bool)
+	for _, s := range deletableSkills {
+		platformSet[s.Platform] = true
+	}
+
+	var platformOptions []model.Platform
+	for _, platform := range model.AllPlatforms() {
+		if platformSet[platform] {
+			platformOptions = append(platformOptions, platform)
+		}
+	}
+
 	columns, columnWidths := deleteListColumns(0, deletableSkills, 0)
 
 	// Initialize with no skills selected (deletion is opt-in)
 	selected := make(map[string]bool)
 
 	m := DeleteListModel{
-		skills:       deletableSkills,
-		filtered:     deletableSkills,
-		selected:     selected,
-		keys:         defaultDeleteListKeyMap(),
-		columnWidths: columnWidths,
-		phase:        deleteListPhaseList,
-		hScroll:      newHorizontalTableState(columns),
+		skills:          deletableSkills,
+		filtered:        deletableSkills,
+		selected:        selected,
+		keys:            defaultDeleteListKeyMap(),
+		columnWidths:    columnWidths,
+		phase:           deleteListPhaseList,
+		hScroll:         newHorizontalTableState(columns),
+		platformOptions: platformOptions,
+		platformIndex:   -1,
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -462,13 +492,13 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
-		case msg.String() == "left" || msg.String() == "h":
+		case msg.String() == "left":
 			if m.hScroll.MoveLeft() {
 				m.refreshTable()
 			}
 			return m, nil
 
-		case msg.String() == "right" || msg.String() == "l":
+		case msg.String() == "right":
 			if m.hScroll.MoveRight(m.width) {
 				m.refreshTable()
 			}
@@ -489,6 +519,26 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.ClearFlt):
 			m.filter = ""
 			m.applyFilter()
+			return m, nil
+
+		case key.Matches(msg, m.keys.NextPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex++
+				if m.platformIndex >= len(m.platformOptions) {
+					m.platformIndex = -1
+				}
+				m.applyFilter()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PrevPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex--
+				if m.platformIndex < -1 {
+					m.platformIndex = len(m.platformOptions) - 1
+				}
+				m.applyFilter()
+			}
 			return m, nil
 
 		case key.Matches(msg, m.keys.Toggle):
@@ -576,21 +626,34 @@ func (m DeleteListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *DeleteListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.skills
-	} else {
-		var filtered []model.Skill
+	filtered := m.skills
+
+	if m.platformIndex >= 0 && m.platformIndex < len(m.platformOptions) {
+		selectedPlatform := m.platformOptions[m.platformIndex]
+		var platformFiltered []model.Skill
+		for _, s := range filtered {
+			if s.Platform == selectedPlatform {
+				platformFiltered = append(platformFiltered, s)
+			}
+		}
+		filtered = platformFiltered
+	}
+
+	if m.filter != "" {
+		var textFiltered []model.Skill
 		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.skills {
+		for _, s := range filtered {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
 				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
+				textFiltered = append(textFiltered, s)
 			}
 		}
-		m.filtered = filtered
+		filtered = textFiltered
 	}
+
+	m.filtered = filtered
 	m.refreshTable()
 }
 
@@ -634,6 +697,9 @@ func (m DeleteListModel) View() string {
 	b.WriteString(warning)
 	b.WriteString("\n\n")
 
+	b.WriteString(m.renderPlatformTabs())
+	b.WriteString("\n\n")
+
 	// Filter indicator
 	if m.filter != "" || m.filtering {
 		filterStr := deleteListStyles.Filter.Render("Filter: ")
@@ -665,7 +731,7 @@ func (m DeleteListModel) View() string {
 	// Status bar
 	selectedCount := len(m.getSelectedSkills())
 	status := fmt.Sprintf("%d skill(s) marked for deletion of %d", selectedCount, len(m.filtered))
-	if m.filter != "" {
+	if m.filter != "" || m.platformIndex >= 0 {
 		status = fmt.Sprintf("%d marked for deletion, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
 	}
 	if m.hOffset > 0 || m.hOffset < deleteListMaxHOffset {
@@ -788,6 +854,7 @@ func (m DeleteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
 		"←/→ scroll cols",
+		"tab/S-tab platform",
 		"space mark/unmark delete",
 		"a toggle all",
 		"enter details",
@@ -808,6 +875,10 @@ func (m DeleteListModel) renderFullHelp() string {
   g/Home   Go to top
   G/End    Go to bottom
   ←/→      Scroll columns left/right
+
+Platform Filtering:
+  Tab/l       Next platform
+  Shift-Tab/h Previous platform
 
 Selection:
   Space/Tab  Toggle current skill for deletion
@@ -840,8 +911,28 @@ Actions:
 
 General:
   ?        Toggle full help
-  q        Quit`
+ q        Quit`
 	return deleteListStyles.Help.Render(help)
+}
+
+func (m DeleteListModel) renderPlatformTabs() string {
+	var tabs []string
+
+	if m.platformIndex == -1 {
+		tabs = append(tabs, deleteListStyles.PlatformActive.Render("[All]"))
+	} else {
+		tabs = append(tabs, deleteListStyles.PlatformTab.Render(" All "))
+	}
+
+	for i, platform := range m.platformOptions {
+		if i == m.platformIndex {
+			tabs = append(tabs, deleteListStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
+		} else {
+			tabs = append(tabs, deleteListStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
+		}
+	}
+
+	return strings.Join(tabs, "")
 }
 
 // Result returns the result of the user interaction.

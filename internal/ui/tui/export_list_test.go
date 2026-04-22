@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -139,6 +140,58 @@ func TestExportListModel_FilterByPlatform(t *testing.T) {
 
 	if m.filtered[0].Name != "claude-skill" {
 		t.Errorf("expected filtered skill to be claude-skill, got %s", m.filtered[0].Name)
+	}
+}
+
+func TestExportListModel_PlatformFilterCycle(t *testing.T) {
+	skills := []model.Skill{
+		{Name: "claude-skill", Platform: model.ClaudeCode, Scope: model.ScopeUser},
+		{Name: "cursor-skill", Platform: model.Cursor, Scope: model.ScopeRepo},
+	}
+
+	m := NewExportListModel(skills)
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	em := newModel.(ExportListModel)
+
+	if em.platformIndex != 0 {
+		t.Fatalf("expected platform index 0, got %d", em.platformIndex)
+	}
+	if len(em.filtered) != 1 || em.filtered[0].Platform != model.ClaudeCode {
+		t.Fatalf("expected only claude skills after first cycle, got %+v", em.filtered)
+	}
+	if !strings.Contains(em.View(), "[claude-code]") {
+		t.Fatalf("expected view to show active platform tab, got %q", em.View())
+	}
+
+	newModel, _ = em.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	em = newModel.(ExportListModel)
+
+	if em.platformIndex != -1 {
+		t.Fatalf("expected platform index -1 after cycling back to all, got %d", em.platformIndex)
+	}
+	if len(em.filtered) != 2 {
+		t.Fatalf("expected all skills after cycling back, got %d", len(em.filtered))
+	}
+}
+
+func TestExportListModel_PlatformFilterComposesWithTextFilter(t *testing.T) {
+	skills := []model.Skill{
+		{Name: "alpha", Description: "shared", Platform: model.ClaudeCode, Scope: model.ScopeUser},
+		{Name: "beta", Description: "shared", Platform: model.Cursor, Scope: model.ScopeRepo},
+		{Name: "gamma", Description: "other", Platform: model.ClaudeCode, Scope: model.ScopeRepo},
+	}
+
+	m := NewExportListModel(skills)
+	m.platformIndex = 0
+	m.filter = "shared"
+	m.applyFilter()
+
+	if len(m.filtered) != 1 {
+		t.Fatalf("expected one skill after combined filters, got %d", len(m.filtered))
+	}
+	if m.filtered[0].Name != "alpha" {
+		t.Fatalf("expected alpha to remain after combined filters, got %s", m.filtered[0].Name)
 	}
 }
 

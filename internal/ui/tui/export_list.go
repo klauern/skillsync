@@ -45,6 +45,8 @@ type exportListKeyMap struct {
 	Confirm   key.Binding
 	Filter    key.Binding
 	ClearFlt  key.Binding
+	NextPlat  key.Binding
+	PrevPlat  key.Binding
 	Help      key.Binding
 	Quit      key.Binding
 }
@@ -87,6 +89,14 @@ func defaultExportListKeyMap() exportListKeyMap {
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "clear filter"),
 		),
+		NextPlat: key.NewBinding(
+			key.WithKeys("l"),
+			key.WithHelp("l", "next platform"),
+		),
+		PrevPlat: key.NewBinding(
+			key.WithKeys("h"),
+			key.WithHelp("h", "prev platform"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -108,6 +118,8 @@ type ExportListModel struct {
 	result          ExportListResult
 	filter          string
 	filtering       bool
+	platformOptions []model.Platform
+	platformIndex   int // Index into platformOptions (-1 = all)
 	showHelp        bool
 	confirmMode     bool
 	width           int
@@ -120,29 +132,33 @@ type ExportListModel struct {
 
 // Styles for the export list TUI.
 var exportListStyles = struct {
-	Title       lipgloss.Style
-	Help        lipgloss.Style
-	Filter      lipgloss.Style
-	FilterInput lipgloss.Style
-	Confirm     lipgloss.Style
-	Status      lipgloss.Style
-	Selected    lipgloss.Style
-	Checkbox    lipgloss.Style
-	Format      lipgloss.Style
-	Option      lipgloss.Style
-	OptionVal   lipgloss.Style
+	Title          lipgloss.Style
+	Help           lipgloss.Style
+	Filter         lipgloss.Style
+	FilterInput    lipgloss.Style
+	Confirm        lipgloss.Style
+	Status         lipgloss.Style
+	Selected       lipgloss.Style
+	Checkbox       lipgloss.Style
+	Format         lipgloss.Style
+	Option         lipgloss.Style
+	OptionVal      lipgloss.Style
+	PlatformTab    lipgloss.Style
+	PlatformActive lipgloss.Style
 }{
-	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
-	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
-	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	Format:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true),
-	Option:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	OptionVal:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
+	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Filter:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	FilterInput:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Confirm:        lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
+	Status:         lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Selected:       lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Checkbox:       lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	Format:         lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true),
+	Option:         lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	OptionVal:      lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
 }
 
 // skillKey creates a unique key for a skill (name + platform combination).
@@ -165,6 +181,18 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
 
+	platformSet := make(map[model.Platform]bool)
+	for _, s := range skills {
+		platformSet[s.Platform] = true
+	}
+
+	var platformOptions []model.Platform
+	for _, platform := range model.AllPlatforms() {
+		if platformSet[platform] {
+			platformOptions = append(platformOptions, platform)
+		}
+	}
+
 	// Initialize all skills as selected by default
 	selected := make(map[string]bool)
 	for _, s := range skills {
@@ -179,6 +207,8 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		format:          export.FormatJSON,
 		includeMetadata: true,
 		pretty:          true,
+		platformOptions: platformOptions,
+		platformIndex:   -1,
 	}
 
 	rows := m.skillsToRows(skills)
@@ -308,6 +338,26 @@ func (m ExportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.applyFilter()
 			return m, nil
 
+		case key.Matches(msg, m.keys.NextPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex++
+				if m.platformIndex >= len(m.platformOptions) {
+					m.platformIndex = -1
+				}
+				m.applyFilter()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PrevPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex--
+				if m.platformIndex < -1 {
+					m.platformIndex = len(m.platformOptions) - 1
+				}
+				m.applyFilter()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Toggle):
 			if len(m.filtered) > 0 {
 				skill := m.getSelectedSkill()
@@ -362,21 +412,34 @@ func (m ExportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *ExportListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.skills
-	} else {
-		var filtered []model.Skill
+	filtered := m.skills
+
+	if m.platformIndex >= 0 && m.platformIndex < len(m.platformOptions) {
+		selectedPlatform := m.platformOptions[m.platformIndex]
+		var platformFiltered []model.Skill
+		for _, s := range filtered {
+			if s.Platform == selectedPlatform {
+				platformFiltered = append(platformFiltered, s)
+			}
+		}
+		filtered = platformFiltered
+	}
+
+	if m.filter != "" {
+		var textFiltered []model.Skill
 		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.skills {
+		for _, s := range filtered {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
 				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
+				textFiltered = append(textFiltered, s)
 			}
 		}
-		m.filtered = filtered
+		filtered = textFiltered
 	}
+
+	m.filtered = filtered
 	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
@@ -426,6 +489,9 @@ func (m ExportListModel) View() string {
 	b.WriteString(optionsLine)
 	b.WriteString("\n\n")
 
+	b.WriteString(m.renderPlatformTabs())
+	b.WriteString("\n\n")
+
 	// Filter indicator
 	if m.filter != "" || m.filtering {
 		filterStr := exportListStyles.Filter.Render("Filter: ")
@@ -453,7 +519,7 @@ func (m ExportListModel) View() string {
 	// Status bar
 	selectedCount := len(m.getSelectedSkills())
 	status := fmt.Sprintf("%d skill(s) selected of %d", selectedCount, len(m.filtered))
-	if m.filter != "" {
+	if m.filter != "" || m.platformIndex >= 0 {
 		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
 	}
 	b.WriteString(exportListStyles.Status.Render(status))
@@ -475,6 +541,7 @@ func (m ExportListModel) View() string {
 func (m ExportListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"h/l platform",
 		"space toggle",
 		"a toggle all",
 		"f format",
@@ -493,6 +560,10 @@ func (m ExportListModel) renderFullHelp() string {
   ↓/j      Move down
   g/Home   Go to top
   G/End    Go to bottom
+
+Platform Filtering:
+  h        Previous platform
+  l        Next platform
 
 Selection:
   Space/Tab  Toggle current skill
@@ -514,6 +585,26 @@ General:
   ?        Toggle full help
   q        Quit without exporting`
 	return exportListStyles.Help.Render(help)
+}
+
+func (m ExportListModel) renderPlatformTabs() string {
+	var tabs []string
+
+	if m.platformIndex == -1 {
+		tabs = append(tabs, exportListStyles.PlatformActive.Render("[All]"))
+	} else {
+		tabs = append(tabs, exportListStyles.PlatformTab.Render(" All "))
+	}
+
+	for i, platform := range m.platformOptions {
+		if i == m.platformIndex {
+			tabs = append(tabs, exportListStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
+		} else {
+			tabs = append(tabs, exportListStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
+		}
+	}
+
+	return strings.Join(tabs, "")
 }
 
 // Result returns the result of the user interaction.
