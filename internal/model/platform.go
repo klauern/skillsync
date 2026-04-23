@@ -69,7 +69,7 @@ func (p Platform) Short() string {
 	case Codex:
 		return "cdx"
 	case PiAgent:
-		return "pi"
+		return "pia"
 	case PiDev:
 		return "pi"
 	case Copilot:
@@ -83,7 +83,7 @@ func (p Platform) Short() string {
 
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
-	return []Platform{ClaudeCode, Cursor, Codex, Copilot, Gemini, PiDev}
+	return []Platform{ClaudeCode, Cursor, Codex, PiAgent, Copilot, Gemini, PiDev}
 }
 
 // ParsePlatform converts a string to a Platform type.

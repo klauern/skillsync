@@ -31,8 +31,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 6 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 6", len(platforms))
+	if len(platforms) != 7 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 7", len(platforms))
 	}
 
 	for _, p := range platforms {
@@ -51,7 +51,7 @@ func TestPlatformShort(t *testing.T) {
 		"copilot":     {platform: Copilot, want: "cop"},
 		"cursor":      {platform: Cursor, want: "cur"},
 		"codex":       {platform: Codex, want: "cdx"},
-		"pi agent":    {platform: PiAgent, want: "pi"},
+		"pi agent":    {platform: PiAgent, want: "pia"},
 		"gemini":      {platform: Gemini, want: "gem"},
 		"pi.dev":      {platform: PiDev, want: "pi"},
 		"unknown":     {platform: "unknown", want: "unknown"},
