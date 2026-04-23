@@ -86,8 +86,8 @@ func defaultDeleteListKeyMap() deleteListKeyMap {
 			key.WithHelp("esc", "clear filter"),
 		),
 		NextPlat: key.NewBinding(
-			key.WithKeys("tab", "l"),
-			key.WithHelp("tab/l", "next platform"),
+			key.WithKeys("l"),
+			key.WithHelp("l", "next platform"),
 		),
 		PrevPlat: key.NewBinding(
 			key.WithKeys("shift+tab", "h"),
@@ -877,8 +877,8 @@ func (m DeleteListModel) renderFullHelp() string {
   ←/→      Scroll columns left/right
 
 Platform Filtering:
-  Tab/l       Next platform
-  Shift-Tab/h Previous platform
+  h/S-tab   Previous platform
+  l         Next platform
 
 Selection:
   Space/Tab  Toggle current skill for deletion
