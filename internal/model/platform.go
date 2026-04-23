@@ -30,7 +30,7 @@ func (p Platform) IsValid() bool {
 	}
 }
 
-// ConfigDir returns the platform's config directory name (without leading dot).
+// ConfigDir returns the platform's display directory token (without leading dot).
 // Returns "claude" for ClaudeCode, "cursor" for Cursor, "codex" for Codex.
 func (p Platform) ConfigDir() string {
 	switch p {
@@ -41,7 +41,7 @@ func (p Platform) ConfigDir() string {
 	case Codex:
 		return "codex"
 	case PiAgent:
-		return "pi"
+		return "agents"
 	default:
 		return string(p)
 	}

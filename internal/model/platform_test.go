@@ -71,7 +71,7 @@ func TestPlatformConfigDir(t *testing.T) {
 		"claude code":     {platform: ClaudeCode, want: "claude"},
 		"cursor":          {platform: Cursor, want: "cursor"},
 		"codex":           {platform: Codex, want: "codex"},
-		"pi agent":        {platform: PiAgent, want: "pi"},
+		"pi agent":        {platform: PiAgent, want: "agents"},
 		"unknown returns": {platform: "unknown", want: "unknown"},
 		"empty":           {platform: "", want: ""},
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
 )
 
@@ -1515,21 +1516,21 @@ This is a user skill.
 	}
 
 	tests := map[string]struct {
-		paths          []string
+		paths          []util.ScopedPath
 		scopeFilter    []model.SkillScope
 		platform       model.Platform
 		includePlugins bool
 		wantScopes     []model.SkillScope
 	}{
 		"user scope filter excludes plugins": {
-			paths:          []string{filepath.Join(tempDir, ".claude", "skills")},
+			paths:          []util.ScopedPath{{Path: filepath.Join(tempDir, ".claude", "skills"), Scope: model.ScopeUser}},
 			scopeFilter:    []model.SkillScope{model.ScopeUser},
 			platform:       model.ClaudeCode,
 			includePlugins: false,
 			wantScopes:     []model.SkillScope{model.ScopeUser},
 		},
 		"plugin scope filter includes only plugins": {
-			paths:       []string{filepath.Join(tempDir, ".claude", "skills")},
+			paths:       []util.ScopedPath{{Path: filepath.Join(tempDir, ".claude", "skills"), Scope: model.ScopeUser}},
 			scopeFilter: []model.SkillScope{model.ScopePlugin},
 			platform:    model.ClaudeCode,
 			// Note: This will return no skills since there's no real plugin cache set up
@@ -1538,7 +1539,7 @@ This is a user skill.
 			wantScopes:     []model.SkillScope{},
 		},
 		"no filter excludes plugins by default": {
-			paths:          []string{filepath.Join(tempDir, ".claude", "skills")},
+			paths:          []util.ScopedPath{{Path: filepath.Join(tempDir, ".claude", "skills"), Scope: model.ScopeUser}},
 			scopeFilter:    nil,
 			platform:       model.ClaudeCode,
 			includePlugins: false,
@@ -1546,7 +1547,7 @@ This is a user skill.
 			wantScopes: []model.SkillScope{model.ScopeUser},
 		},
 		"no filter with includePlugins includes user scope": {
-			paths:          []string{filepath.Join(tempDir, ".claude", "skills")},
+			paths:          []util.ScopedPath{{Path: filepath.Join(tempDir, ".claude", "skills"), Scope: model.ScopeUser}},
 			scopeFilter:    nil,
 			platform:       model.ClaudeCode,
 			includePlugins: true,
@@ -1555,7 +1556,7 @@ This is a user skill.
 			wantScopes: []model.SkillScope{model.ScopeUser},
 		},
 		"non-claude platform ignores plugins": {
-			paths:          []string{filepath.Join(tempDir, ".cursor", "rules")},
+			paths:          []util.ScopedPath{{Path: filepath.Join(tempDir, ".cursor", "rules"), Scope: model.ScopeUser}},
 			scopeFilter:    []model.SkillScope{model.ScopePlugin},
 			platform:       model.Cursor,
 			includePlugins: false,
@@ -1603,7 +1604,7 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 	}
 
 	projectRelative := filepath.Join(repoRoot, ".pi", "project-relative")
-	projectAbsolute := filepath.Join(repoRoot, "project-absolute")
+	projectAbsolute := filepath.Join(t.TempDir(), "project-absolute")
 	userRelative := filepath.Join(home, ".config", "pi", "user-relative")
 	userAbsolute := filepath.Join(home, "user-absolute")
 	for _, dir := range []string{projectRelative, projectAbsolute, userRelative, userAbsolute} {
@@ -1660,24 +1661,27 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 		t.Fatalf("repoRoot = %q, want %q", gotRepoRoot, wantRepoRoot)
 	}
 
-	wantPaths := []string{
-		filepath.Join(workingDir, ".agents", "skills"),
-		filepath.Join(repoRoot, ".agents", "skills"),
-		projectRelative,
-		projectAbsolute,
-		filepath.Join(home, ".agents", "skills"),
-		userRelative,
-		userAbsolute,
+	wantPaths := []util.ScopedPath{
+		{Path: filepath.Join(workingDir, ".agents", "skills"), Scope: model.ScopeRepo},
+		{Path: filepath.Join(repoRoot, ".agents", "skills"), Scope: model.ScopeRepo},
+		{Path: projectRelative, Scope: model.ScopeRepo},
+		{Path: projectAbsolute, Scope: model.ScopeRepo},
+		{Path: filepath.Join(home, ".agents", "skills"), Scope: model.ScopeUser},
+		{Path: userRelative, Scope: model.ScopeUser},
+		{Path: userAbsolute, Scope: model.ScopeUser},
 	}
 	if len(paths) != len(wantPaths) {
 		t.Fatalf("platformSkillsPaths() returned %d paths, want %d: %v", len(paths), len(wantPaths), paths)
 	}
 	for i, want := range wantPaths {
-		gotPath := strings.TrimPrefix(filepath.Clean(paths[i]), "/private")
-		wantPath := strings.TrimPrefix(filepath.Clean(want), "/private")
+		gotPath := strings.TrimPrefix(filepath.Clean(paths[i].Path), "/private")
+		wantPath := strings.TrimPrefix(filepath.Clean(want.Path), "/private")
 
 		if gotPath != wantPath {
 			t.Fatalf("path %d = %q, want %q", i, gotPath, wantPath)
+		}
+		if paths[i].Scope != want.Scope {
+			t.Fatalf("scope %d = %q, want %q", i, paths[i].Scope, want.Scope)
 		}
 	}
 }
@@ -1718,7 +1722,10 @@ Skill content.`
 	// Command path intentionally first to verify same-scope override behavior.
 	skills := parsePlatformSkillsFromPaths(
 		model.ClaudeCode,
-		[]string{commandsDir, skillsDir},
+		[]util.ScopedPath{
+			{Path: commandsDir, Scope: model.ScopeUser},
+			{Path: skillsDir, Scope: model.ScopeUser},
+		},
 		"",
 		nil,
 		false,

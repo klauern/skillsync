@@ -1623,7 +1623,7 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter, includePlugins), nil
 }
 
-func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, string, error) {
+func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get working directory: %w", err)
@@ -1662,18 +1662,21 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 			return nil, repoRoot, err
 		}
 
-		paths := make([]string, 0, len(discoveredPaths)+len(rawPaths))
+		paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))
 		seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
 		for _, sp := range discoveredPaths {
 			if !seen[sp.Path] {
-				paths = append(paths, sp.Path)
+				paths = append(paths, sp)
 				seen[sp.Path] = true
 			}
 		}
 
 		for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
 			if !seen[p] {
-				paths = append(paths, p)
+				paths = append(paths, util.ScopedPath{
+					Path:  p,
+					Scope: inferScopeForPath(p, repoRoot),
+				})
 				seen[p] = true
 			}
 		}
@@ -1681,7 +1684,7 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		return paths, repoRoot, nil
 	}
 
-	paths := resolveSkillsPaths(rawPaths, cwd, repoRoot)
+	paths := scopedPathsFromStrings(resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot)
 
 	// Backward compatibility: older config files may only include .claude/skills
 	// paths and omit .claude/commands paths. Always include command paths for
@@ -1690,11 +1693,14 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]string,
 		commandPaths := resolveSkillsPaths([]string{".claude/commands", "~/.claude/commands"}, cwd, repoRoot)
 		seen := make(map[string]bool, len(paths))
 		for _, p := range paths {
-			seen[p] = true
+			seen[p.Path] = true
 		}
 		for _, p := range commandPaths {
 			if !seen[p] {
-				paths = append(paths, p)
+				paths = append(paths, util.ScopedPath{
+					Path:  p,
+					Scope: inferScopeForPath(p, repoRoot),
+				})
 			}
 		}
 	}
@@ -1733,9 +1739,20 @@ func resolveSkillsPaths(rawPaths []string, cwd, repoRoot string) []string {
 	return paths
 }
 
+func scopedPathsFromStrings(paths []string, repoRoot string) []util.ScopedPath {
+	scoped := make([]util.ScopedPath, 0, len(paths))
+	for _, path := range paths {
+		scoped = append(scoped, util.ScopedPath{
+			Path:  path,
+			Scope: inferScopeForPath(path, repoRoot),
+		})
+	}
+	return scoped
+}
+
 func parsePlatformSkillsFromPaths(
 	platform model.Platform,
-	paths []string,
+	paths []util.ScopedPath,
 	repoRoot string,
 	scopeFilter []model.SkillScope,
 	includePlugins bool,
@@ -1748,8 +1765,12 @@ func parsePlatformSkillsFromPaths(
 		scopeSet[s] = true
 	}
 
-	for _, path := range paths {
-		scope := inferScopeForPath(path, repoRoot)
+	for _, sp := range paths {
+		path := sp.Path
+		scope := sp.Scope
+		if scope == "" {
+			scope = inferScopeForPath(path, repoRoot)
+		}
 		if len(scopeSet) > 0 && !scopeSet[scope] {
 			continue
 		}
