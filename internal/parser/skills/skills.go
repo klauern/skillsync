@@ -101,6 +101,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		Platform: p.platform,
 		Path:     filePath,
 		Metadata: make(map[string]string),
+		Type:     model.SkillTypeSkill,
 	}
 
 	if result.HasFrontmatter {
@@ -170,14 +171,27 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		}
 	}
 
-	// If no name in frontmatter, derive from parent directory name
+	// If no name in frontmatter, derive from parent directory name.
 	if skill.Name == "" {
 		skill.Name = deriveNameFromPath(filePath)
 	}
 
 	// Validate skill name
 	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", skill.Name, filePath, err)
+		// Codex skills often use human-readable frontmatter names, but the
+		// directory basename is the canonical identifier for discovery/sync.
+		// Fall back to the directory name when it is valid so discover stays quiet.
+		if p.platform == model.Codex {
+			fallback := deriveNameFromPath(filePath)
+			if fallback != skill.Name {
+				if fallbackErr := parser.ValidateSkillName(fallback); fallbackErr == nil {
+					skill.Name = fallback
+				}
+			}
+		}
+		if err := parser.ValidateSkillName(skill.Name); err != nil {
+			return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", skill.Name, filePath, err)
+		}
 	}
 
 	// Detect skill directory structure
@@ -193,6 +207,10 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 	// Normalize content
 	skill.Content = parser.NormalizeContent(result.Content)
+
+	if skill.Type == "" {
+		skill.Type = model.SkillTypeSkill
+	}
 
 	return skill, nil
 }
@@ -522,11 +540,25 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 		return model.Skill{}, fmt.Errorf("skill name is required")
 	}
 	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		return model.Skill{}, fmt.Errorf("invalid skill name %q: %w", skill.Name, err)
+		// Keep Codex content parsing aligned with file-backed SKILL.md parsing:
+		// the provided name is the canonical identifier even when frontmatter
+		// carries a human-readable display name.
+		if platform == model.Codex && name != "" && name != skill.Name {
+			if fallbackErr := parser.ValidateSkillName(name); fallbackErr == nil {
+				skill.Name = name
+			}
+		}
+		if err := parser.ValidateSkillName(skill.Name); err != nil {
+			return model.Skill{}, fmt.Errorf("invalid skill name %q: %w", skill.Name, err)
+		}
 	}
 
 	// Normalize content
 	skill.Content = parser.NormalizeContent(result.Content)
+
+	if skill.Type == "" {
+		skill.Type = model.SkillTypeSkill
+	}
 
 	return skill, nil
 }

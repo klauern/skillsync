@@ -66,6 +66,48 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 
 // transformPath generates the appropriate file path for the target platform.
 func (t *Transformer) transformPath(skill model.Skill, target model.Platform) string {
+	if isSystemPromptSkill(skill) {
+		switch target {
+		case model.PiDev:
+			if skill.Metadata["mode"] == "append" {
+				return "APPEND_SYSTEM.md"
+			}
+			return "SYSTEM.md"
+		case model.Gemini:
+			return "GEMINI.md"
+		default:
+			baseName := filepath.Base(skill.Path)
+			if baseName == "" {
+				if skill.Metadata["mode"] == "append" {
+					return "append-system.md"
+				}
+				return "system.md"
+			}
+			return baseName
+		}
+	}
+
+	if target == model.Copilot {
+		return transformCopilotPath(skill)
+	}
+
+	if target == model.Gemini {
+		if skill.Metadata["type"] == "instructions" {
+			return "GEMINI.md"
+		}
+		if skill.Type == model.SkillTypePrompt {
+			return filepath.Join(skill.Name, "SKILL.md")
+		}
+		baseName := filepath.Base(skill.Path)
+		if isSkillFile(baseName) && skill.Name != "" {
+			return filepath.Join(skill.Name, "SKILL.md")
+		}
+		if baseName == "" {
+			return "SKILL.md"
+		}
+		return baseName
+	}
+
 	if skill.Type == model.SkillTypePrompt {
 		switch target {
 		case model.Codex:
@@ -127,7 +169,11 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 func (t *Transformer) transformContent(skill model.Skill, target model.Platform, targetPath string) (string, error) {
 	// Build frontmatter based on target platform
 	var frontmatter map[string]any
-	if shouldIncludeFrontmatter(target, targetPath) {
+	includeFrontmatter := shouldIncludeFrontmatter(target, targetPath)
+	if isSystemPromptSkill(skill) && target == model.PiDev {
+		includeFrontmatter = false
+	}
+	if includeFrontmatter {
 		frontmatter = t.buildFrontmatter(skill, target)
 	}
 
@@ -182,9 +228,15 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		// Cursor has specific fields like globs and alwaysApply
 		if globs, ok := skill.Metadata["globs"]; ok {
 			fm["globs"] = globs
+		} else if applyTo, ok := skill.Metadata["applyTo"]; ok && applyTo != "" {
+			fm["globs"] = applyTo
 		}
 		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
 			fm["alwaysApply"] = alwaysApply
+		}
+	case model.Copilot:
+		if len(skill.Tools) > 0 {
+			fm["tools"] = skill.Tools
 		}
 	}
 
@@ -194,10 +246,19 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		if key == "globs" || key == "alwaysApply" {
 			continue
 		}
+		if target == model.Copilot && key == model.MetadataKeyCopilotArtifact {
+			continue
+		}
 		// Include if not already set
 		if _, exists := fm[key]; !exists {
 			fm[key] = val
 		}
+	}
+
+	if target == model.Copilot && copilotArtifactType(skill) == model.CopilotArtifactRepositoryInstructions {
+		delete(fm, "name")
+		delete(fm, "type")
+		delete(fm, "trigger")
 	}
 
 	return fm
@@ -217,6 +278,44 @@ func shouldIncludeFrontmatter(target model.Platform, targetPath string) bool {
 	return true
 }
 
+func isSystemPromptSkill(skill model.Skill) bool {
+	return skill.Metadata["type"] == "system-prompt"
+}
+
+func transformCopilotPath(skill model.Skill) string {
+	switch copilotArtifactType(skill) {
+	case model.CopilotArtifactRepositoryInstructions:
+		return "copilot-instructions.md"
+	case model.CopilotArtifactInstructions:
+		return filepath.Join("instructions", skill.Name+".instructions.md")
+	case model.CopilotArtifactPrompt:
+		return filepath.Join("prompts", skill.Name+".prompt.md")
+	default:
+		return filepath.Join("agents", skill.Name+".agent.md")
+	}
+}
+
+func copilotArtifactType(skill model.Skill) string {
+	if artifact := skill.Metadata[model.MetadataKeyCopilotArtifact]; artifact != "" {
+		return artifact
+	}
+	if skill.Type == model.SkillTypePrompt {
+		return model.CopilotArtifactPrompt
+	}
+
+	base := strings.ToLower(filepath.Base(skill.Path))
+	switch {
+	case base == "copilot-instructions.md", base == "agents.md", base == "claude.md", base == "gemini.md":
+		return model.CopilotArtifactRepositoryInstructions
+	case strings.HasSuffix(base, ".instructions.md"):
+		return model.CopilotArtifactInstructions
+	case strings.HasSuffix(base, ".prompt.md"):
+		return model.CopilotArtifactPrompt
+	default:
+		return model.CopilotArtifactAgent
+	}
+}
+
 // transformMetadata transforms metadata for the target platform.
 func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform) map[string]string {
 	metadata := make(map[string]string)
@@ -232,11 +331,17 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 		delete(metadata, "alwaysApply")
 
 	case model.Cursor:
-		// Cursor metadata is typically preserved as-is
+		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
+			metadata["globs"] = applyTo
+			delete(metadata, "applyTo")
+		}
 
 	case model.Codex:
 		// Codex metadata handling - preserve source info
 		metadata["source_platform"] = string(skill.Platform)
+		delete(metadata, "handoffs")
+		delete(metadata, "target")
+		delete(metadata, "mcp-servers")
 	}
 
 	return metadata

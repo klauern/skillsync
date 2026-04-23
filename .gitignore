@@ -40,6 +40,9 @@ Thumbs.db
 # bv (beads viewer) local config and caches
 .bv/
 
+# Local git worktrees
+.worktrees/
+
 # E2E test artifacts
 internal/e2e/.codex/
 
@@ -49,3 +52,6 @@ internal/cli/.codex/skills/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key

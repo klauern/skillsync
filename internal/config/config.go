@@ -35,6 +35,9 @@ type PlatformsConfig struct {
 	Cursor     PlatformConfig `yaml:"cursor"`
 	Codex      PlatformConfig `yaml:"codex"`
 	PiAgent    PlatformConfig `yaml:"pi_agent"`
+	Copilot    PlatformConfig `yaml:"copilot"`
+	Gemini     PlatformConfig `yaml:"gemini"`
+	PiDev      PlatformConfig `yaml:"pidev"`
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -96,6 +99,7 @@ func Default() *Config {
 			Codex: PlatformConfig{
 				SkillsPaths: []string{
 					".codex/skills",     // Project (relative)
+					"~/.agents/skills",  // User alternate (preferred when present)
 					"~/.codex/skills",   // User (absolute)
 					"/etc/codex/skills", // Admin (system-wide)
 				},
@@ -104,6 +108,25 @@ func Default() *Config {
 				SkillsPaths: []string{
 					".agents/skills",   // Project (relative)
 					"~/.agents/skills", // User (absolute)
+				},
+			},
+			Copilot: PlatformConfig{
+				SkillsPaths: []string{
+					".github", // GitHub Copilot workspace root
+				},
+			},
+			Gemini: PlatformConfig{
+				SkillsPaths: []string{
+					".gemini",   // Project config root (includes skills/ and GEMINI.md)
+					"~/.gemini", // User config root (includes skills/ and GEMINI.md)
+				},
+			},
+			PiDev: PlatformConfig{
+				SkillsPaths: []string{
+					".agents/skills",     // Project (preferred)
+					".pi/skills",         // Project fallback
+					"~/.agents/skills",   // User (preferred)
+					"~/.pi/agent/skills", // User fallback
 				},
 			},
 		},
@@ -248,6 +271,15 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_PI_AGENT_SKILLS_PATHS"); v != "" {
 		c.Platforms.PiAgent.SkillsPaths = splitPaths(v)
 	}
+	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_SKILLS_PATHS", "SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
+		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
+	}
+	if v := os.Getenv("SKILLSYNC_COPILOT_SKILLS_PATHS"); v != "" {
+		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
+	}
+	if v := os.Getenv("SKILLSYNC_GEMINI_SKILLS_PATHS"); v != "" {
+		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
+	}
 
 	// Deprecated: single path environment variables (for backward compatibility)
 	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
@@ -261,6 +293,15 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := os.Getenv("SKILLSYNC_PI_AGENT_PATH"); v != "" {
 		c.Platforms.PiAgent.SkillsPath = v
+	}
+	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"); v != "" {
+		c.Platforms.PiDev.SkillsPath = v
+	}
+	if v := os.Getenv("SKILLSYNC_COPILOT_PATH"); v != "" {
+		c.Platforms.Copilot.SkillsPath = v
+	}
+	if v := os.Getenv("SKILLSYNC_GEMINI_PATH"); v != "" {
+		c.Platforms.Gemini.SkillsPath = v
 	}
 
 	// Similarity settings
@@ -292,6 +333,15 @@ func splitPaths(s string) []string {
 		}
 	}
 	return result
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // GetStrategy returns the sync strategy from config, validating it.

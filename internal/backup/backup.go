@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -48,7 +50,7 @@ func isSkillEntrypoint(name string) bool {
 // resolveSourcePath returns the path to backup. When given a skill entrypoint
 // file (SKILL.md), resolves to its parent directory so the full skill folder is backed up.
 func resolveSourcePath(sourcePath string) (string, error) {
-	info, err := os.Stat(sourcePath)
+	info, err := os.Lstat(sourcePath)
 	if err != nil {
 		return "", err
 	}
@@ -219,6 +221,13 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 
 	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				logging.Warn("skipping missing path while archiving directory",
+					logging.Path(path),
+					logging.Err(walkErr),
+				)
+				return nil
+			}
 			return walkErr
 		}
 		if info.IsDir() {
@@ -238,15 +247,41 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 		header.Name = relPath
 		header.Method = zip.Deflate
 
-		writer, err := zipWriter.CreateHeader(header)
-		if err != nil {
-			return fmt.Errorf("failed to add %q to archive: %w", path, err)
+		if info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(path)
+			if err != nil {
+				return fmt.Errorf("failed to read symlink %q: %w", path, err)
+			}
+
+			if _, err := os.Stat(path); err != nil {
+				if os.IsNotExist(err) {
+					logging.Warn("skipping broken symlink during backup",
+						logging.Path(path),
+						slog.String("target", linkTarget),
+					)
+					return nil
+				}
+				return fmt.Errorf("failed to stat symlink target %q: %w", path, err)
+			}
 		}
 
 		// #nosec G304 G122 - path comes from filepath.Walk under trusted sourcePath; symlink TOCTOU not applicable here
 		file, err := os.Open(path)
 		if err != nil {
+			if os.IsNotExist(err) {
+				logging.Warn("skipping missing file during backup",
+					logging.Path(path),
+					logging.Err(err),
+				)
+				return nil
+			}
 			return fmt.Errorf("failed to open %q for archive: %w", path, err)
+		}
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			_ = file.Close()
+			return fmt.Errorf("failed to add %q to archive: %w", path, err)
 		}
 
 		if _, err := io.Copy(writer, file); err != nil {

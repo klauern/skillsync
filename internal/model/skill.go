@@ -2,6 +2,20 @@ package model
 
 import "time"
 
+const (
+	// MetadataKeyCopilotArtifact stores the original GitHub Copilot artifact surface.
+	MetadataKeyCopilotArtifact = "copilot_artifact"
+
+	// CopilotArtifactRepositoryInstructions identifies .github/copilot-instructions.md.
+	CopilotArtifactRepositoryInstructions = "repository_instructions"
+	// CopilotArtifactInstructions identifies .github/instructions/*.instructions.md files.
+	CopilotArtifactInstructions = "instructions"
+	// CopilotArtifactPrompt identifies .github/prompts/*.prompt.md files.
+	CopilotArtifactPrompt = "prompt"
+	// CopilotArtifactAgent identifies .github/agents/*.agent.md files.
+	CopilotArtifactAgent = "agent"
+)
+
 // PluginInfo contains metadata about a plugin-installed skill.
 // This tracks whether a skill was installed via Claude Code's plugin system
 // and from which marketplace/repository it originated.
@@ -34,7 +48,8 @@ type Skill struct {
 	Content     string            `json:"content"`
 	ModifiedAt  time.Time         `json:"modified_at"`
 
-	// Type indicates whether this is a regular skill or a slash command/prompt.
+	// Type indicates whether this is a regular skill or a slash command/prompt
+	// transport artifact. It does not imply a separate Codex runtime model.
 	// Defaults to SkillTypeSkill if not specified.
 	Type SkillType `json:"type,omitempty"`
 
@@ -68,10 +83,15 @@ func (s Skill) IsHigherPrecedence(other Skill) bool {
 //   - Dev symlinks show: ~/.claude/skills (dev: marketplace) or (dev) if unknown
 func (s Skill) DisplayScope() string {
 	platformDir := s.Platform.ConfigDir()
+	base := "~/." + platformDir + "/skills"
+	repoBase := "." + platformDir + "/skills"
+	if s.Platform == Gemini {
+		base = "~/.gemini"
+		repoBase = ".gemini"
+	}
 
 	// Check for plugin info from symlink detection
 	if s.PluginInfo != nil {
-		base := "~/." + platformDir + "/skills"
 		if s.PluginInfo.IsDev {
 			// Development symlink - points outside plugin cache
 			if s.PluginInfo.Marketplace != "" {
@@ -90,9 +110,9 @@ func (s Skill) DisplayScope() string {
 
 	switch s.Scope {
 	case ScopeUser:
-		return "~/." + platformDir + "/skills"
+		return base
 	case ScopeRepo:
-		return "." + platformDir + "/skills"
+		return repoBase
 	case ScopePlugin:
 		if name := s.Metadata["plugin"]; name != "" {
 			return "plugin:" + name

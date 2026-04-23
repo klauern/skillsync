@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
@@ -114,37 +115,59 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 	return skills, nil
 }
 
-// parsePluginDirectory scans a plugin directory for SKILL.md files and parses them.
+// parsePluginDirectory scans a plugin directory for SKILL.md files and commands/*.md files.
 func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]model.Skill, error) {
 	// Find all SKILL files in the plugin directory (SKILL.md, skill.md, Skill.md)
-	patterns := []string{
+	skillPatterns := []string{
 		"**/SKILL.md", "SKILL.md",
 		"**/skill.md", "skill.md",
 		"**/Skill.md", "Skill.md",
 	}
-	files, err := parser.DiscoverFiles(entry.InstallPath, patterns)
+	skillFiles, err := parser.DiscoverFiles(entry.InstallPath, skillPatterns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover skill files: %w", err)
 	}
+	skillFiles = deduplicateBySameFile(skillFiles)
 
-	// Deduplicate by same physical file (case-insensitive filesystems can return
-	// multiple path strings for one file when matching SKILL.md, skill.md, Skill.md)
-	files = deduplicateBySameFile(files)
+	// Also find command files in commands/ subdirectories (plugins using legacy command format)
+	commandPatterns := []string{"commands/*.md", "**/commands/*.md"}
+	commandFiles, err := parser.DiscoverFiles(entry.InstallPath, commandPatterns)
+	if err != nil {
+		logging.Warn("failed to discover command files",
+			logging.Path(entry.InstallPath),
+			logging.Err(err),
+		)
+	}
+	commandFiles = deduplicateBySameFile(commandFiles)
 
-	if len(files) == 0 {
-		logging.Debug("no skill files found in plugin",
+	// Build a set of SKILL.md directories to skip duplicate command files that are
+	// already covered by a SKILL.md in the same directory.
+	skillDirs := make(map[string]bool)
+	for _, f := range skillFiles {
+		skillDirs[filepath.Dir(f)] = true
+	}
+	var filteredCommandFiles []string
+	for _, f := range commandFiles {
+		if !skillDirs[filepath.Dir(f)] {
+			filteredCommandFiles = append(filteredCommandFiles, f)
+		}
+	}
+
+	allFiles := append(skillFiles, filteredCommandFiles...)
+	if len(allFiles) == 0 {
+		logging.Debug("no skill or command files found in plugin",
 			logging.Path(entry.InstallPath),
 		)
 		return []model.Skill{}, nil
 	}
 
-	logging.Debug("found skill files in plugin",
+	logging.Debug("found skill/command files in plugin",
 		logging.Path(entry.InstallPath),
-		logging.Count(len(files)),
+		logging.Count(len(allFiles)),
 	)
 
 	var skills []model.Skill
-	for _, filePath := range files {
+	for _, filePath := range allFiles {
 		skill, err := p.parseSkillFile(filePath, entry)
 		if err != nil {
 			logging.Warn("failed to parse skill file",
@@ -195,21 +218,33 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 			}
 		}
 
-		// Extract tools array
-		if toolsVal, ok := fm["tools"]; ok {
-			if toolsSlice, ok := toolsVal.([]any); ok {
-				tools = make([]string, 0, len(toolsSlice))
-				for _, tool := range toolsSlice {
-					if toolStr, ok := tool.(string); ok {
-						tools = append(tools, toolStr)
+		// Extract tools array — command files use "allowed-tools", skills use "tools".
+		for _, toolsKey := range []string{"tools", "allowed-tools"} {
+			if toolsVal, ok := fm[toolsKey]; ok {
+				switch v := toolsVal.(type) {
+				case []any:
+					tools = make([]string, 0, len(v))
+					for _, tool := range v {
+						if toolStr, ok := tool.(string); ok {
+							tools = append(tools, toolStr)
+						}
 					}
+				case string:
+					for _, part := range strings.Split(v, ",") {
+						if t := strings.TrimSpace(part); t != "" {
+							tools = append(tools, t)
+						}
+					}
+				}
+				if len(tools) > 0 {
+					break
 				}
 			}
 		}
 
 		// Store remaining fields in metadata
 		for key, val := range fm {
-			if key != "name" && key != "description" && key != "tools" {
+			if key != "name" && key != "description" && key != "tools" && key != "allowed-tools" {
 				if strVal, ok := val.(string); ok {
 					metadata[key] = strVal
 				} else {
@@ -219,10 +254,17 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 		}
 	}
 
-	// Derive name from directory if not in frontmatter
+	// Detect whether this file is a Claude command (lives inside a commands/ directory).
+	isCommand := parser.IsCommandFile(filePath)
+
+	// Derive name from filename (for commands) or parent directory (for SKILL.md files).
 	if name == "" {
-		// Use the parent directory name as skill name
-		name = filepath.Base(filepath.Dir(filePath))
+		if isCommand {
+			base := filepath.Base(filePath)
+			name = base[:len(base)-len(filepath.Ext(base))]
+		} else {
+			name = filepath.Base(filepath.Dir(filePath))
+		}
 	}
 
 	// Validate skill name, falling back to directory name for non-conforming plugin skills.
@@ -259,6 +301,16 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 	// Normalize content
 	normalizedContent := parser.NormalizeContent(result.Content)
 
+	// For command files: default to prompt type and derive slash trigger from filename.
+	skillType := model.SkillTypeSkill
+	var trigger string
+	if isCommand {
+		skillType = model.SkillTypePrompt
+		base := filepath.Base(filePath)
+		stem := base[:len(base)-len(filepath.Ext(base))]
+		trigger = "/" + stem
+	}
+
 	// Create PluginInfo for this skill
 	pluginInfo := &model.PluginInfo{
 		PluginName:   entry.PluginKey,
@@ -280,6 +332,8 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 		ModifiedAt:  fileInfo.ModTime(),
 		Scope:       model.ScopePlugin,
 		PluginInfo:  pluginInfo,
+		Type:        skillType,
+		Trigger:     trigger,
 	}, nil
 }
 

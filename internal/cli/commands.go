@@ -195,6 +195,7 @@ func showConfigPaths() error {
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
 	fmt.Printf("  Pi Agent:        %v\n", cfg.Platforms.PiAgent.SkillsPaths)
+	fmt.Printf("  Pi.dev:          %v\n", cfg.Platforms.PiDev.SkillsPaths)
 
 	fmt.Println("\nData paths:")
 	fmt.Printf("  Backups:         %s\n", util.SkillsyncBackupsPath())
@@ -250,7 +251,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex, pi-agent
+   Supported platforms: claude-code, cursor, codex, gemini, pi.dev
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -262,7 +263,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, gemini, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -769,6 +770,8 @@ func colorPlatform(platform string, width int) string {
 		return ui.Success(formatted)
 	case "codex":
 		return ui.Warning(formatted)
+	case "pi.dev":
+		return ui.Magenta(formatted)
 	default:
 		return formatted
 	}
@@ -863,7 +866,7 @@ func syncCommand() *cli.Command {
 		UsageText: "skillsync sync [options] <source> <target>",
 		Description: `Synchronize skills between AI coding platforms.
 
-   Supported platforms: claudecode, cursor, codex, pi-agent
+   Supported platforms: claudecode, cursor, codex, pi.dev
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -921,7 +924,7 @@ func deleteCommand() *cli.Command {
 		UsageText: "skillsync delete [options] <source> <target>",
 		Description: `Delete skills from the target platform that also exist in the source.
 
-   Supported platforms: claudecode, cursor, codex, pi-agent
+   Supported platforms: claudecode, cursor, codex, pi.dev
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -1184,6 +1187,8 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 	if err := targetSpec.ValidateAsTarget(); err != nil {
 		return nil, fmt.Errorf("invalid target: %w", err)
 	}
+
+	sourceSpec = sourceSpec.NormalizeSource()
 
 	if sourceSpec.Platform == targetSpec.Platform {
 		return nil, fmt.Errorf("source and target platforms cannot be the same: %s", sourceSpec.Platform)
@@ -1652,6 +1657,21 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 		if len(rawPaths) == 0 && cfg.Platforms.PiAgent.SkillsPath != "" { //nolint:staticcheck // backward compatibility
 			rawPaths = []string{cfg.Platforms.PiAgent.SkillsPath} //nolint:staticcheck // backward compatibility
 		}
+	case model.Copilot:
+		rawPaths = cfg.Platforms.Copilot.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.Copilot.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.Copilot.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
+	case model.Gemini:
+		rawPaths = cfg.Platforms.Gemini.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.Gemini.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.Gemini.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
+	case model.PiDev:
+		rawPaths = cfg.Platforms.PiDev.SkillsPaths
+		if len(rawPaths) == 0 && cfg.Platforms.PiDev.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+			rawPaths = []string{cfg.Platforms.PiDev.SkillsPath} //nolint:staticcheck // backward compatibility
+		}
 	default:
 		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -2067,7 +2087,7 @@ func exportCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2237,7 +2257,7 @@ func backupCreateCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to back up (claude-code, cursor, codex, pi-agent, all)",
+				Usage:   "Platform to back up (claude-code, cursor, codex, pi.dev, all)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -2318,7 +2338,7 @@ func backupListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2537,7 +2557,7 @@ func backupDeleteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
@@ -2597,7 +2617,7 @@ func backupVerifyCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -3093,10 +3113,7 @@ func runSyncTUI() error {
 	}
 
 	if len(sourceSkills) == 0 {
-		sourceScopeLabel := "all"
-		if len(sourceScopes) == 1 {
-			sourceScopeLabel = string(sourceScopes[0])
-		}
+		sourceScopeLabel := model.FormatSourceScopes(sourceScopes)
 		ui.Info(fmt.Sprintf("No skills found in %s:%s", sourcePlatform, sourceScopeLabel))
 		return nil
 	}
@@ -3629,6 +3646,7 @@ func runCompareTUI() error {
 	if err != nil {
 		return fmt.Errorf("failed to find similar skills: %w", err)
 	}
+	comparisons = filterComparisonResultsByPlatform(comparisons, false)
 
 	if len(comparisons) == 0 {
 		ui.Info("No similar skills found to compare")

@@ -8,8 +8,11 @@ import (
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/codex"
+	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
+	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/piagent"
+	"github.com/klauern/skillsync/internal/parser/pidev"
 )
 
 // ClaudeCodeParserFactory returns a ParserFactory for Claude Code.
@@ -40,6 +43,27 @@ func PiAgentParserFactory() ParserFactory {
 	}
 }
 
+// CopilotParserFactory returns a ParserFactory for GitHub Copilot.
+func CopilotParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return copilot.New(basePath)
+	}
+}
+
+// GeminiParserFactory returns a ParserFactory for Gemini CLI.
+func GeminiParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return gemini.New(basePath)
+	}
+}
+
+// PiDevParserFactory returns a ParserFactory for Pi.dev.
+func PiDevParserFactory() ParserFactory {
+	return func(basePath string) parser.Parser {
+		return pidev.New(basePath)
+	}
+}
+
 // ParserFactoryFor returns the appropriate ParserFactory for a platform.
 func ParserFactoryFor(platform model.Platform) ParserFactory {
 	switch platform {
@@ -51,6 +75,12 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 		return CodexParserFactory()
 	case model.PiAgent:
 		return PiAgentParserFactory()
+	case model.Copilot:
+		return CopilotParserFactory()
+	case model.Gemini:
+		return GeminiParserFactory()
+	case model.PiDev:
+		return PiDevParserFactory()
 	default:
 		// Return a factory that creates Claude parsers as a fallback
 		return ClaudeCodeParserFactory()

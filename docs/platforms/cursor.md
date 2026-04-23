@@ -6,7 +6,7 @@
 
 Cursor is an AI-powered IDE (fork of VS Code) that provides contextual AI assistance through rules,
 skills, commands, and custom modes. Configuration lives in the `.cursor/` directory at both project
-and user level. Cursor supports the [Agent Skills Standard](https://agentskills.io) (`SKILL.md`)
+and user level. Cursor supports the [Agent Skills Standard](https://agentskills.io/home) (`SKILL.md`)
 alongside its own legacy rule format (`.md`/`.mdc` files with frontmatter).
 
 Cursor also auto-discovers skills from other platforms' directories (`.claude/skills/`,
@@ -264,7 +264,7 @@ Additional coverage via inline test cases in `internal/parser/cursor/cursor_test
 - **No per-command tool field**: unlike Claude's `allowed-tools`, individual command files cannot
   restrict tool access.
 - **Mode metadata not file-based**: `modes.json` is a single JSON file rather than per-mode
-  markdown files, making it harder to map from individual Claude/Codex command artifacts.
+  markdown files, making it harder to map from individual Claude/Codex prompt artifacts.
 - **`.mdc` format**: the legacy `.mdc` extension is functionally identical to `.md` with YAML
   frontmatter, but is specific to Cursor and not recognized by other platforms.
 - **Team/Enterprise rules**: team-level rules (Team/Enterprise plans) are not parsed by SkillSync
@@ -277,9 +277,9 @@ Additional coverage via inline test cases in `internal/parser/cursor/cursor_test
 - [Cursor Skills documentation](https://cursor.com/docs/context/skills) -- retrieved 2026-02-22
 - [Cursor Rules documentation](https://cursor.com/docs/context/rules) -- retrieved 2026-02-22
 - Cursor full LLM docs: https://cursor.com/docs/llms-full.txt (accessed 2026-02-09)
-- [Agent Skills Standard](https://agentskills.io) -- open standard for portable AI agent skills
+- [Agent Skills Standard](https://agentskills.io/home) -- open standard for portable AI agent skills
 - `internal/parser/cursor/cursor.go` -- SkillSync Cursor parser implementation
 - `internal/parser/skills/skills.go` -- shared SKILL.md parser
 - `internal/model/skill.go` -- unified skill model
-- `docs/research-cursor-commands-prompts.md` -- internal research notes, 2026-02-09 (superseded by this document)
-- `docs/skill-formats-research.md` -- cross-platform skill format research (superseded by `docs/platforms/`)
+- `docs/platforms/portability-assessment.md` -- focused portability assessment
+- `docs/platforms/cross-platform-mapping.md` -- broad cross-platform reference

@@ -55,6 +55,7 @@ func NewHarness(t *testing.T) *Harness {
 
 	// Set default environment for isolation
 	h.SetEnv("SKILLSYNC_HOME", homeDir)
+	h.SetEnv("HOME", homeDir)
 
 	// Set platform paths to use test directories
 	// Set BOTH old (deprecated) and new env vars for compatibility:
@@ -68,6 +69,15 @@ func NewHarness(t *testing.T) *Harness {
 	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
 	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
 	h.SetEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", homeDir+"/.agents/skills")
+	h.SetEnv("SKILLSYNC_COPILOT_PATH", homeDir+"/.github")
+	h.SetEnv("SKILLSYNC_GEMINI_PATH", homeDir+"/.gemini")
+	h.SetEnv("SKILLSYNC_PIDEV_PATH", homeDir+"/.pi/agent/skills")
+	h.SetEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", homeDir+"/.claude/commands")
+	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
+	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
+	h.SetEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", homeDir+"/.github")
+	h.SetEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", homeDir+"/.gemini")
+	h.SetEnv("SKILLSYNC_PIDEV_SKILLS_PATHS", homeDir+"/.pi/agent/skills")
 
 	return h
 }

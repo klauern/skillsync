@@ -30,6 +30,7 @@ skillsync --help
 skillsync config init
 skillsync discover --format table
 skillsync sync cursor claudecode --dry-run
+skillsync sync cursor:repo,user codex:repo
 ```
 
 ## Commands
@@ -69,23 +70,23 @@ By default, Claude Code discovery checks both `commands` and `skills` paths
 (`.claude/commands`, `.claude/skills`, `~/.claude/commands`, `~/.claude/skills`)
 so command-style prompts and standard skills are both synced.
 
-## Command-Aware Sync
+## Transport-Layer Prompt Sync
 
-SkillSync models both traditional skills and prompt/command artifacts.
+SkillSync models both traditional skills and prompt-like transport artifacts.
 
 - Discovery includes both artifact types. Filter with `discover --type`.
 - Sync/delete default to `skill` artifacts only (safe default).
-- Include prompt/command artifacts explicitly with:
+- Include prompt artifacts explicitly with:
   - `--include-prompts`
   - `--type prompt` (or `--type skill,prompt`)
 
 Examples:
 
 ```bash
-# Discover only prompt/command artifacts
+# Discover only prompt artifacts
 skillsync discover --platform claudecode --type prompt
 
-# Sync Claude command artifacts to Codex (opt-in)
+# Sync Claude prompt artifacts to Codex (opt-in)
 skillsync sync --include-prompts claudecode codex
 
 # Sync prompt artifacts only from Claude to Cursor
@@ -96,9 +97,9 @@ Compatibility notes:
 
 | Source -> Target | Mapping | Fidelity |
 |---|---|---|
-| Claude command -> Codex | `name/SKILL.md` prompt artifact | Medium (slash-trigger semantics may be lossy) |
-| Claude command -> Cursor | markdown prompt artifact | Medium (may require Cursor mode config for exact trigger behavior) |
-| Codex prompt skill -> Claude | markdown artifact with prompt metadata | Medium |
+| Claude prompt -> Codex | `name/SKILL.md` prompt artifact | Medium (slash-trigger semantics may be lossy) |
+| Claude prompt -> Cursor | markdown prompt artifact | Medium (may require Cursor mode config for exact trigger behavior) |
+| Codex prompt -> Claude | markdown artifact with prompt metadata | Medium |
 
 Known limitations:
 
@@ -107,6 +108,8 @@ Known limitations:
 - Claude `argument-hint` is preserved as metadata on non-Claude targets.
 - Codex user prompt directories outside documented skills/AGENTS flows remain
   experimental and are not enabled by default.
+- Prompt artifacts are transport metadata, not a guarantee of equivalent
+  runtime behavior on the destination CLI.
 
 Legacy single-path overrides are still supported:
 
@@ -119,8 +122,18 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 ## Docs
 
 - Architecture overview: `docs/architecture.md`
+- Quick start: `docs/quick-start.md`
 - Sync strategies: `docs/strategies.md`
-- Skill format research: `docs/skill-formats-research.md`
+- Portability assessment: `docs/platforms/portability-assessment.md`
+- Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
+- Implemented platform support today: Claude Code, Cursor, Codex
+- Reference-only platform docs today: Copilot, Gemini, Pi.dev
+- Claude Code reference: `docs/platforms/claude.md`
+- Codex reference: `docs/platforms/codex.md`
+- Cursor reference: `docs/platforms/cursor.md`
+- Copilot reference: `docs/platforms/copilot.md`
+- Gemini reference: `docs/platforms/gemini.md`
+- Pi.dev reference: `docs/platforms/pidev.md`
 
 ## Development
 

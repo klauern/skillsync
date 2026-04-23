@@ -64,7 +64,8 @@ func TestCodexConfigPath(t *testing.T) {
 }
 
 func TestCodexSkillsPath(t *testing.T) {
-	home := HomeDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	expected := filepath.Join(home, ".codex", "skills")
 	got := CodexSkillsPath()
 	if got != expected {
@@ -78,6 +79,32 @@ func TestPiAgentSkillsPath(t *testing.T) {
 	got := PiAgentSkillsPath()
 	if got != expected {
 		t.Errorf("PiAgentSkillsPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestGeminiPath(t *testing.T) {
+	home := HomeDir()
+	expected := filepath.Join(home, ".gemini")
+	got := GeminiPath()
+	if got != expected {
+		t.Errorf("GeminiPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestPiDevProjectSkillsPath(t *testing.T) {
+	projectDir := "/test/project"
+	expected := "/test/project/.pi/skills"
+	if got := PiDevProjectSkillsPath(projectDir); got != expected {
+		t.Errorf("PiDevProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
+	}
+}
+
+func TestPiDevSkillsPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	if got := PiDevSkillsPath(); got != expected {
+		t.Errorf("PiDevSkillsPath() = %q, want %q", got, expected)
 	}
 }
 
@@ -182,6 +209,24 @@ func TestGetTieredPaths(t *testing.T) {
 			checkScope: model.ScopeSystem,
 			wantPaths:  true,
 		},
+		{
+			name: "gemini with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.Gemini,
+			},
+			checkScope: model.ScopeUser,
+			wantPaths:  true,
+		},
+		{
+			name: "pi.dev with working dir",
+			cfg: TieredPathConfig{
+				WorkingDir: "/test/project",
+				Platform:   model.PiDev,
+			},
+			checkScope: model.ScopeRepo,
+			wantPaths:  true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -251,6 +296,9 @@ func TestPlatformDirName(t *testing.T) {
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
 		{model.PiAgent, ".pi"},
+		{model.Copilot, ".github"},
+		{model.Gemini, ".gemini"},
+		{model.PiDev, ".pi/agent"},
 	}
 
 	for _, tt := range tests {
@@ -264,7 +312,14 @@ func TestPlatformDirName(t *testing.T) {
 }
 
 func TestPlatformSkillsPath(t *testing.T) {
-	home := HomeDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".pi", "agent", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create pi.dev fallback skills dir: %v", err)
+	}
 
 	tests := []struct {
 		platform model.Platform
@@ -272,8 +327,11 @@ func TestPlatformSkillsPath(t *testing.T) {
 	}{
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
-		{model.Codex, filepath.Join(home, ".codex", "skills")},
+		{model.Codex, filepath.Join(home, ".agents", "skills")},
 		{model.PiAgent, filepath.Join(home, ".agents", "skills")},
+		{model.Copilot, filepath.Join(home, ".github")},
+		{model.Gemini, filepath.Join(home, ".gemini")},
+		{model.PiDev, filepath.Join(home, ".agents", "skills")},
 	}
 
 	for _, tt := range tests {
@@ -296,6 +354,9 @@ func TestRepoSkillsPath(t *testing.T) {
 		{model.Cursor, "/test/repo", "/test/repo/.cursor/skills"},
 		{model.Codex, "/test/repo", "/test/repo/.codex/skills"},
 		{model.PiAgent, "/test/repo", "/test/repo/.agents/skills"},
+		{model.Copilot, "/test/repo", "/test/repo/.github"},
+		{model.Gemini, "/test/repo", "/test/repo/.gemini"},
+		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
 	}
 
 	for _, tt := range tests {
@@ -305,6 +366,63 @@ func TestRepoSkillsPath(t *testing.T) {
 				t.Errorf("RepoSkillsPath(%s, %s) = %q, want %q", tt.platform, tt.repoRoot, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestPiDevPathsPreferAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	agentsRoot := filepath.Join(home, ".agents")
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents prompts dir: %v", err)
+	}
+
+	if got := PiDevSkillsPath(); got != filepath.Join(agentsRoot, "skills") {
+		t.Fatalf("PiDevSkillsPath() = %q, want %q", got, filepath.Join(agentsRoot, "skills"))
+	}
+	if got := PiDevPromptsPath(); got != filepath.Join(agentsRoot, "prompts") {
+		t.Fatalf("PiDevPromptsPath() = %q, want %q", got, filepath.Join(agentsRoot, "prompts"))
+	}
+}
+
+func TestPiDevPathsFallBackToPiAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	piAgentRoot := filepath.Join(home, ".pi", "agent")
+	if err := os.MkdirAll(filepath.Join(piAgentRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .pi/agent skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(piAgentRoot, "prompts"), 0o750); err != nil {
+		t.Fatalf("failed to create .pi/agent prompts dir: %v", err)
+	}
+
+	if got := PiDevSkillsPath(); got != filepath.Join(piAgentRoot, "skills") {
+		t.Fatalf("PiDevSkillsPath() = %q, want %q", got, filepath.Join(piAgentRoot, "skills"))
+	}
+	if got := PiDevPromptsPath(); got != filepath.Join(piAgentRoot, "prompts") {
+		t.Fatalf("PiDevPromptsPath() = %q, want %q", got, filepath.Join(piAgentRoot, "prompts"))
+	}
+}
+
+func TestCodexSkillsPathPrefersAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	agentsRoot := filepath.Join(home, ".agents")
+	if err := os.MkdirAll(filepath.Join(agentsRoot, "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .codex skills dir: %v", err)
+	}
+
+	if got := CodexSkillsPath(); got != filepath.Join(agentsRoot, "skills") {
+		t.Fatalf("CodexSkillsPath() = %q, want %q", got, filepath.Join(agentsRoot, "skills"))
 	}
 }
 
@@ -373,8 +491,12 @@ func TestGetTieredPaths_NoLegacyPaths(t *testing.T) {
 
 			// User scope should only have skills directory
 			userPaths := paths[model.ScopeUser]
-			if len(userPaths) != 1 {
-				t.Errorf("GetTieredPaths() for %s should have exactly 1 user path, got %d", platform, len(userPaths))
+			wantUserPaths := 1
+			if platform == model.Codex {
+				wantUserPaths = 2
+			}
+			if len(userPaths) != wantUserPaths {
+				t.Errorf("GetTieredPaths() for %s should have exactly %d user path(s), got %d", platform, wantUserPaths, len(userPaths))
 			}
 		})
 	}

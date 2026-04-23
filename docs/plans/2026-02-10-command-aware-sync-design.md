@@ -1,17 +1,21 @@
-# Command-Aware Sync Design (skillsync-c1g.4)
+# Command-Aware Sync Design (superseded)
 
 Date: 2026-02-10
-Status: Proposed (implementation-ready)
+Status: Superseded by 2026-03-30 command-agent model decision
+
+> Historical note: this design reflects the earlier implementation plan that
+> introduced transport-layer prompt handling. It should not be read as a claim
+> that Codex or other target CLIs expose native command or agent runtimes.
 
 ## Goal
 
-Add first-class command/prompt support to discovery and sync without regressing
+Define transport-layer prompt support for discovery and sync without regressing
 existing skill workflows.
 
 ## Non-goals
 
 - Implementing parser/sync code in this design doc.
-- Guaranteeing one-to-one runtime command behavior across platforms where the
+- Guaranteeing one-to-one runtime prompt behavior across platforms where the
   underlying products differ (for example explicit slash trigger semantics).
 
 ## Unified Model
@@ -20,7 +24,7 @@ Reuse `model.Skill` as the canonical artifact model and standardize these fields
 
 - `Type`:
   - `skill` (default)
-  - `prompt` (covers slash-command-like artifacts)
+  - `prompt` (covers slash-command-like transport artifacts)
 - `Trigger`:
   - Normalized slash trigger (for example `/review`) when source platform has one.
   - Empty when unknown/unsupported.
@@ -38,7 +42,7 @@ No new top-level struct is required for phase 1; `model.Skill` already has
   - Commands/prompts: `.claude/commands/*.md`, `~/.claude/commands/*.md`
 - Cursor:
   - Skills: `.cursor/skills/**/SKILL.md`
-  - Prompt-like command artifacts: `.cursor/commands/*.md` (plus mode linkage)
+  - Prompt-like transport artifacts: `.cursor/commands/*.md` (plus mode linkage)
   - Rules remain separate behavior (`.cursor/rules/*.mdc`) and are out of scope
     for phase 1 sync-as-command parity.
 - Codex:
@@ -72,7 +76,7 @@ Add type-scoped controls to `sync` and `delete`:
   - `--type` / `-t`: `skill`, `prompt`, `all` (comma-separated allowed)
   - `--include-prompts` (alias for `--type skill,prompt`)
 - Default for `sync` and `delete`: `--type skill`
-  - This is the explicit guardrail for "command-aware sync is opt-in."
+  - This is the explicit guardrail for transport-layer prompt sync being opt-in.
 
 Rationale:
 - Keeps historical "skill sync" expectation stable.
@@ -175,7 +179,7 @@ Warnings must include source path and target artifact path.
 
 - AC1 (model + architecture docs):
   - This design defines model semantics and precedence.
-  - `docs/architecture.md` updated with command-aware extension.
+  - `docs/architecture.md` updated with transport-layer prompt support.
 - AC2 (CLI behavior):
   - `sync/delete --type` and `--include-prompts` behavior specified.
 - AC3 (compat/migration):

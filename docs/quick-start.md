@@ -180,26 +180,26 @@ By default, this:
 - Creates a backup before syncing
 - Uses the "overwrite" strategy (source replaces target)
 - Syncs to the user scope on the target platform
-- Includes `skill` artifacts only (prompts/commands are opt-in)
+- Includes `skill` artifacts only (prompt artifacts are opt-in)
 
-### Command/Prompt Artifacts
+### Prompt Artifacts
 
-Discovery supports both skills and prompt/command artifacts. Sync and delete are
+Discovery supports both skills and prompt artifacts. Sync and delete are
 skill-only by default for safety.
 
 ```bash
-# Discover prompts/commands only
+# Discover prompts only
 skillsync discover --type prompt
 
-# Sync both skills and prompts/commands
+# Sync both skills and prompts
 skillsync sync --include-prompts claude-code codex
 
-# Sync prompts/commands only
+# Sync prompts only
 skillsync sync --type prompt claude-code cursor
 ```
 
 Compatibility caveats:
-- Claude command slash-trigger behavior may not map one-to-one to Codex/Cursor.
+- Claude slash-trigger behavior may not map one-to-one to Codex/Cursor.
 - Some fields (for example `argument-hint`) are preserved as metadata on
   non-Claude targets.
 
@@ -244,6 +244,8 @@ skillsync sync cursor:user claude-code
 
 **Valid Source Scopes:** repo, user, admin, system, builtin, plugin (can specify multiple)
 **Valid Target Scopes:** repo, user (writable locations only, single scope)
+
+If you select every source scope in the TUI, SkillSync normalizes it back to `all`.
 
 > **Tip:** Use `plugin` scope to sync skills from installed Claude Code plugins to other platforms like Cursor or Codex.
 
@@ -318,11 +320,11 @@ skillsync sync --strategy three-way cursor claude-code
 
 If conflicts are detected, they're marked with conflict markers:
 ```
-<<<<<<< SOURCE
+[<<<<<<< SOURCE]
 [source version]
 =======
 [target version]
->>>>>>> TARGET
+[>>>>>>> TARGET]
 ```
 
 ### 6. **interactive**
@@ -478,8 +480,8 @@ skillsync compare --content-only
 # Adjust similarity thresholds
 skillsync compare --name-threshold 0.8 --content-threshold 0.7
 
-# Find duplicates within same platform only
-skillsync compare --same-platform
+# Include cross-platform matches explicitly
+skillsync compare --include-cross-platform
 
 # Export results
 skillsync compare --format json > duplicates.json
@@ -508,7 +510,7 @@ Skills can exist at different scope levels (from highest to lowest priority):
 
 1. **plugin** - Claude Code plugin skills (`~/.claude/plugins/cache/*`) - *read-only*
 2. **repo** - Repository-level (`.claude/skills`, `.cursor/skills`, `.codex/skills`)
-3. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.codex/skills`)
+3. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.agents/skills`, `~/.codex/skills`)
 4. **admin** - Administrator-defined
 5. **system** - System-wide installations
 6. **builtin** - Built-in platform skills
@@ -794,6 +796,7 @@ platforms:
   codex:
     skills_paths:
       - .codex/skills
+      - ~/.agents/skills
       - ~/.codex/skills
       - /etc/codex/skills
 

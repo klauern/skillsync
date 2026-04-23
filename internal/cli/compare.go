@@ -27,16 +27,16 @@ func compareCommand() *cli.Command {
    skillsync compare --name-threshold 0.8
    skillsync compare --content-threshold 0.7
    skillsync compare --platform claude-code
-   skillsync compare --same-platform
+   skillsync compare --include-cross-platform
    skillsync compare --format json`,
 		Description: `Find skills that may be duplicates or variations based on name or content similarity.
 
    The compare command analyzes all discovered skills and identifies pairs that
    are similar based on configurable thresholds. This helps identify:
    - Duplicate skills that may need cleanup
-   - Skills that have diverged across platforms
    - Potential candidates for consolidation
-   - Redundant skills within a single platform (use --same-platform)
+   - Skills that have diverged across platforms (use --include-cross-platform)
+   - Redundant skills within a single platform (default)
 
    Similarity matching:
    - Name similarity: Compares skill names using Levenshtein and Jaro-Winkler algorithms
@@ -65,7 +65,11 @@ func compareCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+			},
+			&cli.BoolFlag{
+				Name:  "include-cross-platform",
+				Usage: "Include cross-platform matches in the output (disabled by default)",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -86,11 +90,6 @@ func compareCommand() *cli.Command {
 				Value: "", // empty means "use config value"
 				Usage: "Similarity algorithm: combined, levenshtein, jaro-winkler (for names) or combined, lcs, jaccard (for content, default from config: combined)",
 			},
-			&cli.BoolFlag{
-				Name:    "same-platform",
-				Aliases: []string{"s"},
-				Usage:   "Only show similar skills within the same platform (helps find redundant skills)",
-			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			return runCompare(cmd)
@@ -100,14 +99,14 @@ func compareCommand() *cli.Command {
 
 // compareConfig holds parsed configuration for the compare command.
 type compareConfig struct {
-	nameThreshold    float64
-	contentThreshold float64
-	platform         string
-	format           string
-	nameOnly         bool
-	contentOnly      bool
-	algorithm        string
-	samePlatform     bool
+	nameThreshold        float64
+	contentThreshold     float64
+	platform             string
+	includeCrossPlatform bool
+	format               string
+	nameOnly             bool
+	contentOnly          bool
+	algorithm            string
 }
 
 func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
@@ -119,14 +118,14 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 	}
 
 	cfg := &compareConfig{
-		nameThreshold:    cmd.Float64("name-threshold"),
-		contentThreshold: cmd.Float64("content-threshold"),
-		platform:         cmd.String("platform"),
-		format:           cmd.String("format"),
-		nameOnly:         cmd.Bool("name-only"),
-		contentOnly:      cmd.Bool("content-only"),
-		algorithm:        cmd.String("algorithm"),
-		samePlatform:     cmd.Bool("same-platform"),
+		nameThreshold:        cmd.Float64("name-threshold"),
+		contentThreshold:     cmd.Float64("content-threshold"),
+		platform:             cmd.String("platform"),
+		includeCrossPlatform: cmd.Bool("include-cross-platform"),
+		format:               cmd.String("format"),
+		nameOnly:             cmd.Bool("name-only"),
+		contentOnly:          cmd.Bool("content-only"),
+		algorithm:            cmd.String("algorithm"),
 	}
 
 	// Apply config defaults for unset values
@@ -149,7 +148,6 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 		return nil, errors.New("content-threshold must be between 0.0 and 1.0")
 	}
 
-	// Validate mutual exclusivity
 	if cfg.nameOnly && cfg.contentOnly {
 		return nil, errors.New("cannot use both --name-only and --content-only")
 	}
@@ -309,18 +307,22 @@ func findSimilarSkills(skills []model.Skill, cfg *compareConfig) ([]*similarity.
 		}
 	}
 
-	// Filter to same-platform pairs if requested
-	if cfg.samePlatform {
-		filtered := make([]*similarity.ComparisonResult, 0, len(results))
-		for _, result := range results {
-			if result.Skill1.Platform == result.Skill2.Platform {
-				filtered = append(filtered, result)
-			}
-		}
-		results = filtered
+	return filterComparisonResultsByPlatform(results, cfg.includeCrossPlatform), nil
+}
+
+// filterComparisonResultsByPlatform removes cross-platform comparisons unless explicitly allowed.
+func filterComparisonResultsByPlatform(results []*similarity.ComparisonResult, includeCrossPlatform bool) []*similarity.ComparisonResult {
+	if includeCrossPlatform {
+		return results
 	}
 
-	return results, nil
+	filtered := make([]*similarity.ComparisonResult, 0, len(results))
+	for _, result := range results {
+		if result.Skill1.Platform == result.Skill2.Platform {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered
 }
 
 // makePairKey creates a consistent key for a skill pair regardless of order.

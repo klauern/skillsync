@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser"
 )
 
 func TestNewTransformer(t *testing.T) {
@@ -104,6 +105,41 @@ func TestTransformer_TransformPath(t *testing.T) {
 			target:     model.PiAgent,
 			expected:   "my-skill/SKILL.md",
 		},
+		{
+			name:       "prompt to copilot prompt file",
+			sourcePath: "/source/review.md",
+			skillName:  "review",
+			target:     model.Copilot,
+			expected:   "prompts/review.prompt.md",
+		},
+		{
+			name:       "agent to copilot agent file",
+			sourcePath: "/source/skill.md",
+			skillName:  "reviewer",
+			target:     model.Copilot,
+			expected:   "agents/reviewer.agent.md",
+		},
+		{
+			name:       "instructions to copilot instructions file",
+			sourcePath: "/source/style.md",
+			skillName:  "go-style",
+			target:     model.Copilot,
+			expected:   "instructions/go-style.instructions.md",
+		},
+		{
+			name:       "claude instructions to copilot repo instructions",
+			sourcePath: "/source/CLAUDE.md",
+			skillName:  "claude",
+			target:     model.Copilot,
+			expected:   "copilot-instructions.md",
+		},
+		{
+			name:       "system prompt to pidev append file",
+			sourcePath: "/source/APPEND_SYSTEM.md",
+			skillName:  "append-system",
+			target:     model.PiDev,
+			expected:   "APPEND_SYSTEM.md",
+		},
 	}
 
 	for _, tt := range tests {
@@ -112,6 +148,16 @@ func TestTransformer_TransformPath(t *testing.T) {
 			if tt.name == "prompt to codex skill file" {
 				skill.Type = model.SkillTypePrompt
 				skill.Trigger = "/review"
+			}
+			if tt.name == "prompt to copilot prompt file" {
+				skill.Type = model.SkillTypePrompt
+				skill.Trigger = "/review"
+			}
+			if tt.name == "instructions to copilot instructions file" {
+				skill.Metadata = map[string]string{model.MetadataKeyCopilotArtifact: model.CopilotArtifactInstructions}
+			}
+			if tt.name == "system prompt to pidev append file" {
+				skill.Metadata = map[string]string{"type": "system-prompt", "mode": "append"}
 			}
 			result := tr.transformPath(skill, tt.target)
 			if result != tt.expected {
@@ -214,6 +260,56 @@ func TestTransformer_TransformContent_CodexAgents(t *testing.T) {
 	}
 }
 
+func TestTransformer_TransformContent_PiDevSystemPrompt(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "append-system",
+		Description: "Append system instructions",
+		Metadata: map[string]string{
+			"type": "system-prompt",
+			"mode": "append",
+		},
+		Content: "System prompt body",
+	}
+
+	content, err := tr.transformContent(skill, model.PiDev, "APPEND_SYSTEM.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if strings.HasPrefix(content, "---\n") {
+		t.Fatal("Pi.dev system prompt content should not include frontmatter")
+	}
+	if content != "System prompt body" {
+		t.Fatalf("content = %q, want body only", content)
+	}
+}
+
+func TestTransformer_TransformContent_CopilotRepositoryInstructions(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name: "copilot-instructions",
+		Metadata: map[string]string{
+			model.MetadataKeyCopilotArtifact: model.CopilotArtifactRepositoryInstructions,
+		},
+		Content: "Always-on instructions",
+	}
+
+	content, err := tr.transformContent(skill, model.Copilot, "copilot-instructions.md")
+	if err != nil {
+		t.Fatalf("transformContent failed: %v", err)
+	}
+
+	if strings.HasPrefix(content, "---\n") {
+		t.Fatal("Copilot repository instructions should not gain synthetic frontmatter")
+	}
+	if content != "Always-on instructions" {
+		t.Fatalf("content = %q, want body only", content)
+	}
+}
+
 func TestTransformer_BuildFrontmatter_ClaudeCode(t *testing.T) {
 	tr := NewTransformer()
 
@@ -289,6 +385,37 @@ func TestTransformer_BuildFrontmatter_Codex(t *testing.T) {
 	}
 }
 
+func TestTransformer_BuildFrontmatter_CopilotPrompt(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "review",
+		Description: "Review code",
+		Tools:       []string{"read", "search"},
+		Type:        model.SkillTypePrompt,
+		Trigger:     "/review",
+		Metadata: map[string]string{
+			model.MetadataKeyCopilotArtifact: model.CopilotArtifactPrompt,
+			"model":                          "gpt-4o",
+		},
+	}
+
+	fm := tr.buildFrontmatter(skill, model.Copilot)
+
+	if fm["name"] != "review" {
+		t.Error("Copilot frontmatter should include name")
+	}
+	if fm["tools"] == nil {
+		t.Error("Copilot frontmatter should include tools")
+	}
+	if _, exists := fm[model.MetadataKeyCopilotArtifact]; exists {
+		t.Error("Copilot frontmatter should not include internal artifact metadata")
+	}
+	if fm["model"] != "gpt-4o" {
+		t.Error("Copilot frontmatter should preserve model")
+	}
+}
+
 func TestTransformer_TransformMetadata(t *testing.T) {
 	tr := NewTransformer()
 
@@ -329,6 +456,119 @@ func TestTransformer_TransformMetadata_Codex(t *testing.T) {
 
 	if metadata["source_platform"] != "claude-code" {
 		t.Error("Codex metadata should contain source_platform")
+	}
+}
+
+func TestTransformer_Transform_CopilotInstructionToCursor(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "react-standards",
+		Description: "Copilot instruction fixture",
+		Platform:    model.ClaudeCode,
+		Path:        "/source/react.instructions.md",
+		Content:     "Use hooks and colocated tests.",
+		Metadata: map[string]string{
+			"applyTo": "**/*.tsx",
+			"model":   "GPT-4o",
+		},
+	}
+
+	transformed, err := tr.Transform(skill, model.Cursor)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+
+	if transformed.Path != "react.instructions.md" {
+		t.Fatalf("Path = %q, want react.instructions.md", transformed.Path)
+	}
+	if _, ok := transformed.Metadata["applyTo"]; ok {
+		t.Fatal("Cursor metadata should not retain applyTo after mapping to globs")
+	}
+	if transformed.Metadata["globs"] != "**/*.tsx" {
+		t.Fatalf("globs metadata = %q, want **/*.tsx", transformed.Metadata["globs"])
+	}
+	if transformed.Metadata["model"] != "GPT-4o" {
+		t.Fatalf("model metadata = %q, want GPT-4o", transformed.Metadata["model"])
+	}
+
+	result := parser.SplitFrontmatter([]byte(transformed.Content))
+	if !result.HasFrontmatter {
+		t.Fatal("expected transformed content to include frontmatter")
+	}
+	fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
+	if err != nil {
+		t.Fatalf("parse frontmatter: %v", err)
+	}
+	if got := fm["globs"]; got != "**/*.tsx" {
+		t.Fatalf("frontmatter globs = %v, want **/*.tsx", got)
+	}
+	if got := fm["model"]; got != "GPT-4o" {
+		t.Fatalf("frontmatter model = %v, want GPT-4o", got)
+	}
+}
+
+func TestTransformer_Transform_CopilotPromptToCodexPreservesLiteralText(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Name:        "review",
+		Description: "Copilot prompt fixture",
+		Platform:    model.ClaudeCode,
+		Path:        "/source/review.prompt.md",
+		Type:        model.SkillTypePrompt,
+		Trigger:     "/review",
+		Content:     "Review ${file} and ask ${input:path} for more context.\n\nReference #file:docs/spec.md.",
+		Metadata: map[string]string{
+			"argument-hint": "<path>",
+			"model":         "GPT-4o",
+		},
+	}
+
+	transformed, err := tr.Transform(skill, model.Codex)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+
+	if transformed.Path != "review/SKILL.md" {
+		t.Fatalf("Path = %q, want review/SKILL.md", transformed.Path)
+	}
+	if !strings.Contains(transformed.Content, "${input:path}") {
+		t.Fatal("transformed content should preserve Copilot input interpolation literally")
+	}
+	if !strings.Contains(transformed.Content, "#file:docs/spec.md") {
+		t.Fatal("transformed content should preserve Copilot file references literally")
+	}
+	if transformed.Metadata["argument-hint"] != "<path>" {
+		t.Fatalf("argument-hint metadata = %q, want <path>", transformed.Metadata["argument-hint"])
+	}
+	if transformed.Metadata["model"] != "GPT-4o" {
+		t.Fatalf("model metadata = %q, want GPT-4o", transformed.Metadata["model"])
+	}
+}
+
+func TestTransformer_TransformMetadata_DropsCopilotAgentOnlyFields(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Platform: model.ClaudeCode,
+		Metadata: map[string]string{
+			"handoffs":    "[{\"agent\":\"implementer\"}]",
+			"target":      "vscode",
+			"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+			"model":       "GPT-4o",
+		},
+	}
+
+	metadata := tr.transformMetadata(skill, model.Codex)
+
+	for _, key := range []string{"handoffs", "target", "mcp-servers"} {
+		if _, ok := metadata[key]; ok {
+			t.Fatalf("metadata should drop %q for Codex target", key)
+		}
+	}
+	if metadata["model"] != "GPT-4o" {
+		t.Fatalf("model metadata = %q, want GPT-4o", metadata["model"])
 	}
 }
 

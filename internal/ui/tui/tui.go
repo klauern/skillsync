@@ -2,9 +2,12 @@
 package tui
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
@@ -214,6 +217,66 @@ func wrapLabeledText(label, value string, width int) string {
 	return b.String()
 }
 
+func truncateTableValue(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+	return runewidth.Truncate(value, width, "...")
+}
+
+func truncateTableValueFromStart(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return runewidth.Truncate(value, width, "")
+	}
+
+	runes := []rune(value)
+	target := width - 3
+	used := 0
+	start := len(runes)
+	for start > 0 {
+		runeWidth := runewidth.RuneWidth(runes[start-1])
+		if used+runeWidth > target && used > 0 {
+			break
+		}
+		used += runeWidth
+		start--
+		if used == target {
+			break
+		}
+	}
+
+	return "..." + string(runes[start:])
+}
+
+// hScrollIndicator returns a compact scroll position hint like "← col 2/4 →" for use in
+// status bars. Arrows are omitted when the user is already at the respective edge.
+func hScrollIndicator(offset, maxOffset int) string {
+	if maxOffset <= 0 {
+		return ""
+	}
+	left := "  "
+	right := "  "
+	if offset > 0 {
+		left = "← "
+	}
+	if offset < maxOffset {
+		right = " →"
+	}
+	return fmt.Sprintf("%scol %d/%d%s", left, offset+1, maxOffset+1, right)
+}
+
 func padLines(lines []string, count int) []string {
 	if count <= 0 {
 		return lines
@@ -227,4 +290,118 @@ func padLines(lines []string, count int) []string {
 		padded[i] = ""
 	}
 	return padded
+}
+
+type horizontalTableState struct {
+	columns []table.Column
+	offset  int
+	start   int
+	end     int
+}
+
+func newHorizontalTableState(columns []table.Column) horizontalTableState {
+	return horizontalTableState{columns: append([]table.Column(nil), columns...)}
+}
+
+func (s *horizontalTableState) SetColumns(columns []table.Column) {
+	s.columns = append(s.columns[:0], columns...)
+	if s.offset >= len(s.columns) {
+		s.offset = max(len(s.columns)-1, 0)
+	}
+}
+
+func (s *horizontalTableState) Apply(t *table.Model, totalWidth int, rows []table.Row) {
+	start, end := s.visibleRange(totalWidth)
+	s.start = start
+	s.end = end
+	t.SetRows(projectTableRows(rows, start, end))
+	t.SetColumns(projectTableColumns(s.columns, start, end))
+}
+
+func (s *horizontalTableState) MoveLeft() bool {
+	if s.offset <= 0 {
+		return false
+	}
+	s.offset--
+	return true
+}
+
+func (s *horizontalTableState) MoveRight(totalWidth int) bool {
+	_, end := s.visibleRange(totalWidth)
+	if end >= len(s.columns) {
+		return false
+	}
+	s.offset++
+	return true
+}
+
+func (s horizontalTableState) Summary(totalWidth int) string {
+	start, end := s.visibleRange(totalWidth)
+	if len(s.columns) == 0 {
+		return ""
+	}
+	if start == 0 && end == len(s.columns) {
+		return ""
+	}
+	return "Columns " + itoa(start+1) + "-" + itoa(end) + " of " + itoa(len(s.columns))
+}
+
+func (s horizontalTableState) visibleRange(totalWidth int) (int, int) {
+	if len(s.columns) == 0 {
+		return 0, 0
+	}
+	if totalWidth <= 0 {
+		return 0, len(s.columns)
+	}
+
+	start := min(max(s.offset, 0), len(s.columns)-1)
+	used := 0
+	end := start
+	for end < len(s.columns) {
+		columnWidth := s.columns[end].Width + 2
+		if end > start && used+columnWidth > totalWidth {
+			break
+		}
+		used += columnWidth
+		end++
+	}
+	if end == start {
+		end = start + 1
+	}
+	return start, end
+}
+
+func projectTableColumns(columns []table.Column, start, end int) []table.Column {
+	if start < 0 {
+		start = 0
+	}
+	if end > len(columns) {
+		end = len(columns)
+	}
+	if start >= end {
+		return nil
+	}
+	projected := make([]table.Column, end-start)
+	copy(projected, columns[start:end])
+	return projected
+}
+
+func projectTableRows(rows []table.Row, start, end int) []table.Row {
+	if start >= end {
+		return nil
+	}
+	projected := make([]table.Row, len(rows))
+	for i, row := range rows {
+		rowEnd := min(end, len(row))
+		if start >= rowEnd {
+			projected[i] = table.Row{}
+			continue
+		}
+		projected[i] = append(table.Row(nil), row[start:rowEnd]...)
+	}
+	return projected
+}
+
+func itoa(v int) string {
+	return strconv.Itoa(v)
 }

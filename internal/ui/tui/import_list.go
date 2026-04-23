@@ -514,8 +514,9 @@ func (m *ImportListModel) loadSkillsFromPath(path string) error {
 func (m *ImportListModel) initSkillTable() {
 	columns := []table.Column{
 		{Title: " ", Width: 3},
-		{Title: "Name", Width: 25},
-		{Title: "Description", Width: 40},
+		{Title: "Name", Width: 20},
+		{Title: "Platform", Width: 12},
+		{Title: "Description", Width: 30},
 		{Title: "Scope", Width: 10},
 	}
 
@@ -551,20 +552,7 @@ func (m ImportListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := s.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-		desc := s.Description
-		if len(desc) > 40 {
-			desc = desc[:37] + "..."
-		}
-		scope := s.DisplayScope()
-		if len(scope) > 10 {
-			scope = scope[:7] + "..."
-		}
-
-		rows[i] = table.Row{checkbox, name, desc, scope}
+		rows[i] = table.Row{checkbox, truncateTableValue(s.Name, 20), truncateTableValue(string(s.Platform), 12), truncateTableValue(s.Description, 30), truncateTableValue(s.DisplayScope(), 10)}
 	}
 	return rows
 }
@@ -577,6 +565,8 @@ func (m *ImportListModel) applyFilter() {
 		lowerFilter := strings.ToLower(m.filter)
 		for _, s := range m.skills {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
+				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
 				filtered = append(filtered, s)
 			}

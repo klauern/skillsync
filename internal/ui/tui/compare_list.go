@@ -79,6 +79,7 @@ func defaultCompareListKeyMap() compareListKeyMap {
 // CompareListModel is the BubbleTea model for interactive skill comparison.
 type CompareListModel struct {
 	table       table.Model
+	hScroll     horizontalTableState
 	comparisons []*similarity.ComparisonResult
 	filtered    []*similarity.ComparisonResult
 	keys        compareListKeyMap
@@ -150,6 +151,7 @@ func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareList
 		comparisons: comparisons,
 		filtered:    comparisons,
 		keys:        defaultCompareListKeyMap(),
+		hScroll:     newHorizontalTableState(columns),
 	}
 
 	rows := m.comparisonsToRows(comparisons)
@@ -180,19 +182,6 @@ func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareList
 func (m CompareListModel) comparisonsToRows(comparisons []*similarity.ComparisonResult) []table.Row {
 	rows := make([]table.Row, len(comparisons))
 	for i, c := range comparisons {
-		name1 := c.Skill1.Name
-		if len(name1) > 22 {
-			name1 = name1[:19] + "..."
-		}
-
-		name2 := c.Skill2.Name
-		if len(name2) > 22 {
-			name2 = name2[:19] + "..."
-		}
-
-		plat1 := c.Skill1.Platform.Short()
-		plat2 := c.Skill2.Platform.Short()
-
 		nameScore := "-"
 		if c.NameScore > 0 {
 			nameScore = fmt.Sprintf("%.0f%%", c.NameScore*100)
@@ -203,16 +192,14 @@ func (m CompareListModel) comparisonsToRows(comparisons []*similarity.Comparison
 			contentScore = fmt.Sprintf("%.0f%%", c.ContentScore*100)
 		}
 
-		changes := c.DiffSummary()
-
 		rows[i] = table.Row{
-			name1,
-			plat1,
-			name2,
-			plat2,
+			truncateTableValue(c.Skill1.Name, 22),
+			c.Skill1.Platform.Short(),
+			truncateTableValue(c.Skill2.Name, 22),
+			c.Skill2.Platform.Short(),
 			nameScore,
 			contentScore,
-			changes,
+			truncateTableValue(c.DiffSummary(), 18),
 		}
 	}
 	return rows
@@ -249,6 +236,7 @@ func (m CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Adjust table height based on window
 			newHeight := max(msg.Height-12, 5)
 			m.table.SetHeight(newHeight)
+			m.refreshTable()
 		}
 
 	case tea.KeyMsg:
@@ -300,6 +288,18 @@ func (m CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
+		case msg.String() == "left" || msg.String() == "h":
+			if m.hScroll.MoveLeft() {
+				m.refreshTable()
+			}
+			return m, nil
+
+		case msg.String() == "right" || msg.String() == "l":
+			if m.hScroll.MoveRight(m.width) {
+				m.refreshTable()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
@@ -338,6 +338,10 @@ func (m CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m *CompareListModel) refreshTable() {
+	m.hScroll.Apply(&m.table, m.width, m.comparisonsToRows(m.filtered))
+}
+
 func (m *CompareListModel) applyFilter() {
 	if m.filter == "" {
 		m.filtered = m.comparisons
@@ -358,7 +362,7 @@ func (m *CompareListModel) applyFilter() {
 		})
 		m.filtered = filtered
 	}
-	m.table.SetRows(m.comparisonsToRows(m.filtered))
+	m.refreshTable()
 }
 
 func (m CompareListModel) getSelectedComparison() *similarity.ComparisonResult {
@@ -508,6 +512,9 @@ func (m CompareListModel) View() string {
 	if m.filter != "" {
 		status = fmt.Sprintf("%d of %d pair(s) (filtered)", len(m.filtered), len(m.comparisons))
 	}
+	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
+		status += " • " + scrollStatus
+	}
 	b.WriteString(compareListStyles.Status.Render(status))
 	b.WriteString("\n")
 
@@ -573,6 +580,7 @@ func (m CompareListModel) viewDiff() string {
 func (m CompareListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"←/→ columns",
 		"enter view",
 		"/ filter",
 		"? help",
@@ -585,6 +593,8 @@ func (m CompareListModel) renderFullHelp() string {
 	help := `Navigation:
   ↑/k      Move up
   ↓/j      Move down
+  ←/h      Show previous columns
+  →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
 

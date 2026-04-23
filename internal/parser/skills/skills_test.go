@@ -386,6 +386,39 @@ Content`,
 	}
 }
 
+func TestParser_parseSkillFile_CodexFallsBackToDirectoryName(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "agent-development")
+	// #nosec G301 - test directory permissions
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+
+	filePath := filepath.Join(skillDir, "SKILL.md")
+	content := `---
+name: Agent Development
+description: Codex skill with a display name
+---
+Content`
+	// #nosec G306 - test file permissions
+	if err := os.WriteFile(filePath, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	p := New(tmpDir, model.Codex)
+	skill, err := p.parseSkillFile(filePath)
+	if err != nil {
+		t.Fatalf("parseSkillFile() error = %v", err)
+	}
+
+	if skill.Name != "agent-development" {
+		t.Fatalf("Name = %q, want %q", skill.Name, "agent-development")
+	}
+	if skill.Description != "Codex skill with a display name" {
+		t.Fatalf("Description = %q, want %q", skill.Description, "Codex skill with a display name")
+	}
+}
+
 func TestParser_parseSkillFile_AgentSkillsStandardFields(t *testing.T) {
 	tests := map[string]struct {
 		content                    string
@@ -928,6 +961,7 @@ func TestParseSkillContent(t *testing.T) {
 	tests := map[string]struct {
 		content     []byte
 		name        string
+		platform    model.Platform
 		wantName    string
 		wantDesc    string
 		wantLicense string
@@ -942,6 +976,7 @@ license: MIT
 ---
 Body content`),
 			name:        "fallback-name",
+			platform:    model.ClaudeCode,
 			wantName:    "content-skill",
 			wantDesc:    "Parsed from content",
 			wantLicense: "MIT",
@@ -954,6 +989,7 @@ allowed-tools: Read, Write, Bash
 ---
 Body content`),
 			name:      "fallback-name",
+			platform:  model.ClaudeCode,
 			wantName:  "content-tools",
 			wantDesc:  "Parses allowed-tools too",
 			wantTools: []string{"Read", "Write", "Bash"},
@@ -964,6 +1000,7 @@ description: No name in frontmatter
 ---
 Body`),
 			name:     "provided-name",
+			platform: model.ClaudeCode,
 			wantName: "provided-name",
 			wantDesc: "No name in frontmatter",
 		},
@@ -972,8 +1009,9 @@ Body`),
 description: No name
 ---
 Body`),
-			name:    "",
-			wantErr: true,
+			name:     "",
+			platform: model.ClaudeCode,
+			wantErr:  true,
 		},
 		"invalid name fails": {
 			content: []byte(`---
@@ -981,14 +1019,26 @@ name: invalid name spaces
 description: Test
 ---
 Body`),
-			name:    "fallback",
-			wantErr: true,
+			name:     "fallback",
+			platform: model.ClaudeCode,
+			wantErr:  true,
+		},
+		"codex falls back to provided canonical name": {
+			content: []byte(`---
+name: Agent Development
+description: Human-readable Codex display name
+---
+Body`),
+			name:     "agent-development",
+			platform: model.Codex,
+			wantName: "agent-development",
+			wantDesc: "Human-readable Codex display name",
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			skill, err := ParseSkillContent(tt.content, tt.name, model.ClaudeCode)
+			skill, err := ParseSkillContent(tt.content, tt.name, tt.platform)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("ParseSkillContent() error = %v, wantErr %v", err, tt.wantErr)

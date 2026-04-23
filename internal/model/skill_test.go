@@ -144,6 +144,18 @@ func TestSkillDisplayScope(t *testing.T) {
 			skill: Skill{Platform: PiAgent, Scope: ScopeUser},
 			want:  "~/.agents/skills",
 		},
+		"user scope gemini": {
+			skill: Skill{Platform: Gemini, Scope: ScopeUser},
+			want:  "~/.gemini",
+		},
+		"user scope copilot": {
+			skill: Skill{Platform: Copilot, Scope: ScopeUser},
+			want:  "~/.github/skills",
+		},
+		"repo scope copilot": {
+			skill: Skill{Platform: Copilot, Scope: ScopeRepo},
+			want:  ".github/skills",
+		},
 		"repo scope claude": {
 			skill: Skill{Platform: ClaudeCode, Scope: ScopeRepo},
 			want:  ".claude/skills",
@@ -155,6 +167,10 @@ func TestSkillDisplayScope(t *testing.T) {
 		"repo scope pi agent": {
 			skill: Skill{Platform: PiAgent, Scope: ScopeRepo},
 			want:  ".agents/skills",
+		},
+		"repo scope gemini": {
+			skill: Skill{Platform: Gemini, Scope: ScopeRepo},
+			want:  ".gemini",
 		},
 		"plugin scope with name": {
 			skill: Skill{

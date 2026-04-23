@@ -38,16 +38,18 @@ type SyncListResult struct {
 
 // syncListKeyMap defines the key bindings for the sync list.
 type syncListKeyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	Toggle    key.Binding
-	ToggleAll key.Binding
-	Preview   key.Binding
-	Confirm   key.Binding
-	Filter    key.Binding
-	ClearFlt  key.Binding
-	Help      key.Binding
-	Quit      key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	Toggle      key.Binding
+	ToggleAll   key.Binding
+	Preview     key.Binding
+	Confirm     key.Binding
+	Filter      key.Binding
+	ClearFlt    key.Binding
+	Help        key.Binding
+	Quit        key.Binding
+	ScrollLeft  key.Binding
+	ScrollRight key.Binding
 }
 
 func defaultSyncListKeyMap() syncListKeyMap {
@@ -92,12 +94,21 @@ func defaultSyncListKeyMap() syncListKeyMap {
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
 		),
+		ScrollLeft: key.NewBinding(
+			key.WithKeys("left"),
+			key.WithHelp("←", "scroll cols left"),
+		),
+		ScrollRight: key.NewBinding(
+			key.WithKeys("right"),
+			key.WithHelp("→", "scroll cols right"),
+		),
 	}
 }
 
 // SyncListModel is the BubbleTea model for interactive sync skill selection.
 type SyncListModel struct {
 	table          table.Model
+	hScroll        horizontalTableState
 	skills         []model.Skill
 	filtered       []model.Skill
 	selected       map[string]bool // map of skill name to selected state
@@ -113,6 +124,7 @@ type SyncListModel struct {
 	sourcePlatform model.Platform
 	targetPlatform model.Platform
 	columnWidths   syncListColumnWidths
+	hOffset        int // horizontal column scroll offset (0 = show all)
 }
 
 // Styles for the sync list TUI.
@@ -146,10 +158,11 @@ const (
 	syncListScopeWidth    = 12
 	syncListDescWidth     = 50
 	syncListColumnPadding = 2
-	syncListColumnCount   = 4
 	syncListDetailLines   = 3
 	syncListDetailGap     = 1
 	syncListDetailHeight  = syncListDetailLines + 1 + 2 // title + content + border
+	// syncListMaxHOffset is the maximum horizontal scroll offset (2 scrollable cols - 1).
+	syncListMaxHOffset = 1
 )
 
 type syncListColumnWidths struct {
@@ -158,31 +171,46 @@ type syncListColumnWidths struct {
 	desc  int
 }
 
-func syncListColumns(totalWidth int, skills []model.Skill) ([]table.Column, syncListColumnWidths) {
+// syncListColumns returns visible table columns for the given terminal width and horizontal
+// scroll offset. Scrollable columns are: scope(0), description(1).
+func syncListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]table.Column, syncListColumnWidths) {
+	hOffset = max(0, min(hOffset, syncListMaxHOffset))
+
 	widths := syncListColumnWidths{
 		name:  syncListNameWidth,
 		scope: syncListScopeWidth,
 		desc:  syncListDescWidth,
 	}
 
+	showScope := hOffset == 0
+
+	visibleColCount := 3 // checkbox + name + description always visible
+	if showScope {
+		visibleColCount++
+	}
+
 	if totalWidth > 0 {
-		baseTotal := syncListCheckboxWidth + widths.name + widths.scope + widths.desc +
-			(syncListColumnPadding * syncListColumnCount)
+		baseTotal := syncListCheckboxWidth + widths.name + widths.desc +
+			(syncListColumnPadding * visibleColCount)
+		if showScope {
+			baseTotal += widths.scope
+		}
+
 		extra := totalWidth - baseTotal
 		if extra > 0 {
-			maxScopeWidth := widths.scope
-			for _, skill := range skills {
-				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
-				if scopeWidth > maxScopeWidth {
-					maxScopeWidth = scopeWidth
+			if showScope {
+				maxScopeWidth := widths.scope
+				for _, skill := range skills {
+					if w := runewidth.StringWidth(skill.DisplayScope()); w > maxScopeWidth {
+						maxScopeWidth = w
+					}
 				}
-			}
-
-			scopeNeeded := maxScopeWidth - widths.scope
-			if scopeNeeded > 0 {
-				scopeExtra := min(scopeNeeded, extra)
-				widths.scope += scopeExtra
-				extra -= scopeExtra
+				scopeNeeded := maxScopeWidth - widths.scope
+				if scopeNeeded > 0 {
+					scopeExtra := min(scopeNeeded, extra)
+					widths.scope += scopeExtra
+					extra -= scopeExtra
+				}
 			}
 
 			nameExtra := extra / 3
@@ -193,11 +221,13 @@ func syncListColumns(totalWidth int, skills []model.Skill) ([]table.Column, sync
 	}
 
 	columns := []table.Column{
-		{Title: " ", Width: syncListCheckboxWidth}, // Checkbox column
+		{Title: " ", Width: syncListCheckboxWidth},
 		{Title: "Name", Width: widths.name},
-		{Title: "Scope", Width: widths.scope},
-		{Title: "Description", Width: widths.desc},
 	}
+	if showScope {
+		columns = append(columns, table.Column{Title: "Scope", Width: widths.scope})
+	}
+	columns = append(columns, table.Column{Title: "Description", Width: widths.desc})
 
 	return columns, widths
 }
@@ -209,7 +239,7 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform, initi
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
 	})
 
-	columns, columnWidths := syncListColumns(0, skills)
+	columns, columnWidths := syncListColumns(0, skills, 0)
 
 	// Initialize selections - use initialSelections if provided, otherwise default all to true
 	selected := make(map[string]bool)
@@ -229,6 +259,7 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform, initi
 		sourcePlatform: source,
 		targetPlatform: target,
 		columnWidths:   columnWidths,
+		hScroll:        newHorizontalTableState(columns),
 	}
 
 	rows := m.skillsToRows(skills)
@@ -264,36 +295,38 @@ func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
 			checkbox = "[✓]"
 		}
 
-		name := truncateSyncListValue(s.Name, m.columnWidths.name)
-		scope := truncateSyncListValue(s.DisplayScope(), m.columnWidths.scope)
-		desc := truncateSyncListValue(s.Description, m.columnWidths.desc)
-		rows[i] = table.Row{
+		row := table.Row{
 			checkbox,
-			name,
-			scope,
-			desc,
+			truncateTableValue(s.Name, m.columnWidths.name),
 		}
+		if m.hOffset == 0 {
+			row = append(row, truncateTableValue(s.DisplayScope(), m.columnWidths.scope))
+		}
+		row = append(row, truncateTableValue(s.Description, m.columnWidths.desc))
+		rows[i] = row
 	}
 	return rows
 }
 
-func (m *SyncListModel) updateColumns(totalWidth int) {
-	columns, widths := syncListColumns(totalWidth, m.skills)
-	m.columnWidths = widths
-	m.table.SetColumns(columns)
+func (m *SyncListModel) shiftHOffset(delta int) {
+	newOffset := m.hOffset + delta
+	if newOffset < 0 || newOffset > syncListMaxHOffset {
+		return
+	}
+	m.hOffset = newOffset
+	m.updateColumns(m.width)
+	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
-func truncateSyncListValue(value string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if len(value) <= width {
-		return value
-	}
-	if width <= 3 {
-		return value[:width]
-	}
-	return value[:width-3] + "..."
+func (m *SyncListModel) updateColumns(totalWidth int) {
+	columns, widths := syncListColumns(totalWidth, m.skills, m.hOffset)
+	m.columnWidths = widths
+	m.hScroll.SetColumns(columns)
+	m.refreshTable()
+}
+
+func (m *SyncListModel) refreshTable() {
+	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
 }
 
 func (m SyncListModel) detailPanelWidth() int {
@@ -301,7 +334,7 @@ func (m SyncListModel) detailPanelWidth() int {
 		return m.width
 	}
 	return syncListCheckboxWidth + m.columnWidths.name + m.columnWidths.scope + m.columnWidths.desc +
-		(syncListColumnPadding * syncListColumnCount)
+		(syncListColumnPadding * 4)
 }
 
 func (m SyncListModel) renderDetailPanel() string {
@@ -329,6 +362,8 @@ func (m SyncListModel) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
+//
+//nolint:gocyclo // interactive table/event handling is intentionally centralized here
 func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -340,7 +375,6 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newHeight := max(msg.Height-10-syncListDetailHeight-syncListDetailGap, 5) // Reserve space for title, help, status, detail
 		m.table.SetHeight(newHeight)
 		m.updateColumns(msg.Width)
-		m.table.SetRows(m.skillsToRows(m.filtered))
 
 	case tea.KeyMsg:
 		// Handle confirmation mode
@@ -388,6 +422,18 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
+		case msg.String() == "left" || msg.String() == "h":
+			if m.hScroll.MoveLeft() {
+				m.refreshTable()
+			}
+			return m, nil
+
+		case msg.String() == "right" || msg.String() == "l":
+			if m.hScroll.MoveRight(m.width) {
+				m.refreshTable()
+			}
+			return m, nil
+
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
@@ -409,7 +455,7 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filtered) > 0 {
 				skill := m.getSelectedSkill()
 				m.selected[skill.Name] = !m.selected[skill.Name]
-				m.table.SetRows(m.skillsToRows(m.filtered))
+				m.refreshTable()
 			}
 			return m, nil
 
@@ -426,7 +472,7 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, s := range m.filtered {
 				m.selected[s.Name] = selectAll
 			}
-			m.table.SetRows(m.skillsToRows(m.filtered))
+			m.refreshTable()
 			return m, nil
 
 		case key.Matches(msg, m.keys.Preview):
@@ -447,6 +493,14 @@ func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirmMode = true
 			}
 			return m, nil
+
+		case key.Matches(msg, m.keys.ScrollLeft):
+			m.shiftHOffset(-1)
+			return m, nil
+
+		case key.Matches(msg, m.keys.ScrollRight):
+			m.shiftHOffset(1)
+			return m, nil
 		}
 	}
 
@@ -462,6 +516,7 @@ func (m *SyncListModel) applyFilter() {
 		lowerFilter := strings.ToLower(m.filter)
 		for _, s := range m.skills {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
 				filtered = append(filtered, s)
@@ -469,7 +524,7 @@ func (m *SyncListModel) applyFilter() {
 		}
 		m.filtered = filtered
 	}
-	m.table.SetRows(m.skillsToRows(m.filtered))
+	m.refreshTable()
 }
 
 func (m SyncListModel) getSelectedSkill() model.Skill {
@@ -537,6 +592,9 @@ func (m SyncListModel) View() string {
 	if m.filter != "" {
 		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
 	}
+	if m.hOffset > 0 || m.hOffset < syncListMaxHOffset {
+		status += "  " + hScrollIndicator(m.hOffset, syncListMaxHOffset)
+	}
 	b.WriteString(syncListStyles.Status.Render(status))
 	b.WriteString("\n")
 
@@ -556,6 +614,7 @@ func (m SyncListModel) View() string {
 func (m SyncListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
+		"←/→ scroll cols",
 		"space toggle",
 		"a toggle all",
 		"p preview",
@@ -571,8 +630,11 @@ func (m SyncListModel) renderFullHelp() string {
 	help := `Navigation:
   ↑/k      Move up
   ↓/j      Move down
+  ←/h      Show previous columns
+  →/l      Show next columns
   g/Home   Go to top
   G/End    Go to bottom
+  ←/→      Scroll columns left/right
 
 Selection:
   Space/Tab  Toggle current skill

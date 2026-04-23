@@ -166,6 +166,10 @@ func TestPlatformPickerModel_View(t *testing.T) {
 			t.Errorf("expected view to contain platform %s", p)
 		}
 	}
+
+	if !strings.Contains(view, string(model.PiDev)) {
+		t.Fatalf("expected view to include %q", model.PiDev)
+	}
 }
 
 func TestPlatformPickerModel_View_TargetPhase(t *testing.T) {
@@ -215,5 +219,43 @@ func TestPlatformPickerModel_CannotSelectSamePlatform(t *testing.T) {
 		if cmd != nil && m.quitting {
 			t.Error("should not quit when selecting same platform as target")
 		}
+	}
+}
+
+func TestPlatformPickerModel_PiDevSelectionFlow(t *testing.T) {
+	m := NewPlatformPickerModel()
+
+	for i, platform := range m.platforms {
+		if platform == model.PiDev {
+			m.cursor = i
+			break
+		}
+	}
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(PlatformPickerModel)
+	if m.source != model.PiDev {
+		t.Fatalf("source = %q, want pi.dev", m.source)
+	}
+	if !strings.Contains(m.View(), "Source:") {
+		t.Fatal("expected target phase view to show the selected source")
+	}
+
+	for i, platform := range m.platforms {
+		if platform == model.PiDev {
+			m.cursor = i
+			break
+		}
+	}
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(PlatformPickerModel)
+	if cmd != nil {
+		t.Fatal("expected blocked target selection to continue without quitting")
+	}
+	if m.result.Action != PlatformPickerActionNone {
+		t.Fatalf("result action = %v, want none", m.result.Action)
+	}
+	if m.phase != phaseTargetPlatform {
+		t.Fatalf("phase = %v, want target platform", m.phase)
 	}
 }

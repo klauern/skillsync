@@ -44,6 +44,7 @@ func TestValidateSourceTarget_Valid(t *testing.T) {
 	// Mock platform paths - we'll validate paths exist
 	opts := DefaultOptions()
 	opts.CheckConflicts = false // Skip conflict check for this test
+	opts.RequireWritePermission = false
 
 	// For now, test with paths that exist
 	sourcePlatform := model.ClaudeCode
@@ -181,6 +182,42 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			platform: model.PiAgent,
 			path:     "/skills/SKILL.md",
 			wantErr:  false,
+		},
+		{
+			name:     "Copilot .md",
+			platform: model.Copilot,
+			path:     "/skills/test.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Copilot invalid extension .txt",
+			platform: model.Copilot,
+			path:     "/skills/test.txt",
+			wantErr:  true,
+		},
+		{
+			name:     "Gemini .md",
+			platform: model.Gemini,
+			path:     "/skills/test.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Gemini invalid extension .txt",
+			platform: model.Gemini,
+			path:     "/skills/test.txt",
+			wantErr:  true,
+		},
+		{
+			name:     "Pi.dev .md",
+			platform: model.PiDev,
+			path:     "/skills/SKILL.md",
+			wantErr:  false,
+		},
+		{
+			name:     "Pi.dev invalid extension .json",
+			platform: model.PiDev,
+			path:     "/skills/test.json",
+			wantErr:  true,
 		},
 	}
 
@@ -454,6 +491,21 @@ func TestGetPlatformPath(t *testing.T) {
 			wantErr:  false,
 		},
 		{
+			name:     "Copilot",
+			platform: model.Copilot,
+			wantErr:  false,
+		},
+		{
+			name:     "Gemini",
+			platform: model.Gemini,
+			wantErr:  false,
+		},
+		{
+			name:     "Pi.dev",
+			platform: model.PiDev,
+			wantErr:  false,
+		},
+		{
 			name:     "Invalid platform",
 			platform: model.Platform("invalid"),
 			wantErr:  true,
@@ -489,6 +541,125 @@ func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
 	if got != expected {
 		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
 	}
+}
+
+func TestGetPlatformPath_CodexPrefersAgentsWhenPresent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_CODEX_PATH", "")
+
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .codex skills dir: %v", err)
+	}
+
+	got, err := GetPlatformPath(model.Codex)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".agents", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_PiDevDefaultsToUserSkills(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_PI_DEV_PATH", "")
+	t.Setenv("SKILLSYNC_PIDEV_PATH", "")
+
+	got, err := GetPlatformPath(model.PiDev)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	if got != expected {
+		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_CopilotDefaultsToGitHubRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_COPILOT_PATH", "")
+
+	got, err := GetPlatformPath(model.Copilot)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".github")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Copilot) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_PiDevPrefersAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create .agents skills dir: %v", err)
+	}
+	expected := filepath.Join(home, ".agents", "skills")
+	got, err := GetPlatformPath(model.PiDev)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+	if got != expected {
+		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_GeminiDefaultsToConfigRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SKILLSYNC_GEMINI_PATH", "")
+
+	got, err := GetPlatformPath(model.Gemini)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+
+	expected := filepath.Join(home, ".gemini")
+	if got != expected {
+		t.Errorf("GetPlatformPath(Gemini) = %q, want %q", got, expected)
+	}
+}
+
+func TestGetPlatformPath_PiDevEnvOverrides(t *testing.T) {
+	t.Run("legacy pi_dev env", func(t *testing.T) {
+		override := t.TempDir()
+		t.Setenv("SKILLSYNC_PI_DEV_PATH", override)
+		t.Setenv("SKILLSYNC_PIDEV_PATH", "")
+
+		got, err := GetPlatformPath(model.PiDev)
+		if err != nil {
+			t.Fatalf("GetPlatformPath() error = %v", err)
+		}
+		if got != override {
+			t.Fatalf("GetPlatformPath(PiDev) = %q, want %q", got, override)
+		}
+	})
+
+	t.Run("normalized pidev env", func(t *testing.T) {
+		override := t.TempDir()
+		t.Setenv("SKILLSYNC_PI_DEV_PATH", "")
+		t.Setenv("SKILLSYNC_PIDEV_PATH", override)
+
+		got, err := GetPlatformPath(model.PiDev)
+		if err != nil {
+			t.Fatalf("GetPlatformPath() error = %v", err)
+		}
+		if got != override {
+			t.Fatalf("GetPlatformPath(PiDev) = %q, want %q", got, override)
+		}
+	})
 }
 
 func TestValidationError_Error(t *testing.T) {
@@ -662,6 +833,42 @@ func TestGetPlatformPathForScope(t *testing.T) {
 			t.Fatalf("failed to resolve repo root: %v", err)
 		}
 		expected := filepath.Join(resolvedRoot, ".claude", "skills")
+		if filepath.Clean(got) != expected {
+			t.Errorf("expected %q, got %q", expected, got)
+		}
+	})
+
+	t.Run("Pi.dev repo scope uses preferred project root", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+			t.Fatalf("failed to create .git dir: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(repoRoot, ".agents", "skills"), 0o755); err != nil {
+			t.Fatalf("failed to create .agents skills: %v", err)
+		}
+		subDir := filepath.Join(repoRoot, "pkg")
+		if err := os.MkdirAll(subDir, 0o755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chdir(cwd) })
+		if err := os.Chdir(subDir); err != nil {
+			t.Fatalf("failed to chdir: %v", err)
+		}
+
+		got, err := GetPlatformPathForScope(model.PiDev, model.ScopeRepo)
+		if err != nil {
+			t.Fatalf("GetPlatformPathForScope() error = %v", err)
+		}
+		resolvedRoot, err := filepath.EvalSymlinks(repoRoot)
+		if err != nil {
+			t.Fatalf("failed to resolve repo root: %v", err)
+		}
+		expected := filepath.Join(resolvedRoot, ".agents", "skills")
 		if filepath.Clean(got) != expected {
 			t.Errorf("expected %q, got %q", expected, got)
 		}

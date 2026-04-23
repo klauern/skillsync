@@ -35,20 +35,22 @@ jobs:
           go install golang.org/x/tools/cmd/goimports@latest
       - name: Check formatting (gofumpt)
         run: |
-          unformatted=$(gofumpt -l .)
+          files=$(git ls-files '*.go')
+          unformatted=$(printf '%s\n' "$files" | xargs -r gofumpt -l)
           if [ -n "$unformatted" ]; then
             echo "::error::Files not formatted with gofumpt:"
             echo "$unformatted"
-            gofumpt -d .
+            printf '%s\n' "$files" | xargs -r gofumpt -d
             exit 1
           fi
       - name: Check formatting (goimports)
         run: |
-          unformatted=$(goimports -l -local github.com/klauern/skillsync .)
+          files=$(git ls-files '*.go')
+          unformatted=$(printf '%s\n' "$files" | xargs -r goimports -l -local github.com/klauern/skillsync)
           if [ -n "$unformatted" ]; then
             echo "::error::Files not formatted with goimports:"
             echo "$unformatted"
-            goimports -d -local github.com/klauern/skillsync .
+            printf '%s\n' "$files" | xargs -r goimports -d -local github.com/klauern/skillsync
             exit 1
           fi
       - name: Run go vet

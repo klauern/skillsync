@@ -98,14 +98,17 @@ And some code:
 }
 
 func TestIntegration_AllPlatformCombinations(t *testing.T) {
-	// Test ClaudeCode <-> Cursor combinations (they share the same .md format)
-	// Codex uses AGENTS.md which has different structure
+	// Exercise the common text-based combinations, including Pi.dev.
 	testCases := []struct {
 		source model.Platform
 		target model.Platform
 	}{
 		{model.ClaudeCode, model.Cursor},
 		{model.Cursor, model.ClaudeCode},
+		{model.ClaudeCode, model.PiDev},
+		{model.PiDev, model.ClaudeCode},
+		{model.Cursor, model.PiDev},
+		{model.PiDev, model.Cursor},
 	}
 
 	for _, tc := range testCases {
@@ -138,6 +141,37 @@ Test content for cross-platform synchronization.
 			util.AssertEqual(t, result.Source, tc.source)
 			util.AssertEqual(t, result.Target, tc.target)
 		})
+	}
+}
+
+func TestIntegration_PiDevRoundTrip(t *testing.T) {
+	s := New()
+
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	util.WriteFile(t, filepath.Join(sourceDir, "pi-round-trip.md"), `---
+name: pi-round-trip
+description: Pi.dev round trip fixture
+---
+
+Pi.dev content.
+`)
+
+	opts := Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	}
+
+	result, err := s.Sync(model.ClaudeCode, model.PiDev, opts)
+	util.AssertNoError(t, err)
+	util.AssertEqual(t, len(result.Created()), 1)
+	util.AssertEqual(t, result.Target, model.PiDev)
+
+	if _, err := os.Stat(filepath.Join(targetDir, "pi-round-trip.md")); err != nil {
+		t.Fatalf("expected Pi.dev target file to exist: %v", err)
 	}
 }
 

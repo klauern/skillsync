@@ -13,7 +13,9 @@ const (
 	// SkillTypeSkill represents a regular agent skill (default).
 	SkillTypeSkill SkillType = "skill"
 
-	// SkillTypePrompt represents a slash command or reusable prompt.
+	// SkillTypePrompt represents a slash command or reusable prompt transport
+	// artifact. It is used when a platform exposes command-like content, but it
+	// does not imply equivalent runtime behavior across CLIs.
 	// In Claude Code these are invoked via /command-name.
 	// In Cursor these are called "prompts".
 	// In Codex these are called "prompts".

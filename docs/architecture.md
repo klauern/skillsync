@@ -32,7 +32,7 @@ type Parser interface {
 }
 ```
 
-**Platform**: `ClaudeCode | Cursor | Codex | PiAgent` (`internal/model/platform.go`); `Copilot` and `Gemini` are documented in `docs/platforms/` but not yet added to the runtime enum.
+**Platform**: `ClaudeCode | Cursor | Codex | Copilot | Gemini | Pi.dev` (`internal/model/platform.go`); `PiAgent` remains a legacy alias for compatibility.
 
 See `docs/platforms/` for per-platform format references and `docs/platforms/cross-platform-mapping.md` for conversion rules.
 
@@ -46,16 +46,37 @@ See `docs/platforms/` for per-platform format references and `docs/platforms/cro
 3. Sync applies strategy to merge skills
 4. Export writes to target format
 
-## Command-Aware Extension
+## Transport-Layer Prompt Support
 
 Command/prompt artifacts are represented in the same unified `model.Skill`
 structure using:
 
 - `Type`: `skill` or `prompt`
-- `Trigger`: optional slash trigger (for example `/review`) when source platform
-  exposes one
+- `Trigger`: optional slash trigger when the source platform exposes one
 - `Metadata`: passthrough for platform-specific fields that are not universally
   portable
+
+This is a transport model, not a claim of runtime parity. SkillSync does not
+introduce separate first-class `command` or `agent` entities for Codex, and it
+does not imply that Codex can reproduce Claude command triggers or subagent
+behavior natively.
+
+## Portability Boundaries
+
+The architecture docs use the same portability classes as the platform docs:
+
+- **Portable**: `SKILL.md` content plus supporting directories that fit the
+  shared Agent Skills subset.
+- **Partially portable**: prompt/command artifacts and always-on instruction
+  files, where content survives but runtime semantics differ by platform.
+- **Non-portable**: agent/subagent definitions, plugin/package provenance, and
+  other runtime-owned behavior with no common cross-platform file model.
+
+This means the unified model is intentionally conservative:
+
+- it preserves content and source metadata for lossy conversions
+- it does not claim that `Type=prompt` recreates native slash-command behavior
+- it does not model agent files as a portable top-level runtime concept
 
 ### Discovery
 

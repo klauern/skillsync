@@ -18,12 +18,18 @@ const (
 	Codex Platform = "codex"
 	// PiAgent is the identifier for the Pi Agent platform.
 	PiAgent Platform = "pi-agent"
+	// Copilot is the identifier for GitHub Copilot.
+	Copilot Platform = "copilot"
+	// Gemini is the identifier for the Gemini CLI platform.
+	Gemini Platform = "gemini"
+	// PiDev is the identifier for the Pi.dev platform.
+	PiDev Platform = "pi.dev"
 )
 
-// IsValid returns true if the platform is recognized
+// IsValid returns true if the platform is recognized.
 func (p Platform) IsValid() bool {
 	switch p {
-	case ClaudeCode, Cursor, Codex, PiAgent:
+	case ClaudeCode, Cursor, Codex, PiAgent, Copilot, Gemini, PiDev:
 		return true
 	default:
 		return false
@@ -42,13 +48,18 @@ func (p Platform) ConfigDir() string {
 		return "codex"
 	case PiAgent:
 		return "agents"
+	case Copilot:
+		return "github"
+	case Gemini:
+		return "gemini"
+	case PiDev:
+		return "pi/agent"
 	default:
 		return string(p)
 	}
 }
 
 // Short returns an abbreviated platform name for compact display.
-// Returns "cc" for ClaudeCode, "cur" for Cursor, "cdx" for Codex.
 func (p Platform) Short() string {
 	switch p {
 	case ClaudeCode:
@@ -59,6 +70,12 @@ func (p Platform) Short() string {
 		return "cdx"
 	case PiAgent:
 		return "pi"
+	case PiDev:
+		return "pi"
+	case Copilot:
+		return "cop"
+	case Gemini:
+		return "gem"
 	default:
 		return string(p)
 	}
@@ -66,7 +83,7 @@ func (p Platform) Short() string {
 
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
-	return []Platform{ClaudeCode, Cursor, Codex, PiAgent}
+	return []Platform{ClaudeCode, Cursor, Codex, Copilot, Gemini, PiDev}
 }
 
 // ParsePlatform converts a string to a Platform type.
@@ -75,13 +92,13 @@ func AllPlatforms() []Platform {
 func ParsePlatform(s string) (Platform, error) {
 	normalized := strings.ToLower(strings.TrimSpace(s))
 
-	// Try exact match first
+	// Try exact match first.
 	p := Platform(normalized)
 	if p.IsValid() {
 		return p, nil
 	}
 
-	// Try normalized formats
+	// Try normalized formats.
 	switch normalized {
 	case "claudecode", "claude":
 		return ClaudeCode, nil
@@ -91,7 +108,17 @@ func ParsePlatform(s string) (Platform, error) {
 		return Codex, nil
 	case "pi-agent", "piagent", "pi":
 		return PiAgent, nil
+	case "copilot", "github-copilot", "githubcopilot":
+		return Copilot, nil
+	case "gemini":
+		return Gemini, nil
+	case "pi.dev", "pidev", "pi-dev":
+		return PiDev, nil
 	default:
-		return "", fmt.Errorf("unknown platform %q (valid: claudecode, cursor, codex, pi-agent)", s)
+		valid := make([]string, 0, len(AllPlatforms()))
+		for _, platform := range AllPlatforms() {
+			valid = append(valid, string(platform))
+		}
+		return "", fmt.Errorf("unknown platform %q (valid: %s)", s, strings.Join(valid, ", "))
 	}
 }

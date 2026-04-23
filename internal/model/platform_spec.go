@@ -13,6 +13,84 @@ type PlatformSpec struct {
 	Scopes   []SkillScope // Empty means all scopes (for source) or user scope (for target)
 }
 
+// SourceScopeOrder returns the canonical ordering for selectable source scopes.
+// The ordering matches the platform-wide precedence order.
+func SourceScopeOrder() []SkillScope {
+	return AllScopes()
+}
+
+// NormalizeSourceScopes canonicalizes a source-scope selection.
+// It removes duplicates, orders scopes canonically, and collapses a full
+// selection set to nil so callers can treat it as "all".
+func NormalizeSourceScopes(scopes []SkillScope) []SkillScope {
+	ordered := SourceScopeOrder()
+	seen := make(map[SkillScope]bool, len(scopes))
+	normalized := make([]SkillScope, 0, len(scopes))
+
+	for _, orderedScope := range ordered {
+		for _, scope := range scopes {
+			if scope == orderedScope && !seen[scope] {
+				seen[scope] = true
+				normalized = append(normalized, scope)
+				break
+			}
+		}
+	}
+
+	if len(normalized) == len(ordered) {
+		return nil
+	}
+	return normalized
+}
+
+// ParseSourceScopes parses a source scope list.
+// The empty string and the literal "all" both mean all scopes.
+// Duplicate values are removed and the result is canonicalized.
+func ParseSourceScopes(s string) ([]SkillScope, error) {
+	s = strings.TrimSpace(s)
+	if s == "" || strings.EqualFold(s, "all") {
+		return nil, nil
+	}
+
+	parts := strings.Split(s, ",")
+	scopes := make([]SkillScope, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.EqualFold(part, "all") {
+			return nil, nil
+		}
+		scope, err := ParseScope(part)
+		if err != nil {
+			return nil, fmt.Errorf("invalid scope in %q: %w", s, err)
+		}
+		scopes = append(scopes, scope)
+	}
+
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("no valid scopes found in %q", s)
+	}
+
+	return NormalizeSourceScopes(scopes), nil
+}
+
+// FormatSourceScopes renders a source scope selection.
+// A nil/empty selection or a full selection set renders as "all".
+func FormatSourceScopes(scopes []SkillScope) string {
+	normalized := NormalizeSourceScopes(scopes)
+	if len(normalized) == 0 {
+		return "all"
+	}
+
+	parts := make([]string, len(normalized))
+	for i, scope := range normalized {
+		parts[i] = string(scope)
+	}
+	return strings.Join(parts, ",")
+}
+
 // HasScopes returns true if explicit scopes were specified.
 func (ps PlatformSpec) HasScopes() bool {
 	return len(ps.Scopes) > 0
@@ -28,6 +106,19 @@ func (ps PlatformSpec) String() string {
 		scopeStrs[i] = string(s)
 	}
 	return fmt.Sprintf("%s:%s", ps.Platform, strings.Join(scopeStrs, ","))
+}
+
+// NormalizeSource returns a copy of the PlatformSpec with source-scopes
+// canonicalized for multi-select usage.
+func (ps PlatformSpec) NormalizeSource() PlatformSpec {
+	ps.Scopes = NormalizeSourceScopes(ps.Scopes)
+	return ps
+}
+
+// SourceString returns the canonical string representation for source selection.
+// When all scopes are selected, the normalized string is just the platform.
+func (ps PlatformSpec) SourceString() string {
+	return ps.NormalizeSource().String()
 }
 
 // ParsePlatformSpec parses a platform:scope specification string.
