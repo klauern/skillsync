@@ -100,7 +100,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			continue
 		}
 		// Skip files inside skill directories
-		if isInsideSkillDir(f, skillDirs) {
+		if parser.IsInsideSkillDir(f, skillDirs) {
 			logging.Debug("skipping file inside skill directory",
 				logging.Path(f),
 			)
@@ -260,13 +260,13 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	}
 
 	// Extract name
-	if nameStr := extractString(fm, "name"); nameStr != "" {
+	if nameStr := parser.ExtractFrontmatterString(fm, "name"); nameStr != "" {
 		f.name = nameStr
 		f.hasExplicitName = true
 	}
 
 	// Extract description
-	f.description = extractString(fm, "description")
+	f.description = parser.ExtractFrontmatterString(fm, "description")
 
 	// Extract tool allowlist.
 	// Claude command files commonly use `allowed-tools`, while skills use `tools`.
@@ -285,14 +285,14 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	}
 
 	// Extract type and trigger (for command/prompt artifacts).
-	if typeStr := extractString(fm, "type"); typeStr != "" {
+	if typeStr := parser.ExtractFrontmatterString(fm, "type"); typeStr != "" {
 		parsedType, err := model.ParseSkillType(typeStr)
 		if err != nil {
 			return f, err
 		}
 		f.skillType = parsedType
 	}
-	f.trigger = extractString(fm, "trigger")
+	f.trigger = parser.ExtractFrontmatterString(fm, "trigger")
 	if f.trigger != "" {
 		f.commandMetadataHint = true
 	}
@@ -309,15 +309,6 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	}
 
 	return f, nil
-}
-
-func extractString(fm map[string]any, key string) string {
-	if val, ok := fm[key]; ok {
-		if strVal, ok := val.(string); ok {
-			return strVal
-		}
-	}
-	return ""
 }
 
 func extractTools(fm map[string]any, key string) []string {
@@ -362,23 +353,6 @@ func isClaudeCommandFile(path string) bool {
 	return slices.Contains(parts, "commands")
 }
 
-// isInsideSkillDir checks if a file path is inside any of the skill directories.
-// This is used to filter out reference files (patterns/, references/, etc.) from legacy parsing.
-func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
-	dir := filepath.Dir(filePath)
-	// Walk up the directory tree to check if any parent is a skill directory
-	for dir != "/" && dir != "." && dir != "" {
-		if skillDirs[dir] {
-			return true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return false
-}
 
 // DefaultPath returns the default path for Claude Code skills
 func (p *Parser) DefaultPath() string {

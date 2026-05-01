@@ -299,6 +299,33 @@ func walkFollowSymlinksImpl(path string, visited map[string]bool, walkFn func(pa
 	return nil
 }
 
+// IsInsideSkillDir checks if a file path is inside any of the skill directories.
+// This is used to filter out reference files (patterns/, references/, etc.) from legacy parsing.
+func IsInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
+	dir := filepath.Dir(filePath)
+	for dir != "." && dir != "/" && dir != "" {
+		if skillDirs[dir] {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
+}
+
+// ExtractFrontmatterString extracts a string value from a parsed frontmatter map.
+func ExtractFrontmatterString(fm map[string]any, key string) string {
+	if val, ok := fm[key]; ok {
+		if strVal, ok := val.(string); ok {
+			return strVal
+		}
+	}
+	return ""
+}
+
 // ValidateSkillName checks if a skill name is valid.
 // Valid names contain only alphanumeric characters, hyphens, and underscores.
 func ValidateSkillName(name string) error {

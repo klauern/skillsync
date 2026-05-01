@@ -175,10 +175,10 @@ func (p *Parser) parsePromptFile(filePath string) (model.Skill, error) {
 			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
 		}
 
-		name = extractString(fm, "name")
-		description = extractString(fm, "description")
-		trigger = extractString(fm, "trigger")
-		if typeStr := extractString(fm, "type"); typeStr != "" {
+		name = coreparser.ExtractFrontmatterString(fm, "name")
+		description = coreparser.ExtractFrontmatterString(fm, "description")
+		trigger = coreparser.ExtractFrontmatterString(fm, "trigger")
+		if typeStr := coreparser.ExtractFrontmatterString(fm, "type"); typeStr != "" {
 			parsedType, err := model.ParseSkillType(typeStr)
 			if err == nil {
 				skillType = parsedType
@@ -399,11 +399,3 @@ func instructionName(filePath, root string) string {
 	return filepath.Base(dir) + "-agents"
 }
 
-func extractString(fm map[string]any, key string) string {
-	if val, ok := fm[key]; ok {
-		if strVal, ok := val.(string); ok {
-			return strVal
-		}
-	}
-	return ""
-}

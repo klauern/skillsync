@@ -30,7 +30,7 @@ SkillSync is a command-line tool that helps you manage and synchronize AI coding
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/skillsync
+git clone https://github.com/klauern/skillsync
 cd skillsync
 
 # Build the binary
@@ -772,53 +772,11 @@ skillsync version
 
 Default: `~/.skillsync/config.yaml`
 
-Find your config file:
+Find your config file and dump its current values:
 ```bash
 skillsync config path
+skillsync config show --format yaml
 ```
-
-### Configuration Options
-
-```yaml
-# ~/.skillsync/config.yaml
-
-platforms:
-  claude_code:
-    skills_paths:
-      - .claude/commands
-      - .claude/skills
-      - ~/.claude/commands
-      - ~/.claude/skills
-  cursor:
-    skills_paths:
-      - .cursor/skills
-      - ~/.cursor/skills
-  codex:
-    skills_paths:
-      - .codex/skills
-      - ~/.codex/skills
-      - /etc/codex/skills
-
-sync:
-  # Default sync strategy (overwrite, skip, newer, merge, three-way, interactive)
-  default_strategy: overwrite
-  # Artifact types included by default for sync/delete (skill, prompt)
-  include_types: [skill]
-
-output:
-  # Color output mode (auto, always, never)
-  color: auto
-
-similarity:
-  # Name similarity threshold (0.0-1.0)
-  name_threshold: 0.7
-  # Content similarity threshold (0.0-1.0)
-  content_threshold: 0.6
-  # Algorithm (levenshtein, jaro-winkler, combined)
-  algorithm: combined
-```
-
-Claude Code defaults include both `commands` and `skills` directories so slash-command style prompts are discovered alongside standard skills.
 
 ### Environment Variables
 
@@ -837,16 +795,15 @@ export SKILLSYNC_SYNC_INCLUDE_TYPES=skill,prompt
 
 ## Next Steps
 
-- **Read the full command reference:** `docs/commands.md` (coming soon)
-- **Learn about sync strategies:** `docs/sync-strategies.md` (coming soon)
-- **Migration guide:** `docs/migration.md` (if you have existing skills)
+- **Learn about sync strategies:** [docs/strategies.md](strategies.md)
+- **Architecture overview:** [docs/architecture.md](architecture.md)
 - **Development guide:** See `AGENTS.md` if you want to contribute
 
 ## Getting Help
 
 - View command help: `skillsync <command> --help`
-- Report issues: [GitHub Issues](https://github.com/yourusername/skillsync/issues)
-- Ask questions: [GitHub Discussions](https://github.com/yourusername/skillsync/discussions)
+- Report issues: [GitHub Issues](https://github.com/klauern/skillsync/issues)
+- Ask questions: [GitHub Discussions](https://github.com/klauern/skillsync/discussions)
 
 ---
 
