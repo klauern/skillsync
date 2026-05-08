@@ -421,6 +421,10 @@ func (s *Synchronizer) processSkill(
 	// Check if skill exists in target
 	existingSkill, exists := existingSkills[source.Name]
 	if !exists {
+		// os.Lstat (not Stat) is intentional: captures the symlink's own mtime,
+		// not the target's. Type/Scope/Metadata/PluginInfo are synthesized from
+		// the source — determineAction only reads Name and ModifiedAt for most
+		// strategies, so this is safe for current use.
 		if info, err := os.Lstat(targetEntryPath); err == nil {
 			existingSkill = model.Skill{
 				Name:       source.Name,
@@ -441,25 +445,18 @@ func (s *Synchronizer) processSkill(
 	result.Action = action
 	result.Message = message
 	result.Conflict = conflict
+	var extras []string
+	if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
+		extras = append(extras, "linked Claude skill directory")
+	}
 	if warning := mappingWarning(source, targetPlatform); warning != "" {
-		if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
-			if result.Message != "" {
-				result.Message += "; "
-			}
-			result.Message += "linked Claude skill directory"
-			result.Message += "; "
-			result.Message += warning
-		} else {
-			if result.Message != "" {
-				result.Message += "; "
-			}
-			result.Message += warning
-		}
-	} else if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
+		extras = append(extras, warning)
+	}
+	if len(extras) > 0 {
 		if result.Message != "" {
 			result.Message += "; "
 		}
-		result.Message += "linked Claude skill directory"
+		result.Message += strings.Join(extras, "; ")
 	}
 
 	logging.Debug(
@@ -539,7 +536,13 @@ func (s *Synchronizer) processSkill(
 					result.Error = fmt.Errorf("failed to create parent directories for symlink: %w", err)
 					return result
 				}
-				if err := os.Symlink(sourceRootPath, targetEntryPath); err != nil {
+				absSource, err := filepath.Abs(sourceRootPath)
+				if err != nil {
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to resolve absolute source path for symlink: %w", err)
+					return result
+				}
+				if err := os.Symlink(absSource, targetEntryPath); err != nil {
 					logging.Error(
 						"failed to create Claude skill symlink",
 						logging.Skill(source.Name),
