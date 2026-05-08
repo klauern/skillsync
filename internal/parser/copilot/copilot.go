@@ -30,7 +30,8 @@ func New(basePath string) *Parser {
 // Parse discovers supported Copilot artifacts from the configured .github root.
 func (p *Parser) Parse() ([]model.Skill, error) {
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		logging.Debug("copilot directory not found",
+		logging.Debug(
+			"copilot directory not found",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 		)
@@ -87,7 +88,8 @@ func (p *Parser) parseRepositoryInstructions(seen map[string]bool) ([]model.Skil
 
 	skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false, model.CopilotArtifactRepositoryInstructions)
 	if err != nil {
-		logging.Warn("failed to parse Copilot repository instructions",
+		logging.Warn(
+			"failed to parse Copilot repository instructions",
 			logging.Path(filePath),
 			logging.Err(err),
 		)
@@ -110,7 +112,8 @@ func (p *Parser) parseInstructionFiles(seen map[string]bool) ([]model.Skill, err
 	for _, filePath := range files {
 		skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false, model.CopilotArtifactInstructions)
 		if err != nil {
-			logging.Warn("failed to parse Copilot instruction file",
+			logging.Warn(
+				"failed to parse Copilot instruction file",
 				logging.Path(filePath),
 				logging.Err(err),
 			)
@@ -136,7 +139,8 @@ func (p *Parser) parsePromptFiles(seen map[string]bool) ([]model.Skill, error) {
 	for _, filePath := range files {
 		skill, err := p.parseArtifactFile(filePath, model.SkillTypePrompt, true, model.CopilotArtifactPrompt)
 		if err != nil {
-			logging.Warn("failed to parse Copilot prompt file",
+			logging.Warn(
+				"failed to parse Copilot prompt file",
 				logging.Path(filePath),
 				logging.Err(err),
 			)
@@ -162,7 +166,8 @@ func (p *Parser) parseAgentFiles(seen map[string]bool) ([]model.Skill, error) {
 	for _, filePath := range files {
 		skill, err := p.parseArtifactFile(filePath, model.SkillTypeSkill, false, model.CopilotArtifactAgent)
 		if err != nil {
-			logging.Warn("failed to parse Copilot agent file",
+			logging.Warn(
+				"failed to parse Copilot agent file",
 				logging.Path(filePath),
 				logging.Err(err),
 			)

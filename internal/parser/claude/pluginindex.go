@@ -78,7 +78,8 @@ func LoadPluginIndex() *PluginIndex {
 	data, err := os.ReadFile(pluginsPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			logging.Debug("failed to read installed_plugins.json",
+			logging.Debug(
+				"failed to read installed_plugins.json",
 				logging.Path(pluginsPath),
 				logging.Err(err),
 			)
@@ -88,7 +89,8 @@ func LoadPluginIndex() *PluginIndex {
 
 	var manifest InstalledPluginsFile
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		logging.Warn("failed to parse installed_plugins.json",
+		logging.Warn(
+			"failed to parse installed_plugins.json",
 			logging.Path(pluginsPath),
 			logging.Err(err),
 		)
@@ -102,7 +104,8 @@ func LoadPluginIndex() *PluginIndex {
 		for _, inst := range installations {
 			// Skip disabled plugins
 			if !inst.IsEnabled() {
-				logging.Debug("skipping disabled plugin",
+				logging.Debug(
+					"skipping disabled plugin",
 					slog.String("plugin", pluginKey),
 					logging.Path(inst.InstallPath),
 				)
@@ -129,7 +132,8 @@ func LoadPluginIndex() *PluginIndex {
 		}
 	}
 
-	logging.Debug("loaded plugin index",
+	logging.Debug(
+		"loaded plugin index",
 		logging.Count(len(index.byInstallPath)),
 	)
 

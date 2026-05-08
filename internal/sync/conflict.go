@@ -168,7 +168,8 @@ func NewConflictDetector() *ConflictDetector {
 
 // DetectConflict checks if there's a conflict between source and target skills.
 func (cd *ConflictDetector) DetectConflict(source, target model.Skill) *Conflict {
-	logging.Debug("checking for conflicts",
+	logging.Debug(
+		"checking for conflicts",
 		logging.Skill(source.Name),
 		logging.Operation("conflict_detection"),
 	)
@@ -177,7 +178,8 @@ func (cd *ConflictDetector) DetectConflict(source, target model.Skill) *Conflict
 	metadataDiffers := cd.metadataDiffers(source, target)
 
 	if !contentDiffers && !metadataDiffers {
-		logging.Debug("no conflict detected",
+		logging.Debug(
+			"no conflict detected",
 			logging.Skill(source.Name),
 		)
 		return nil // No conflict
@@ -199,7 +201,8 @@ func (cd *ConflictDetector) DetectConflict(source, target model.Skill) *Conflict
 		conflict.Type = ConflictTypeMetadata
 	}
 
-	logging.Debug("conflict detected",
+	logging.Debug(
+		"conflict detected",
 		logging.Skill(source.Name),
 		slog.String("conflict_type", string(conflict.Type)),
 		slog.Bool("content_differs", contentDiffers),
@@ -209,7 +212,8 @@ func (cd *ConflictDetector) DetectConflict(source, target model.Skill) *Conflict
 	// Compute diff hunks for content conflicts
 	if contentDiffers {
 		conflict.Hunks = cd.computeDiff(conflict.SourceLines, conflict.TargetLines)
-		logging.Debug("computed diff hunks",
+		logging.Debug(
+			"computed diff hunks",
 			logging.Skill(source.Name),
 			logging.Count(len(conflict.Hunks)),
 		)

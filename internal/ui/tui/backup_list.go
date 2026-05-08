@@ -217,7 +217,8 @@ func (m BackupListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Adjust table height based on window
 		newHeight := max(
 			// Reserve space for title, help, status
-			msg.Height-8, 5)
+			msg.Height-8, 5,
+		)
 		m.table.SetHeight(newHeight)
 
 	case tea.KeyMsg:

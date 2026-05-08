@@ -41,7 +41,8 @@ func New(basePath string) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		logging.Debug("skills directory not found",
+		logging.Debug(
+			"skills directory not found",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 		)
@@ -56,7 +57,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	skillsParser := skills.New(p.basePath, p.Platform())
 	agentSkills, err := skillsParser.Parse()
 	if err != nil {
-		logging.Warn("failed to parse SKILL.md files",
+		logging.Warn(
+			"failed to parse SKILL.md files",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -81,7 +83,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	patterns := []string{"*.md", "**/*.md"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
-		logging.Error("failed to discover skill files",
+		logging.Error(
+			"failed to discover skill files",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -100,7 +103,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		}
 		// Skip files inside skill directories
 		if isInsideSkillDir(f, skillDirs) {
-			logging.Debug("skipping file inside skill directory",
+			logging.Debug(
+				"skipping file inside skill directory",
 				logging.Path(f),
 			)
 			continue
@@ -108,7 +112,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		legacyFiles = append(legacyFiles, f)
 	}
 
-	logging.Debug("discovered legacy skill files",
+	logging.Debug(
+		"discovered legacy skill files",
 		logging.Platform(string(p.Platform())),
 		logging.Path(p.basePath),
 		logging.Count(len(legacyFiles)),
@@ -118,7 +123,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	for _, filePath := range legacyFiles {
 		skill, err := p.parseSkillFile(filePath)
 		if err != nil {
-			logging.Warn("failed to parse skill file",
+			logging.Warn(
+				"failed to parse skill file",
 				logging.Platform(string(p.Platform())),
 				logging.Path(filePath),
 				logging.Err(err),
@@ -127,7 +133,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		}
 		// Skip if a SKILL.md with the same name was already parsed
 		if seenNames[skill.Name] {
-			logging.Debug("skipping legacy skill, SKILL.md version takes precedence",
+			logging.Debug(
+				"skipping legacy skill, SKILL.md version takes precedence",
 				logging.Skill(skill.Name),
 				logging.Path(filePath),
 			)
@@ -145,7 +152,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		allSkills = append(allSkills, skill)
 	}
 
-	logging.Debug("completed parsing skills",
+	logging.Debug(
+		"completed parsing skills",
 		logging.Platform(string(p.Platform())),
 		logging.Count(len(allSkills)),
 	)
