@@ -1628,6 +1628,7 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter, includePlugins), nil
 }
 
+//nolint:gocyclo // platform enum dispatch — each case is a distinct config path, refactoring would not reduce real complexity
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {

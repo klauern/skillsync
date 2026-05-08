@@ -191,6 +191,8 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 }
 
 // parseSkillFile parses a single SKILL.md file with plugin metadata.
+//
+//nolint:gocyclo // handles all Claude skill/command field combinations in one pass
 func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexEntry) (model.Skill, error) {
 	// #nosec G304 - filePath is from trusted plugin index
 	content, err := os.ReadFile(filePath)

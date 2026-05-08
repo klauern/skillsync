@@ -345,6 +345,7 @@ func (m DiscoverListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+//nolint:gocyclo // TUI message dispatch — each msg type is a distinct UI event
 func (m DiscoverListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 

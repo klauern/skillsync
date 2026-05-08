@@ -69,6 +69,8 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 }
 
 // transformPath generates the appropriate file path for the target platform.
+//
+//nolint:gocyclo // intentional (source-platform × target-platform) dispatch table
 func (t *Transformer) transformPath(skill model.Skill, target model.Platform) string {
 	if isSystemPromptSkill(skill) {
 		switch target {
