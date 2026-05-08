@@ -522,6 +522,11 @@ func (s *Synchronizer) processSkill(
 
 		case SourceTypeDirectory:
 			if shouldLinkClaudeDirectorySkill(source, targetPlatform) {
+				if err := os.MkdirAll(filepath.Dir(targetEntryPath), 0o750); err != nil {
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to create parent directories for symlink: %w", err)
+					return result
+				}
 				if err := os.Symlink(sourceRootPath, targetEntryPath); err != nil {
 					logging.Error(
 						"failed to create Claude skill symlink",

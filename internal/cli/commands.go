@@ -1628,6 +1628,7 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter, includePlugins), nil
 }
 
+//nolint:gocyclo // intentional platform dispatch — each case is a distinct platform, refactoring would obscure intent
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
