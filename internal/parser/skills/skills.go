@@ -34,7 +34,8 @@ func New(basePath string, platform model.Platform) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		logging.Debug("skills directory not found",
+		logging.Debug(
+			"skills directory not found",
 			logging.Platform(string(p.platform)),
 			logging.Path(p.basePath),
 		)
@@ -46,7 +47,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	patterns := []string{"SKILL.md", "**/SKILL.md", "skill.md", "**/skill.md", "Skill.md", "**/Skill.md"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
-		logging.Error("failed to discover SKILL.md files",
+		logging.Error(
+			"failed to discover SKILL.md files",
 			logging.Platform(string(p.platform)),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -55,7 +57,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	}
 	files = deduplicateSkillEntrypoints(files)
 
-	logging.Debug("discovered SKILL.md files",
+	logging.Debug(
+		"discovered SKILL.md files",
 		logging.Platform(string(p.platform)),
 		logging.Path(p.basePath),
 		logging.Count(len(files)),
@@ -66,7 +69,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	for _, filePath := range files {
 		skill, err := p.parseSkillFile(filePath)
 		if err != nil {
-			logging.Warn("failed to parse SKILL.md file",
+			logging.Warn(
+				"failed to parse SKILL.md file",
 				logging.Platform(string(p.platform)),
 				logging.Path(filePath),
 				logging.Err(err),
@@ -76,7 +80,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		skills = append(skills, skill)
 	}
 
-	logging.Debug("completed parsing SKILL.md files",
+	logging.Debug(
+		"completed parsing SKILL.md files",
 		logging.Platform(string(p.platform)),
 		logging.Count(len(skills)),
 	)
@@ -122,7 +127,8 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		if typeStr := extractString(fm, "type"); typeStr != "" {
 			skillType, err := model.ParseSkillType(typeStr)
 			if err != nil {
-				logging.Warn("invalid type in SKILL.md frontmatter",
+				logging.Warn(
+					"invalid type in SKILL.md frontmatter",
 					logging.Path(filePath),
 					logging.Err(err),
 				)
@@ -138,7 +144,8 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		if scopeStr := extractString(fm, "scope"); scopeStr != "" {
 			scope, err := model.ParseScope(scopeStr)
 			if err != nil {
-				logging.Warn("invalid scope in SKILL.md frontmatter",
+				logging.Warn(
+					"invalid scope in SKILL.md frontmatter",
 					logging.Path(filePath),
 					logging.Err(err),
 				)

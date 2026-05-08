@@ -92,7 +92,8 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("failed to copy content to %q: %w", dst, err)
 	}
 
-	logging.Debug("copied file",
+	logging.Debug(
+		"copied file",
 		logging.Path(src),
 	)
 
@@ -154,7 +155,8 @@ func copyDir(src, dst string) error {
 		}
 	}
 
-	logging.Debug("copied directory",
+	logging.Debug(
+		"copied directory",
 		logging.Path(src),
 	)
 

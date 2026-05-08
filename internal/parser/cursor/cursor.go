@@ -37,7 +37,8 @@ func New(basePath string) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Check if the base path exists
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		logging.Debug("skills directory not found",
+		logging.Debug(
+			"skills directory not found",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 		)
@@ -52,7 +53,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	skillsParser := skills.New(p.basePath, p.Platform())
 	agentSkills, err := skillsParser.Parse()
 	if err != nil {
-		logging.Warn("failed to parse SKILL.md files",
+		logging.Warn(
+			"failed to parse SKILL.md files",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -73,7 +75,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	patterns := []string{"*.md", "*.mdc", "**/*.md", "**/*.mdc"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
-		logging.Error("failed to discover skill files",
+		logging.Error(
+			"failed to discover skill files",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -92,7 +95,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		}
 		// Skip files inside skill directories
 		if isInsideSkillDir(f, skillDirs) {
-			logging.Debug("skipping file inside skill directory",
+			logging.Debug(
+				"skipping file inside skill directory",
 				logging.Path(f),
 			)
 			continue
@@ -100,7 +104,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		legacyFiles = append(legacyFiles, f)
 	}
 
-	logging.Debug("discovered skill files",
+	logging.Debug(
+		"discovered skill files",
 		logging.Platform(string(p.Platform())),
 		logging.Path(p.basePath),
 		logging.Count(len(legacyFiles)),
@@ -110,7 +115,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	for _, filePath := range legacyFiles {
 		skill, err := p.parseSkillFile(filePath)
 		if err != nil {
-			logging.Warn("failed to parse skill file",
+			logging.Warn(
+				"failed to parse skill file",
 				logging.Platform(string(p.Platform())),
 				logging.Path(filePath),
 				logging.Err(err),
@@ -119,7 +125,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		}
 		// Skip if a SKILL.md with the same name was already parsed
 		if seenNames[skill.Name] {
-			logging.Debug("skipping legacy skill, SKILL.md version takes precedence",
+			logging.Debug(
+				"skipping legacy skill, SKILL.md version takes precedence",
 				logging.Skill(skill.Name),
 				logging.Path(filePath),
 			)
@@ -132,14 +139,16 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	// Finally, parse .cursor/commands/*.md files as prompt artifacts
 	commandSkills, err := p.parseCommandFiles(seenNames)
 	if err != nil {
-		logging.Warn("failed to parse command files",
+		logging.Warn(
+			"failed to parse command files",
 			logging.Platform(string(p.Platform())),
 			logging.Err(err),
 		)
 	}
 	allSkills = append(allSkills, commandSkills...)
 
-	logging.Debug("completed parsing skills",
+	logging.Debug(
+		"completed parsing skills",
 		logging.Platform(string(p.Platform())),
 		logging.Count(len(allSkills)),
 	)
@@ -155,7 +164,8 @@ func (p *Parser) parseCommandFiles(seen map[string]bool) ([]model.Skill, error) 
 	commandsDir := filepath.Join(filepath.Dir(p.basePath), "commands")
 
 	if _, err := os.Stat(commandsDir); os.IsNotExist(err) {
-		logging.Debug("commands directory not found",
+		logging.Debug(
+			"commands directory not found",
 			logging.Platform(string(p.Platform())),
 			logging.Path(commandsDir),
 		)
@@ -167,7 +177,8 @@ func (p *Parser) parseCommandFiles(seen map[string]bool) ([]model.Skill, error) 
 		return nil, fmt.Errorf("failed to discover command files in %q: %w", commandsDir, err)
 	}
 
-	logging.Debug("discovered command files",
+	logging.Debug(
+		"discovered command files",
 		logging.Platform(string(p.Platform())),
 		logging.Path(commandsDir),
 		logging.Count(len(files)),
@@ -177,7 +188,8 @@ func (p *Parser) parseCommandFiles(seen map[string]bool) ([]model.Skill, error) 
 	for _, filePath := range files {
 		skill, err := p.parseCommandFile(filePath)
 		if err != nil {
-			logging.Warn("failed to parse command file",
+			logging.Warn(
+				"failed to parse command file",
 				logging.Platform(string(p.Platform())),
 				logging.Path(filePath),
 				logging.Err(err),
@@ -185,7 +197,8 @@ func (p *Parser) parseCommandFiles(seen map[string]bool) ([]model.Skill, error) 
 			continue
 		}
 		if seen[skill.Name] {
-			logging.Debug("skipping command, higher-precedence artifact takes priority",
+			logging.Debug(
+				"skipping command, higher-precedence artifact takes priority",
 				logging.Skill(skill.Name),
 				logging.Path(filePath),
 			)

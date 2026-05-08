@@ -32,7 +32,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	configRoot, skillsRoot := p.resolveRoots()
 
 	if _, err := os.Stat(configRoot); os.IsNotExist(err) {
-		logging.Debug("config directory not found",
+		logging.Debug(
+			"config directory not found",
 			logging.Platform(string(p.Platform())),
 			logging.Path(configRoot),
 		)
@@ -45,7 +46,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	skillsParser := skills.New(skillsRoot, p.Platform())
 	agentSkills, err := skillsParser.Parse()
 	if err != nil {
-		logging.Warn("failed to parse Gemini skills",
+		logging.Warn(
+			"failed to parse Gemini skills",
 			logging.Platform(string(p.Platform())),
 			logging.Path(skillsRoot),
 			logging.Err(err),
@@ -59,7 +61,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	contextSkill, err := p.parseContextFile(filepath.Join(configRoot, "GEMINI.md"))
 	if err != nil {
-		logging.Warn("failed to parse GEMINI.md",
+		logging.Warn(
+			"failed to parse GEMINI.md",
 			logging.Platform(string(p.Platform())),
 			logging.Path(filepath.Join(configRoot, "GEMINI.md")),
 			logging.Err(err),

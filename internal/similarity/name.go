@@ -63,7 +63,8 @@ func NewNameMatcher(config NameMatcherConfig) *NameMatcher {
 
 // FindSimilar finds all pairs of skills with similar names above the threshold.
 func (m *NameMatcher) FindSimilar(skills []model.Skill) []NameMatch {
-	logging.Debug("finding similar skill names",
+	logging.Debug(
+		"finding similar skill names",
 		logging.Operation("name_similarity"),
 		logging.Count(len(skills)),
 		slog.Float64("threshold", m.config.Threshold),
@@ -84,7 +85,8 @@ func (m *NameMatcher) FindSimilar(skills []model.Skill) []NameMatch {
 					Algorithm:  m.config.Algorithm,
 					Normalized: m.config.Normalize,
 				})
-				logging.Debug("found similar names",
+				logging.Debug(
+					"found similar names",
 					slog.String("name1", skills[i].Name),
 					slog.String("name2", skills[j].Name),
 					slog.Float64("score", score),
@@ -93,7 +95,8 @@ func (m *NameMatcher) FindSimilar(skills []model.Skill) []NameMatch {
 		}
 	}
 
-	logging.Debug("name similarity search complete",
+	logging.Debug(
+		"name similarity search complete",
 		logging.Operation("name_similarity"),
 		slog.Int("matches_found", len(matches)),
 	)

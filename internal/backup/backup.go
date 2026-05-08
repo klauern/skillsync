@@ -222,7 +222,8 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			if os.IsNotExist(walkErr) {
-				logging.Warn("skipping missing path while archiving directory",
+				logging.Warn(
+					"skipping missing path while archiving directory",
 					logging.Path(path),
 					logging.Err(walkErr),
 				)
@@ -255,7 +256,8 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 
 			if _, err := os.Stat(path); err != nil {
 				if os.IsNotExist(err) {
-					logging.Warn("skipping broken symlink during backup",
+					logging.Warn(
+						"skipping broken symlink during backup",
 						logging.Path(path),
 						slog.String("target", linkTarget),
 					)
@@ -269,7 +271,8 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 		file, err := os.Open(path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				logging.Warn("skipping missing file during backup",
+				logging.Warn(
+					"skipping missing file during backup",
 					logging.Path(path),
 					logging.Err(err),
 				)
