@@ -798,4 +798,14 @@ description: A Pi Agent skill
 	if _, err := os.Stat(filepath.Join(targetDir, "example", "SKILL.md")); err != nil {
 		t.Fatalf("expected synced file at targetDir/example/SKILL.md: %v", err)
 	}
+
+	// #nosec G304 - targetDir is a test-controlled temp path
+	got, err := os.ReadFile(filepath.Join(targetDir, "example", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("failed to read synced SKILL.md: %v", err)
+	}
+	const wantContent = "---\nname: example\ndescription: A Pi Agent skill\n---\n\n# Example\n"
+	if string(got) != wantContent {
+		t.Fatalf("synced SKILL.md content mismatch:\ngot:  %q\nwant: %q", string(got), wantContent)
+	}
 }

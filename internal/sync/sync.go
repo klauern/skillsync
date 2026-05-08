@@ -437,7 +437,10 @@ func (s *Synchronizer) processSkill(
 	result.Conflict = conflict
 	if warning := mappingWarning(source, targetPlatform); warning != "" {
 		if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
-			result.Message = "linked Claude skill directory"
+			if result.Message != "" {
+				result.Message += "; "
+			}
+			result.Message += "linked Claude skill directory"
 			result.Message += "; "
 			result.Message += warning
 		} else {
@@ -447,7 +450,10 @@ func (s *Synchronizer) processSkill(
 			result.Message += warning
 		}
 	} else if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
-		result.Message = "linked Claude skill directory"
+		if result.Message != "" {
+			result.Message += "; "
+		}
+		result.Message += "linked Claude skill directory"
 	}
 
 	logging.Debug(

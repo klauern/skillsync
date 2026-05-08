@@ -49,7 +49,7 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillsLinkCompatibleTargets(t *testing
 func TestSynchronizer_Sync_ClaudeDirectorySkillDryRun(t *testing.T) {
 	s := New()
 
-	sourceDir, skillDir := writeClaudeDirectorySkill(t, "dry-run-linked")
+	sourceDir, _ := writeClaudeDirectorySkill(t, "dry-run-linked")
 	targetDir := t.TempDir()
 
 	result, err := s.Sync(model.ClaudeCode, model.Cursor, Options{
@@ -79,8 +79,6 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillDryRun(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(targetDir, "dry-run-linked")); !os.IsNotExist(err) {
 		t.Fatalf("expected no target entry to be created in dry-run, got err=%v", err)
 	}
-
-	_ = skillDir
 }
 
 func TestSynchronizer_Sync_ClaudeDirectorySkillOverwriteAndSkipExistingEntries(t *testing.T) {
@@ -368,6 +366,11 @@ func writeClaudeDirectorySkill(t *testing.T, name string) (string, string) {
 
 func assertSymlinkTarget(t *testing.T, path, want string) {
 	t.Helper()
+	// On macOS, t.TempDir() lives under /var which is itself a symlink to /private/var.
+	// os.Readlink returns the path as written at symlink-creation time, not the resolved path.
+	// These assertions therefore rely on processSkill NOT calling filepath.EvalSymlinks on
+	// the source before symlinking. If that contract changes, update callers to pass
+	// filepath.EvalSymlinks(want) instead.
 
 	info, err := os.Lstat(path)
 	if err != nil {
