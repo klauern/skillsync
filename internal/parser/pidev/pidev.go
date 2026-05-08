@@ -38,7 +38,8 @@ func New(basePath string) *Parser {
 // Parse discovers skills, prompt templates, and AGENTS.md instructions.
 func (p *Parser) Parse() ([]model.Skill, error) {
 	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
-		logging.Debug("skills directory not found",
+		logging.Debug(
+			"skills directory not found",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 		)
@@ -53,7 +54,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	skillsParser := skills.New(p.basePath, p.Platform())
 	agentSkills, err := skillsParser.Parse()
 	if err != nil {
-		logging.Warn("failed to parse SKILL.md files",
+		logging.Warn(
+			"failed to parse SKILL.md files",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -67,7 +69,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	promptSkills, err := p.parsePrompts(seenNames)
 	if err != nil {
-		logging.Warn("failed to parse prompt templates",
+		logging.Warn(
+			"failed to parse prompt templates",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.promptsRoot()),
 			logging.Err(err),
@@ -78,7 +81,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	instructionSkills, err := p.parseInstructions(seenNames)
 	if err != nil {
-		logging.Warn("failed to parse AGENTS.md instructions",
+		logging.Warn(
+			"failed to parse AGENTS.md instructions",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.basePath),
 			logging.Err(err),
@@ -89,7 +93,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	systemSkills, err := p.parseSystemPrompts(seenNames)
 	if err != nil {
-		logging.Warn("failed to parse SYSTEM.md files",
+		logging.Warn(
+			"failed to parse SYSTEM.md files",
 			logging.Platform(string(p.Platform())),
 			logging.Path(p.configRoot()),
 			logging.Err(err),
@@ -138,7 +143,8 @@ func (p *Parser) parsePrompts(seenNames map[string]bool) ([]model.Skill, error) 
 	for _, filePath := range files {
 		skill, err := p.parsePromptFile(filePath)
 		if err != nil {
-			logging.Warn("failed to parse prompt template",
+			logging.Warn(
+				"failed to parse prompt template",
 				logging.Platform(string(p.Platform())),
 				logging.Path(filePath),
 				logging.Err(err),

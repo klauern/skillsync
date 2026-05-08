@@ -80,7 +80,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	for _, sp := range searchPaths {
 		// Skip non-existent paths
 		if _, err := os.Stat(sp.Path); os.IsNotExist(err) {
-			logging.Debug("tiered lookup: path not found",
+			logging.Debug(
+				"tiered lookup: path not found",
 				logging.Platform(string(p.platform)),
 				logging.Path(sp.Path),
 				slog.String("scope", string(sp.Scope)),
@@ -88,7 +89,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			continue
 		}
 
-		logging.Debug("tiered lookup: searching path",
+		logging.Debug(
+			"tiered lookup: searching path",
 			logging.Platform(string(p.platform)),
 			logging.Path(sp.Path),
 			slog.String("scope", string(sp.Scope)),
@@ -100,7 +102,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		// Parse skills from this location
 		skills, err := pathParser.Parse()
 		if err != nil {
-			logging.Warn("tiered lookup: failed to parse path",
+			logging.Warn(
+				"tiered lookup: failed to parse path",
 				logging.Platform(string(p.platform)),
 				logging.Path(sp.Path),
 				logging.Err(err),
@@ -122,7 +125,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			if existing, exists := skillsByName[skill.Name]; exists {
 				// Keep skill with higher precedence
 				if skill.Scope.IsHigherPrecedence(existing.Scope) {
-					logging.Debug("tiered lookup: skill override",
+					logging.Debug(
+						"tiered lookup: skill override",
 						logging.Skill(skill.Name),
 						slog.String("newScope", string(skill.Scope)),
 						slog.String("existingScope", string(existing.Scope)),
@@ -140,7 +144,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	if p.pluginParser != nil {
 		pluginSkills, err := p.pluginParser.Parse()
 		if err != nil {
-			logging.Warn("tiered lookup: failed to parse plugin scope",
+			logging.Warn(
+				"tiered lookup: failed to parse plugin scope",
 				logging.Platform(string(p.platform)),
 				logging.Err(err),
 			)
@@ -163,7 +168,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		allSkills = append(allSkills, skill)
 	}
 
-	logging.Debug("tiered lookup: completed",
+	logging.Debug(
+		"tiered lookup: completed",
 		logging.Platform(string(p.platform)),
 		logging.Count(len(allSkills)),
 	)
@@ -203,7 +209,8 @@ func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill,
 		pathParser := p.parserFactory(sp.Path)
 		skills, err := pathParser.Parse()
 		if err != nil {
-			logging.Warn("tiered lookup: failed to parse path",
+			logging.Warn(
+				"tiered lookup: failed to parse path",
 				logging.Platform(string(p.platform)),
 				logging.Path(sp.Path),
 				logging.Err(err),
@@ -230,7 +237,8 @@ func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill,
 	if scopeSet[model.ScopePlugin] && p.pluginParser != nil {
 		pluginSkills, err := p.pluginParser.Parse()
 		if err != nil {
-			logging.Warn("tiered lookup: failed to parse plugin scope",
+			logging.Warn(
+				"tiered lookup: failed to parse plugin scope",
 				logging.Platform(string(p.platform)),
 				logging.Err(err),
 			)
@@ -293,7 +301,8 @@ func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
 			pathParser := p.parserFactory(path)
 			skills, err := pathParser.Parse()
 			if err != nil {
-				logging.Warn("tiered lookup: failed to parse path",
+				logging.Warn(
+					"tiered lookup: failed to parse path",
 					logging.Platform(string(p.platform)),
 					logging.Path(path),
 					logging.Err(err),
@@ -330,7 +339,8 @@ func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
 		pathParser := p.parserFactory(path)
 		skills, err := pathParser.Parse()
 		if err != nil {
-			logging.Warn("tiered lookup: failed to parse path",
+			logging.Warn(
+				"tiered lookup: failed to parse path",
 				logging.Platform(string(p.platform)),
 				logging.Path(path),
 				logging.Err(err),

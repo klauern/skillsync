@@ -64,7 +64,8 @@ func NewContentMatcher(config ContentMatcherConfig) *ContentMatcher {
 
 // FindSimilar finds all pairs of skills with similar content above the threshold.
 func (m *ContentMatcher) FindSimilar(skills []model.Skill) []ContentMatch {
-	logging.Debug("finding similar skill content",
+	logging.Debug(
+		"finding similar skill content",
 		logging.Operation("content_similarity"),
 		logging.Count(len(skills)),
 		slog.Float64("threshold", m.config.Threshold),
@@ -86,7 +87,8 @@ func (m *ContentMatcher) FindSimilar(skills []model.Skill) []ContentMatch {
 					Score:     score,
 					Algorithm: m.config.Algorithm,
 				})
-				logging.Debug("found similar content",
+				logging.Debug(
+					"found similar content",
 					slog.String("name1", skillI.Name),
 					slog.String("name2", skillJ.Name),
 					slog.Float64("score", score),
@@ -95,7 +97,8 @@ func (m *ContentMatcher) FindSimilar(skills []model.Skill) []ContentMatch {
 		}
 	}
 
-	logging.Debug("content similarity search complete",
+	logging.Debug(
+		"content similarity search complete",
 		logging.Operation("content_similarity"),
 		slog.Int("matches_found", len(matches)),
 	)

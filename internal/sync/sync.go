@@ -82,7 +82,8 @@ func New() *Synchronizer {
 
 // Sync performs synchronization from source to target platform.
 func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Result, error) {
-	logging.Debug("starting sync operation",
+	logging.Debug(
+		"starting sync operation",
 		logging.Platform(string(source)),
 		logging.Operation("sync"),
 		slog.String("target", string(target)),
@@ -106,7 +107,8 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	// Parse source skills
 	sourceSkills, err := s.parseSkills(source, opts.SourcePath)
 	if err != nil {
-		logging.Error("failed to parse source skills",
+		logging.Error(
+			"failed to parse source skills",
 			logging.Platform(string(source)),
 			logging.Operation("sync"),
 			logging.Err(err),
@@ -114,13 +116,15 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		return result, fmt.Errorf("failed to parse source skills: %w", err)
 	}
 
-	logging.Debug("parsed source skills",
+	logging.Debug(
+		"parsed source skills",
 		logging.Platform(string(source)),
 		logging.Count(len(sourceSkills)),
 	)
 
 	if len(sourceSkills) == 0 {
-		logging.Debug("no skills to sync",
+		logging.Debug(
+			"no skills to sync",
 			logging.Platform(string(source)),
 		)
 		return result, nil // Nothing to sync
@@ -152,14 +156,16 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	// Parse existing target skills for conflict detection
 	targetSkills, err := s.parseSkills(target, opts.TargetPath)
 	if err != nil {
-		logging.Debug("target skills not found, starting fresh",
+		logging.Debug(
+			"target skills not found, starting fresh",
 			logging.Platform(string(target)),
 			logging.Err(err),
 		)
 		// Target may not exist yet, which is okay
 		targetSkills = []model.Skill{}
 	} else {
-		logging.Debug("parsed target skills",
+		logging.Debug(
+			"parsed target skills",
 			logging.Platform(string(target)),
 			logging.Count(len(targetSkills)),
 		)
@@ -174,13 +180,15 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	// Ensure target directory exists (unless dry run)
 	if !opts.DryRun {
 		if err := os.MkdirAll(targetPath, 0o750); err != nil {
-			logging.Error("failed to create target directory",
+			logging.Error(
+				"failed to create target directory",
 				logging.Path(targetPath),
 				logging.Err(err),
 			)
 			return result, fmt.Errorf("failed to create target directory: %w", err)
 		}
-		logging.Debug("ensured target directory exists",
+		logging.Debug(
+			"ensured target directory exists",
 			logging.Path(targetPath),
 		)
 	}
@@ -191,7 +199,8 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		result.Skills = append(result.Skills, skillResult)
 	}
 
-	logging.Debug("sync operation completed",
+	logging.Debug(
+		"sync operation completed",
 		logging.Platform(string(source)),
 		slog.String("target", string(target)),
 		logging.Count(len(result.Skills)),
@@ -308,7 +317,8 @@ func filterNestedDirectorySkills(skills []model.Skill) ([]model.Skill, []SkillRe
 			Action:  ActionSkipped,
 			Message: msg,
 		})
-		logging.Debug("skipping nested skill to avoid duplicate copy",
+		logging.Debug(
+			"skipping nested skill to avoid duplicate copy",
 			logging.Skill(info.skill.Name),
 			slog.String("parent_skill", parentName),
 			logging.Path(info.rootPath),
@@ -352,7 +362,8 @@ func (s *Synchronizer) processSkill(
 	existingSkills map[string]model.Skill,
 	opts Options,
 ) SkillResult {
-	logging.Debug("processing skill",
+	logging.Debug(
+		"processing skill",
 		logging.Skill(source.Name),
 		logging.Platform(string(source.Platform)),
 		slog.String("target", string(targetPlatform)),
@@ -365,7 +376,8 @@ func (s *Synchronizer) processSkill(
 	// Detect source type and get source root path
 	sourceType, sourceRootPath := detectSourceType(source.Path)
 
-	logging.Debug("detected source type",
+	logging.Debug(
+		"detected source type",
 		logging.Skill(source.Name),
 		slog.String("source_type", sourceType.String()),
 		logging.Path(sourceRootPath),
@@ -381,7 +393,8 @@ func (s *Synchronizer) processSkill(
 		// Legacy file behavior: transform path for target platform
 		transformed, err := s.transformer.Transform(source, targetPlatform)
 		if err != nil {
-			logging.Warn("transformation failed",
+			logging.Warn(
+				"transformation failed",
 				logging.Skill(source.Name),
 				logging.Err(err),
 			)
@@ -409,7 +422,8 @@ func (s *Synchronizer) processSkill(
 		result.Message += warning
 	}
 
-	logging.Debug("action determined",
+	logging.Debug(
+		"action determined",
 		logging.Skill(source.Name),
 		slog.String("action", string(action)),
 		slog.String("message", message),
@@ -425,7 +439,8 @@ func (s *Synchronizer) processSkill(
 	if !opts.DryRun {
 		// Remove any existing entry at target path to avoid duplicates
 		if err := removeExisting(targetEntryPath); err != nil {
-			logging.Error("failed to remove existing entry",
+			logging.Error(
+				"failed to remove existing entry",
 				logging.Skill(source.Name),
 				logging.Path(targetEntryPath),
 				logging.Err(err),
@@ -448,7 +463,8 @@ func (s *Synchronizer) processSkill(
 			}
 
 			if symlinkTarget == "" {
-				logging.Error("failed to determine symlink target",
+				logging.Error(
+					"failed to determine symlink target",
 					logging.Skill(source.Name),
 					logging.Path(sourceRootPath),
 				)
@@ -458,7 +474,8 @@ func (s *Synchronizer) processSkill(
 			}
 
 			if err := os.Symlink(symlinkTarget, targetEntryPath); err != nil {
-				logging.Error("failed to create symlink",
+				logging.Error(
+					"failed to create symlink",
 					logging.Skill(source.Name),
 					logging.Path(targetEntryPath),
 					logging.Err(err),
@@ -468,7 +485,8 @@ func (s *Synchronizer) processSkill(
 				return result
 			}
 
-			logging.Debug("created symlink",
+			logging.Debug(
+				"created symlink",
 				logging.Skill(source.Name),
 				logging.Path(targetEntryPath),
 				slog.String("target", symlinkTarget),
@@ -477,7 +495,8 @@ func (s *Synchronizer) processSkill(
 		case SourceTypeDirectory:
 			// Copy directory structure
 			if err := copyDir(sourceRootPath, targetEntryPath); err != nil {
-				logging.Error("failed to copy directory",
+				logging.Error(
+					"failed to copy directory",
 					logging.Skill(source.Name),
 					logging.Path(targetEntryPath),
 					logging.Err(err),
@@ -487,7 +506,8 @@ func (s *Synchronizer) processSkill(
 				return result
 			}
 
-			logging.Debug("copied directory",
+			logging.Debug(
+				"copied directory",
 				logging.Skill(source.Name),
 				logging.Path(targetEntryPath),
 			)
@@ -505,7 +525,8 @@ func (s *Synchronizer) processSkill(
 
 			// Handle merge strategy
 			if action == ActionMerged && exists {
-				logging.Debug("merging content",
+				logging.Debug(
+					"merging content",
 					logging.Skill(source.Name),
 				)
 				content = s.transformer.MergeContent(transformed.Content, existingSkill.Content, source.Name)
@@ -513,7 +534,8 @@ func (s *Synchronizer) processSkill(
 
 			// Ensure parent directory exists
 			if err := os.MkdirAll(filepath.Dir(targetEntryPath), 0o750); err != nil {
-				logging.Error("failed to create target subdirectory",
+				logging.Error(
+					"failed to create target subdirectory",
 					logging.Skill(source.Name),
 					logging.Path(targetEntryPath),
 					logging.Err(err),
@@ -525,7 +547,8 @@ func (s *Synchronizer) processSkill(
 
 			// #nosec G306 - skill files should be readable
 			if err := os.WriteFile(targetEntryPath, []byte(content), 0o644); err != nil {
-				logging.Error("failed to write skill file",
+				logging.Error(
+					"failed to write skill file",
 					logging.Skill(source.Name),
 					logging.Path(targetEntryPath),
 					logging.Err(err),
@@ -535,7 +558,8 @@ func (s *Synchronizer) processSkill(
 				return result
 			}
 
-			logging.Debug("wrote skill file",
+			logging.Debug(
+				"wrote skill file",
 				logging.Skill(source.Name),
 				logging.Path(targetEntryPath),
 			)
@@ -588,7 +612,8 @@ func (s *Synchronizer) determineAction(
 	exists bool,
 	strategy Strategy,
 ) (Action, string, *Conflict) {
-	logging.Debug("determining action",
+	logging.Debug(
+		"determining action",
 		logging.Skill(source.Name),
 		slog.String(logging.KeyStrategy, string(strategy)),
 		slog.Bool("exists", exists),
@@ -607,7 +632,8 @@ func (s *Synchronizer) determineAction(
 
 	case StrategyNewer:
 		if source.ModifiedAt.After(existing.ModifiedAt) {
-			logging.Debug("source is newer",
+			logging.Debug(
+				"source is newer",
 				logging.Skill(source.Name),
 				slog.Time("source_modified", source.ModifiedAt),
 				slog.Time("existing_modified", existing.ModifiedAt),
@@ -616,7 +642,8 @@ func (s *Synchronizer) determineAction(
 				source.ModifiedAt.Format(time.RFC3339),
 				existing.ModifiedAt.Format(time.RFC3339)), nil
 		}
-		logging.Debug("target is newer or same age",
+		logging.Debug(
+			"target is newer or same age",
 			logging.Skill(source.Name),
 			slog.Time("source_modified", source.ModifiedAt),
 			slog.Time("existing_modified", existing.ModifiedAt),
@@ -633,25 +660,29 @@ func (s *Synchronizer) determineAction(
 		conflict := s.conflictDetector.DetectConflict(source, existing)
 		if conflict == nil {
 			// No conflict, content is identical
-			logging.Debug("no conflict detected, content identical",
+			logging.Debug(
+				"no conflict detected, content identical",
 				logging.Skill(source.Name),
 			)
 			return ActionSkipped, "content is identical", nil
 		}
 		// Attempt three-way merge
-		logging.Debug("attempting three-way merge",
+		logging.Debug(
+			"attempting three-way merge",
 			logging.Skill(source.Name),
 			slog.String("conflict_type", string(conflict.Type)),
 		)
 		mergeResult := s.merger.TwoWayMerge(source, existing)
 		if mergeResult.Success {
-			logging.Debug("three-way merge successful",
+			logging.Debug(
+				"three-way merge successful",
 				logging.Skill(source.Name),
 			)
 			return ActionMerged, "three-way merge successful", nil
 		}
 		// Has conflicts that need resolution
-		logging.Debug("conflict requires manual resolution",
+		logging.Debug(
+			"conflict requires manual resolution",
 			logging.Skill(source.Name),
 			slog.String("conflict_type", string(conflict.Type)),
 		)
@@ -663,7 +694,8 @@ func (s *Synchronizer) determineAction(
 		if conflict == nil {
 			return ActionUpdated, "updating (no conflicts)", nil
 		}
-		logging.Debug("conflict detected for interactive resolution",
+		logging.Debug(
+			"conflict detected for interactive resolution",
 			logging.Skill(source.Name),
 			slog.String("conflict_type", string(conflict.Type)),
 		)
@@ -681,7 +713,8 @@ func (s *Synchronizer) SyncWithSkills(
 	target model.Platform,
 	opts Options,
 ) (*Result, error) {
-	logging.Debug("starting sync with pre-parsed skills",
+	logging.Debug(
+		"starting sync with pre-parsed skills",
 		logging.Platform(string(target)),
 		logging.Operation("sync"),
 		logging.Count(len(skills)),
@@ -737,7 +770,8 @@ func (s *Synchronizer) SyncWithSkills(
 			targetPath, err = validation.GetPlatformPath(target)
 		}
 		if err != nil {
-			logging.Error("failed to get target path",
+			logging.Error(
+				"failed to get target path",
 				logging.Platform(string(target)),
 				slog.String("scope", string(opts.TargetScope)),
 				logging.Err(err),
@@ -745,7 +779,8 @@ func (s *Synchronizer) SyncWithSkills(
 			return result, fmt.Errorf("failed to get target path: %w", err)
 		}
 	}
-	logging.Debug("determined target path",
+	logging.Debug(
+		"determined target path",
 		logging.Path(targetPath),
 		slog.String("scope", string(opts.TargetScope)),
 	)
@@ -753,13 +788,15 @@ func (s *Synchronizer) SyncWithSkills(
 	// Parse existing target skills
 	targetSkills, err := s.parseSkills(target, opts.TargetPath)
 	if err != nil {
-		logging.Debug("target skills not found, starting fresh",
+		logging.Debug(
+			"target skills not found, starting fresh",
 			logging.Platform(string(target)),
 			logging.Err(err),
 		)
 		targetSkills = []model.Skill{}
 	} else {
-		logging.Debug("parsed existing target skills",
+		logging.Debug(
+			"parsed existing target skills",
 			logging.Platform(string(target)),
 			logging.Count(len(targetSkills)),
 		)
@@ -773,7 +810,8 @@ func (s *Synchronizer) SyncWithSkills(
 	// Ensure target directory exists
 	if !opts.DryRun {
 		if err := os.MkdirAll(targetPath, 0o750); err != nil {
-			logging.Error("failed to create target directory",
+			logging.Error(
+				"failed to create target directory",
 				logging.Path(targetPath),
 				logging.Err(err),
 			)
@@ -787,7 +825,8 @@ func (s *Synchronizer) SyncWithSkills(
 		result.Skills = append(result.Skills, skillResult)
 	}
 
-	logging.Debug("sync with skills completed",
+	logging.Debug(
+		"sync with skills completed",
 		logging.Platform(string(target)),
 		logging.Count(len(result.Skills)),
 	)
@@ -803,7 +842,8 @@ func (s *Synchronizer) DeleteWithSkills(
 	target model.Platform,
 	opts Options,
 ) (*Result, error) {
-	logging.Debug("starting delete sync operation",
+	logging.Debug(
+		"starting delete sync operation",
 		logging.Platform(string(target)),
 		logging.Operation("delete-sync"),
 		logging.Count(len(sourceSkills)),
@@ -839,7 +879,8 @@ func (s *Synchronizer) DeleteWithSkills(
 			targetPath, err = validation.GetPlatformPath(target)
 		}
 		if err != nil {
-			logging.Error("failed to get target path",
+			logging.Error(
+				"failed to get target path",
 				logging.Platform(string(target)),
 				slog.String("scope", string(opts.TargetScope)),
 				logging.Err(err),
@@ -847,7 +888,8 @@ func (s *Synchronizer) DeleteWithSkills(
 			return result, fmt.Errorf("failed to get target path: %w", err)
 		}
 	}
-	logging.Debug("determined target path",
+	logging.Debug(
+		"determined target path",
 		logging.Path(targetPath),
 		slog.String("scope", string(opts.TargetScope)),
 	)
@@ -855,14 +897,16 @@ func (s *Synchronizer) DeleteWithSkills(
 	// Parse existing target skills
 	targetSkills, err := s.parseSkills(target, opts.TargetPath)
 	if err != nil {
-		logging.Debug("target skills not found, nothing to delete",
+		logging.Debug(
+			"target skills not found, nothing to delete",
 			logging.Platform(string(target)),
 			logging.Err(err),
 		)
 		return result, nil
 	}
 
-	logging.Debug("parsed existing target skills",
+	logging.Debug(
+		"parsed existing target skills",
 		logging.Platform(string(target)),
 		logging.Count(len(targetSkills)),
 	)
@@ -878,7 +922,8 @@ func (s *Synchronizer) DeleteWithSkills(
 		sourceSkill, exists := sourceSkillNames[targetSkill.Name]
 		if !exists {
 			// Skill not in source list, skip it
-			logging.Debug("skill not in source list, skipping",
+			logging.Debug(
+				"skill not in source list, skipping",
 				logging.Skill(targetSkill.Name),
 			)
 			continue
@@ -892,7 +937,8 @@ func (s *Synchronizer) DeleteWithSkills(
 		// Delete the skill file
 		if !opts.DryRun {
 			if err := os.Remove(targetSkill.Path); err != nil {
-				logging.Error("failed to delete skill file",
+				logging.Error(
+					"failed to delete skill file",
 					logging.Skill(targetSkill.Name),
 					logging.Path(targetSkill.Path),
 					logging.Err(err),
@@ -910,7 +956,8 @@ func (s *Synchronizer) DeleteWithSkills(
 				_ = os.Remove(parentDir)
 			}
 
-			logging.Debug("deleted skill file",
+			logging.Debug(
+				"deleted skill file",
 				logging.Skill(targetSkill.Name),
 				logging.Path(targetSkill.Path),
 			)
@@ -921,7 +968,8 @@ func (s *Synchronizer) DeleteWithSkills(
 		result.Skills = append(result.Skills, skillResult)
 	}
 
-	logging.Debug("delete sync operation completed",
+	logging.Debug(
+		"delete sync operation completed",
 		logging.Platform(string(target)),
 		logging.Count(len(result.Skills)),
 	)

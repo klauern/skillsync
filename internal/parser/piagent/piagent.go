@@ -119,7 +119,7 @@ func ancestorSkillPaths(workingDir, repoRoot string) []string {
 }
 
 func parseSettingsSkillPaths(settingsPath string) ([]string, error) {
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(settingsPath) // #nosec G304 — settingsPath comes from .pi/settings.json discovery, not user input
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

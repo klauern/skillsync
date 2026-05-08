@@ -105,14 +105,14 @@ func defaultDiscoverListKeyMap() discoverListKeyMap {
 
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
-	table        table.Model
-	hScroll      horizontalTableState
-	skills       []model.Skill
-	filtered     []model.Skill
-	keys         discoverListKeyMap
-	result       DiscoverListResult
-	filter       string
-	filtering    bool
+	table           table.Model
+	hScroll         horizontalTableState
+	skills          []model.Skill
+	filtered        []model.Skill
+	keys            discoverListKeyMap
+	result          DiscoverListResult
+	filter          string
+	filtering       bool
 	platformOptions []model.Platform
 	platformIndex   int // Index into platformOptions (-1 = all)
 	showHelp        bool
@@ -128,21 +128,21 @@ type DiscoverListModel struct {
 
 // Styles for the discover list TUI.
 var discoverListStyles = struct {
-	Title       lipgloss.Style
-	Help        lipgloss.Style
-	Filter      lipgloss.Style
-	FilterInput lipgloss.Style
-	Status      lipgloss.Style
-	DetailBox    lipgloss.Style
-	DetailTitle  lipgloss.Style
-	PlatformTab  lipgloss.Style
+	Title          lipgloss.Style
+	Help           lipgloss.Style
+	Filter         lipgloss.Style
+	FilterInput    lipgloss.Style
+	Status         lipgloss.Style
+	DetailBox      lipgloss.Style
+	DetailTitle    lipgloss.Style
+	PlatformTab    lipgloss.Style
 	PlatformActive lipgloss.Style
 }{
-	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
-	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
+	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Filter:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	FilterInput:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Status:         lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	DetailBox:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
 	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
 	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
@@ -345,6 +345,7 @@ func (m DiscoverListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+//nolint:gocyclo // TUI message dispatch — each msg type is a distinct UI event
 func (m DiscoverListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 

@@ -72,7 +72,8 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 		// Skip orphaned plugins
 		orphanedMarker := filepath.Join(entry.InstallPath, ".orphaned_at")
 		if _, err := os.Stat(orphanedMarker); err == nil {
-			logging.Debug("skipping orphaned plugin",
+			logging.Debug(
+				"skipping orphaned plugin",
 				logging.Path(entry.InstallPath),
 			)
 			continue
@@ -80,7 +81,8 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 
 		// Check if the install path exists
 		if _, err := os.Stat(entry.InstallPath); os.IsNotExist(err) {
-			logging.Debug("plugin install path does not exist",
+			logging.Debug(
+				"plugin install path does not exist",
 				logging.Path(entry.InstallPath),
 			)
 			continue
@@ -89,7 +91,8 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 		// Discover SKILL.md files in this plugin
 		pluginSkills, err := p.parsePluginDirectory(entry)
 		if err != nil {
-			logging.Warn("failed to parse plugin",
+			logging.Warn(
+				"failed to parse plugin",
 				logging.Path(entry.InstallPath),
 				logging.Err(err),
 			)
@@ -108,7 +111,8 @@ func (p *CachePluginsParser) Parse() ([]model.Skill, error) {
 		}
 	}
 
-	logging.Debug("discovered skills from Claude plugin cache",
+	logging.Debug(
+		"discovered skills from Claude plugin cache",
 		logging.Count(len(skills)),
 	)
 
@@ -133,7 +137,8 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 	commandPatterns := []string{"commands/*.md", "**/commands/*.md"}
 	commandFiles, err := parser.DiscoverFiles(entry.InstallPath, commandPatterns)
 	if err != nil {
-		logging.Warn("failed to discover command files",
+		logging.Warn(
+			"failed to discover command files",
 			logging.Path(entry.InstallPath),
 			logging.Err(err),
 		)
@@ -155,13 +160,15 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 
 	allFiles := append(skillFiles, filteredCommandFiles...)
 	if len(allFiles) == 0 {
-		logging.Debug("no skill or command files found in plugin",
+		logging.Debug(
+			"no skill or command files found in plugin",
 			logging.Path(entry.InstallPath),
 		)
 		return []model.Skill{}, nil
 	}
 
-	logging.Debug("found skill/command files in plugin",
+	logging.Debug(
+		"found skill/command files in plugin",
 		logging.Path(entry.InstallPath),
 		logging.Count(len(allFiles)),
 	)
@@ -170,7 +177,8 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 	for _, filePath := range allFiles {
 		skill, err := p.parseSkillFile(filePath, entry)
 		if err != nil {
-			logging.Warn("failed to parse skill file",
+			logging.Warn(
+				"failed to parse skill file",
 				logging.Path(filePath),
 				logging.Err(err),
 			)
@@ -183,6 +191,8 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 }
 
 // parseSkillFile parses a single SKILL.md file with plugin metadata.
+//
+//nolint:gocyclo // handles all Claude skill/command field combinations in one pass
 func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexEntry) (model.Skill, error) {
 	// #nosec G304 - filePath is from trusted plugin index
 	content, err := os.ReadFile(filePath)

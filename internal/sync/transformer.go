@@ -24,7 +24,8 @@ func NewTransformer() *Transformer {
 
 // Transform converts a skill from source to target platform format.
 func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform) (model.Skill, error) {
-	logging.Debug("transforming skill",
+	logging.Debug(
+		"transforming skill",
 		logging.Skill(skill.Name),
 		logging.Platform(string(skill.Platform)),
 		slog.String("target", string(targetPlatform)),
@@ -36,7 +37,8 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 
 	// Update path for target platform
 	transformed.Path = t.transformPath(skill, targetPlatform)
-	logging.Debug("transformed path",
+	logging.Debug(
+		"transformed path",
 		logging.Skill(skill.Name),
 		slog.String("original_path", skill.Path),
 		logging.Path(transformed.Path),
@@ -45,7 +47,8 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 	// Transform content based on target platform requirements
 	content, err := t.transformContent(skill, targetPlatform, transformed.Path)
 	if err != nil {
-		logging.Warn("content transformation failed",
+		logging.Warn(
+			"content transformation failed",
 			logging.Skill(skill.Name),
 			logging.Err(err),
 		)
@@ -56,7 +59,8 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 	// Transform metadata for platform-specific fields
 	transformed.Metadata = t.transformMetadata(skill, targetPlatform)
 
-	logging.Debug("skill transformation completed",
+	logging.Debug(
+		"skill transformation completed",
 		logging.Skill(skill.Name),
 		slog.String("target", string(targetPlatform)),
 	)
@@ -65,6 +69,8 @@ func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform
 }
 
 // transformPath generates the appropriate file path for the target platform.
+//
+//nolint:gocyclo // intentional (source-platform × target-platform) dispatch table
 func (t *Transformer) transformPath(skill model.Skill, target model.Platform) string {
 	if isSystemPromptSkill(skill) {
 		switch target {
@@ -355,7 +361,8 @@ func (t *Transformer) CanTransform(source, target model.Platform) bool {
 
 // MergeContent merges source and target content with clear separation.
 func (t *Transformer) MergeContent(sourceContent, targetContent string, sourceName string) string {
-	logging.Debug("merging content with separator",
+	logging.Debug(
+		"merging content with separator",
 		logging.Skill(sourceName),
 		logging.Operation("merge_content"),
 	)
