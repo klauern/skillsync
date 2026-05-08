@@ -216,7 +216,7 @@ func RestoreBackup(backupID string, targetPath string) error {
 }
 
 // createDirectoryArchive creates an in-memory ZIP archive of the directory at sourcePath.
-// 
+//
 // The archive contains all regular files found under the directory (entry names are the
 // path relative to the resolved directory root, normalized to forward slashes) and uses DEFLATE
 // compression. If sourcePath resolves to a different path via symlinks, that resolved path is

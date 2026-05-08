@@ -1635,7 +1635,7 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 }
 
 // platformSkillsPaths returns the list of resolved, deduplicated ScopedPath entries and the repository root for the given platform.
-// 
+//
 // The returned paths are derived from the platform-specific skills path settings in cfg with user/home/repo expansions applied.
 // For PiAgent, discovered PiAgent search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
 // for backward compatibility. If the platform is unsupported or discovery fails, an error is returned. The second return value is the

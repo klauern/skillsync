@@ -249,7 +249,7 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 // filterNestedDirectorySkills filters out skills whose source paths are nested inside
 // another skill's directory or symlink and returns the remaining skills along with
 // SkillResult entries for each skipped nested skill.
-// 
+//
 // The function prefers the deepest matching parent directory/symlink when deciding
 // which parent causes a child to be skipped. For each skipped skill a SkillResult
 // with ActionSkipped and a message indicating the parent skill name is returned.
