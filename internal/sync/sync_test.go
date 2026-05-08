@@ -758,3 +758,44 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestSynchronizer_Sync_PiAgentToClaudeCode(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	skillDir := filepath.Join(sourceDir, "example")
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: example
+description: A Pi Agent skill
+---
+
+# Example
+`), 0o600); err != nil {
+		t.Fatalf("failed to write skill: %v", err)
+	}
+
+	result, err := s.Sync(model.PiAgent, model.ClaudeCode, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	})
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+
+	if len(result.Skills) != 1 {
+		t.Fatalf("expected 1 synced skill, got %d", len(result.Skills))
+	}
+	if result.Skills[0].Action != ActionCreated {
+		t.Fatalf("expected created action, got %s", result.Skills[0].Action)
+	}
+
+	if _, err := os.Stat(filepath.Join(targetDir, "example", "SKILL.md")); err != nil {
+		t.Fatalf("expected synced file at targetDir/example/SKILL.md: %v", err)
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
+	"github.com/klauern/skillsync/internal/parser/piagent"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -224,6 +225,8 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 		p = copilot.New(basePath)
 	case model.Gemini:
 		p = gemini.New(basePath)
+	case model.PiAgent:
+		p = piagent.New(basePath)
 	case model.PiDev:
 		p = pidev.New(basePath)
 	default:
@@ -345,6 +348,8 @@ func pathDepth(path string) int {
 
 // processSkill handles syncing a single skill.
 // It preserves the source structure: symlinks become symlinks, directories become directories.
+//
+//nolint:gocyclo // This dispatcher intentionally branches on source type, target type, and strategy.
 func (s *Synchronizer) processSkill(
 	source model.Skill,
 	targetPlatform model.Platform,
@@ -396,6 +401,21 @@ func (s *Synchronizer) processSkill(
 
 	// Check if skill exists in target
 	existingSkill, exists := existingSkills[source.Name]
+	if !exists {
+		if info, err := os.Lstat(targetEntryPath); err == nil {
+			existingSkill = model.Skill{
+				Name:       source.Name,
+				Platform:   targetPlatform,
+				Path:       targetEntryPath,
+				ModifiedAt: info.ModTime(),
+				Type:       source.Type,
+				Scope:      source.Scope,
+				Metadata:   map[string]string{},
+				PluginInfo: nil,
+			}
+			exists = true
+		}
+	}
 
 	// Determine action based on strategy
 	action, message, conflict := s.determineAction(source, existingSkill, exists, opts.Strategy)
@@ -403,10 +423,18 @@ func (s *Synchronizer) processSkill(
 	result.Message = message
 	result.Conflict = conflict
 	if warning := mappingWarning(source, targetPlatform); warning != "" {
-		if result.Message != "" {
+		if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
+			result.Message = "linked Claude skill directory"
 			result.Message += "; "
+			result.Message += warning
+		} else {
+			if result.Message != "" {
+				result.Message += "; "
+			}
+			result.Message += warning
 		}
-		result.Message += warning
+	} else if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
+		result.Message = "linked Claude skill directory"
 	}
 
 	logging.Debug("action determined",
@@ -475,7 +503,27 @@ func (s *Synchronizer) processSkill(
 			)
 
 		case SourceTypeDirectory:
-			// Copy directory structure
+			if shouldLinkClaudeDirectorySkill(source, targetPlatform) {
+				if err := os.Symlink(sourceRootPath, targetEntryPath); err != nil {
+					logging.Error("failed to create Claude skill symlink",
+						logging.Skill(source.Name),
+						logging.Path(targetEntryPath),
+						logging.Err(err),
+					)
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to create Claude skill symlink: %w", err)
+					return result
+				}
+
+				logging.Debug("linked Claude skill directory",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Path(sourceRootPath),
+				)
+				break
+			}
+
+			// Copy directory structure for non-Claude or non-linkable targets.
 			if err := copyDir(sourceRootPath, targetEntryPath); err != nil {
 				logging.Error("failed to copy directory",
 					logging.Skill(source.Name),
@@ -543,6 +591,18 @@ func (s *Synchronizer) processSkill(
 	}
 
 	return result
+}
+
+func shouldLinkClaudeDirectorySkill(source model.Skill, target model.Platform) bool {
+	if source.Platform != model.ClaudeCode {
+		return false
+	}
+	if target != model.Codex && target != model.Cursor && target != model.PiDev {
+		return false
+	}
+
+	sourceType, _ := detectSourceType(source.Path)
+	return sourceType == SourceTypeDirectory
 }
 
 func mappingWarning(skill model.Skill, target model.Platform) string {

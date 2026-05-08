@@ -218,8 +218,12 @@ func RestoreBackup(backupID string, targetPath string) error {
 func createDirectoryArchive(sourcePath string) ([]byte, error) {
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
+	walkRoot := sourcePath
+	if resolved, err := filepath.EvalSymlinks(sourcePath); err == nil && resolved != "" {
+		walkRoot = resolved
+	}
 
-	err := filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
+	err := filepath.Walk(walkRoot, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			if os.IsNotExist(walkErr) {
 				logging.Warn("skipping missing path while archiving directory",
@@ -234,7 +238,7 @@ func createDirectoryArchive(sourcePath string) ([]byte, error) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(sourcePath, path)
+		relPath, err := filepath.Rel(walkRoot, path)
 		if err != nil {
 			return fmt.Errorf("failed to derive relative path for %q: %w", path, err)
 		}
