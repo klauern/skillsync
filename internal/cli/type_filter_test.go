@@ -158,7 +158,7 @@ func TestFilterBySkillType_EmptyInput(t *testing.T) {
 // field are treated as SkillTypeSkill for filtering purposes.
 func TestFilterBySkillType_EmptyTypeIsSkill(t *testing.T) {
 	skills := []model.Skill{
-		{Name: "no-type"},      // empty Type
+		{Name: "no-type"}, // empty Type
 		{Name: "prompt-skill", Type: model.SkillTypePrompt},
 	}
 

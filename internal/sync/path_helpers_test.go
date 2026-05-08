@@ -308,10 +308,10 @@ func TestFilterNestedDirectorySkills(t *testing.T) {
 	flatFile := filepath.Join(root, "flat.md")
 
 	for path, content := range map[string]string{
-		parentSKILL: "---\nname: parent\n---\nParent content",
-		childSKILL:  "---\nname: child\n---\nChild content",
+		parentSKILL:  "---\nname: parent\n---\nParent content",
+		childSKILL:   "---\nname: child\n---\nChild content",
 		siblingSKILL: "---\nname: sibling\n---\nSibling content",
-		flatFile:    "---\nname: flat\n---\nFlat content",
+		flatFile:     "---\nname: flat\n---\nFlat content",
 	} {
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("write %s: %v", path, err)
