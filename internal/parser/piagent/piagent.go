@@ -98,6 +98,9 @@ func DiscoverSearchPaths(workingDir string) ([]util.ScopedPath, error) {
 	return result, nil
 }
 
+// ancestorSkillPaths builds a slice of candidate skill directory paths by walking
+// from workingDir up to repoRoot (inclusive). Each entry is the path formed by
+// joining the directory with ".agents" and "skills".
 func ancestorSkillPaths(workingDir, repoRoot string) []string {
 	var paths []string
 
@@ -118,6 +121,11 @@ func ancestorSkillPaths(workingDir, repoRoot string) []string {
 	return paths
 }
 
+// parseSettingsSkillPaths reads a Pi settings JSON file and returns its configured skill directories
+// with each path expanded relative to the settings file's directory.
+// If the file does not exist, it returns (nil, nil). If reading or parsing fails, it returns a
+// wrapped error describing the failure. Paths are expanded using util.ExpandPath with the settings
+// file's directory as the base.
 func parseSettingsSkillPaths(settingsPath string) ([]string, error) {
 	data, err := os.ReadFile(settingsPath) // #nosec G304 — settingsPath comes from .pi/settings.json discovery, not user input
 	if err != nil {

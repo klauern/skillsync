@@ -35,6 +35,18 @@ Perform a three-way merge with conflict detection when possible.
 
 Prompt for each conflict, allowing manual resolution in the TUI.
 
+## Claude Directory Linking
+
+When the source is Claude Code and the skill is a directory-based `SKILL.md`
+skill, SkillSync links the source directory into Codex, Cursor, and Pi.dev
+targets instead of copying the directory contents.
+
+- `overwrite` replaces the target entry with the symlink
+- `skip` leaves the existing target entry alone
+- `newer` relinks only when the source is newer than the target
+- `merge` and other merge-oriented strategies do not attempt content merges
+  for linked directory skills
+
 ## Examples
 
 ```bash

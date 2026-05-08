@@ -16,6 +16,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
+	"github.com/klauern/skillsync/internal/parser/piagent"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -233,6 +234,8 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 		p = copilot.New(basePath)
 	case model.Gemini:
 		p = gemini.New(basePath)
+	case model.PiAgent:
+		p = piagent.New(basePath)
 	case model.PiDev:
 		p = pidev.New(basePath)
 	default:
@@ -243,7 +246,13 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 }
 
 // filterNestedDirectorySkills removes nested directory/symlink skills that would
-// already be copied as part of a parent directory/symlink skill.
+// filterNestedDirectorySkills filters out skills whose source paths are nested inside
+// another skill's directory or symlink and returns the remaining skills along with
+// SkillResult entries for each skipped nested skill.
+//
+// The function prefers the deepest matching parent directory/symlink when deciding
+// which parent causes a child to be skipped. For each skipped skill a SkillResult
+// with ActionSkipped and a message indicating the parent skill name is returned.
 func filterNestedDirectorySkills(skills []model.Skill) ([]model.Skill, []SkillResult) {
 	if len(skills) < 2 {
 		return skills, nil
@@ -355,6 +364,8 @@ func pathDepth(path string) int {
 
 // processSkill handles syncing a single skill.
 // It preserves the source structure: symlinks become symlinks, directories become directories.
+//
+//nolint:gocyclo // This dispatcher intentionally branches on source type, target type, and strategy.
 func (s *Synchronizer) processSkill(
 	source model.Skill,
 	targetPlatform model.Platform,
@@ -409,17 +420,43 @@ func (s *Synchronizer) processSkill(
 
 	// Check if skill exists in target
 	existingSkill, exists := existingSkills[source.Name]
+	if !exists {
+		// os.Lstat (not Stat) is intentional: captures the symlink's own mtime,
+		// not the target's. Type/Scope/Metadata/PluginInfo are synthesized from
+		// the source — determineAction only reads Name and ModifiedAt for most
+		// strategies, so this is safe for current use.
+		if info, err := os.Lstat(targetEntryPath); err == nil {
+			existingSkill = model.Skill{
+				Name:       source.Name,
+				Platform:   targetPlatform,
+				Path:       targetEntryPath,
+				ModifiedAt: info.ModTime(),
+				Type:       source.Type,
+				Scope:      source.Scope,
+				Metadata:   map[string]string{},
+				PluginInfo: nil,
+			}
+			exists = true
+		}
+	}
 
 	// Determine action based on strategy
 	action, message, conflict := s.determineAction(source, existingSkill, exists, opts.Strategy)
 	result.Action = action
 	result.Message = message
 	result.Conflict = conflict
+	var extras []string
+	if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
+		extras = append(extras, "linked Claude skill directory")
+	}
 	if warning := mappingWarning(source, targetPlatform); warning != "" {
+		extras = append(extras, warning)
+	}
+	if len(extras) > 0 {
 		if result.Message != "" {
 			result.Message += "; "
 		}
-		result.Message += warning
+		result.Message += strings.Join(extras, "; ")
 	}
 
 	logging.Debug(
@@ -493,7 +530,40 @@ func (s *Synchronizer) processSkill(
 			)
 
 		case SourceTypeDirectory:
-			// Copy directory structure
+			if shouldLinkClaudeDirectorySkill(source, targetPlatform) {
+				if err := os.MkdirAll(filepath.Dir(targetEntryPath), 0o750); err != nil {
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to create parent directories for symlink: %w", err)
+					return result
+				}
+				absSource, err := filepath.Abs(sourceRootPath)
+				if err != nil {
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to resolve absolute source path for symlink: %w", err)
+					return result
+				}
+				if err := os.Symlink(absSource, targetEntryPath); err != nil {
+					logging.Error(
+						"failed to create Claude skill symlink",
+						logging.Skill(source.Name),
+						logging.Path(targetEntryPath),
+						logging.Err(err),
+					)
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to create Claude skill symlink: %w", err)
+					return result
+				}
+
+				logging.Debug(
+					"linked Claude skill directory",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
+					logging.Path(sourceRootPath),
+				)
+				break
+			}
+
+			// Copy directory structure for non-Claude or non-linkable targets.
 			if err := copyDir(sourceRootPath, targetEntryPath); err != nil {
 				logging.Error(
 					"failed to copy directory",
@@ -569,6 +639,10 @@ func (s *Synchronizer) processSkill(
 	return result
 }
 
+// mappingWarning builds a semicolon-separated warning string describing lossy mappings
+// when converting a skill to the given target platform.
+// It reports fields that will be preserved only as metadata, may require target-specific
+// configuration, or will be dropped. The returned string is empty if no warnings apply.
 func mappingWarning(skill model.Skill, target model.Platform) string {
 	warnings := []string{}
 	if skill.Type == model.SkillTypePrompt && target == model.Codex {

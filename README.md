@@ -33,6 +33,10 @@ skillsync sync cursor claudecode --dry-run
 skillsync sync cursor:repo,user codex:repo
 ```
 
+When syncing from Claude Code, directory-based `SKILL.md` skills are linked
+by default into Codex, Cursor, and Pi.dev targets. Flat `.md` skills and
+prompt/command artifacts still use the existing copy/transform behavior.
+
 ## Commands
 
 - `config` manage config file and defaults

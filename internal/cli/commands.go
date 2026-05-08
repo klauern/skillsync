@@ -1610,7 +1610,13 @@ func parsePlatformSkills(platform model.Platform) ([]model.Skill, error) {
 
 // parsePlatformSkillsWithScope parses skills from the given platform with optional scope filtering.
 // If scopeFilter is nil or empty, all scopes are included. Plugin scope skills are excluded by
-// default unless includePlugins is true or the plugin scope is explicitly in scopeFilter.
+// ParsePlatformSkillsWithScope loads configuration, resolves skill search paths for the given
+// platform, and returns the parsed skills that match the optional scope filter, optionally
+// including plugin-sourced skills when includePlugins is true or the plugin scope is present
+// in scopeFilter.
+//
+// If no search paths are found for the platform this function returns an empty slice and
+// a nil error. It returns an error if configuration loading or path resolution fails.
 func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope, includePlugins bool) ([]model.Skill, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1628,7 +1634,14 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter, includePlugins), nil
 }
 
-//nolint:gocyclo // platform enum dispatch — each case is a distinct config path, refactoring would not reduce real complexity
+// platformSkillsPaths returns the list of resolved, deduplicated ScopedPath entries and the repository root for the given platform.
+//
+// The returned paths are derived from the platform-specific skills path settings in cfg with user/home/repo expansions applied.
+// For PiAgent, discovered PiAgent search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
+// for backward compatibility. If the platform is unsupported or discovery fails, an error is returned. The second return value is the
+// discovered repository root (may be empty).
+//
+//nolint:gocyclo // intentional platform dispatch — each case is a distinct platform, refactoring would obscure intent
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
