@@ -66,7 +66,9 @@ func removeExisting(path string) error {
 	return nil
 }
 
-// copyFile copies a single file from src to dst, preserving permissions.
+// copyFile copies the file at src to dst, creating or truncating dst and preserving src's permission bits.
+// It returns a wrapped error if stat, open, create, or content copy operations fail.
+// On success a debug log entry is emitted indicating the source path.
 func copyFile(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -101,7 +103,12 @@ func copyFile(src, dst string) error {
 }
 
 // copyDir recursively copies a directory from src to dst.
-// If dst exists, it will be removed first.
+// copyDir copies the contents of the directory named by src into dst,
+// creating dst with the same permission bits as src and recreating the
+// entire directory tree. Subdirectories are copied recursively, regular
+// files are copied with their modes preserved, and symbolic links are
+// recreated at the destination pointing to the same targets. An error is
+// returned if any filesystem operation fails.
 func copyDir(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {

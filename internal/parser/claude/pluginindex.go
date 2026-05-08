@@ -65,7 +65,9 @@ type PluginIndexEntry struct {
 }
 
 // LoadPluginIndex loads and parses the Claude Code installed plugins manifest.
-// Returns an empty index if the file doesn't exist or can't be parsed.
+// LoadPluginIndex constructs a PluginIndex populated from the installed_plugins.json manifest.
+// If the manifest cannot be read or parsed, it returns an empty index.
+// Install paths are normalized and the index records the preferred (newest) installation for each plugin key; disabled installations are ignored.
 func LoadPluginIndex() *PluginIndex {
 	index := &PluginIndex{
 		byInstallPath:     make(map[string]*PluginIndexEntry),

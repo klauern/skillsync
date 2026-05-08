@@ -246,7 +246,13 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 }
 
 // filterNestedDirectorySkills removes nested directory/symlink skills that would
-// already be copied as part of a parent directory/symlink skill.
+// filterNestedDirectorySkills filters out skills whose source paths are nested inside
+// another skill's directory or symlink and returns the remaining skills along with
+// SkillResult entries for each skipped nested skill.
+// 
+// The function prefers the deepest matching parent directory/symlink when deciding
+// which parent causes a child to be skipped. For each skipped skill a SkillResult
+// with ActionSkipped and a message indicating the parent skill name is returned.
 func filterNestedDirectorySkills(skills []model.Skill) ([]model.Skill, []SkillResult) {
 	if len(skills) < 2 {
 		return skills, nil
@@ -624,6 +630,8 @@ func (s *Synchronizer) processSkill(
 	return result
 }
 
+// shouldLinkClaudeDirectorySkill reports whether a ClaudeCode skill whose source path is a directory should be linked (created as a symlink) when syncing to the specified target platform.
+// It returns true only if the source skill's Platform is ClaudeCode, the target platform is one of Codex, Cursor, or PiDev, and the detected source type for the skill's path is a directory.
 func shouldLinkClaudeDirectorySkill(source model.Skill, target model.Platform) bool {
 	if source.Platform != model.ClaudeCode {
 		return false
@@ -636,6 +644,10 @@ func shouldLinkClaudeDirectorySkill(source model.Skill, target model.Platform) b
 	return sourceType == SourceTypeDirectory
 }
 
+// mappingWarning builds a semicolon-separated warning string describing lossy mappings
+// when converting a skill to the given target platform.
+// It reports fields that will be preserved only as metadata, may require target-specific
+// configuration, or will be dropped. The returned string is empty if no warnings apply.
 func mappingWarning(skill model.Skill, target model.Platform) string {
 	warnings := []string{}
 	if skill.Type == model.SkillTypePrompt && target == model.Codex {
