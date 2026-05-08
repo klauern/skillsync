@@ -636,20 +636,6 @@ func (s *Synchronizer) processSkill(
 	return result
 }
 
-// shouldLinkClaudeDirectorySkill reports whether a ClaudeCode skill whose source path is a directory should be linked (created as a symlink) when syncing to the specified target platform.
-// It returns true only if the source skill's Platform is ClaudeCode, the target platform is one of Codex, Cursor, or PiDev, and the detected source type for the skill's path is a directory.
-func shouldLinkClaudeDirectorySkill(source model.Skill, target model.Platform) bool {
-	if source.Platform != model.ClaudeCode {
-		return false
-	}
-	if target != model.Codex && target != model.Cursor && target != model.PiDev {
-		return false
-	}
-
-	sourceType, _ := detectSourceType(source.Path)
-	return sourceType == SourceTypeDirectory
-}
-
 // mappingWarning builds a semicolon-separated warning string describing lossy mappings
 // when converting a skill to the given target platform.
 // It reports fields that will be preserved only as metadata, may require target-specific
