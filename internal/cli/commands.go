@@ -1640,6 +1640,8 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 // For PiAgent, discovered PiAgent search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
 // for backward compatibility. If the platform is unsupported or discovery fails, an error is returned. The second return value is the
 // discovered repository root (may be empty).
+//
+//nolint:gocyclo // intentional platform dispatch — each case is a distinct platform, refactoring would obscure intent
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
