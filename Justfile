@@ -16,14 +16,14 @@ help: default
 [group("build"), doc("Build the binary")]
 build:
   @mkdir -p {{BUILD_DIR}}
-  go build {{LDFLAGS}} -o {{BUILD_DIR}}/{{BINARY_NAME}} ./cmd/skillsync
+  GOTOOLCHAIN=auto go build {{LDFLAGS}} -o {{BUILD_DIR}}/{{BINARY_NAME}} ./cmd/skillsync
 
 [group("build"), doc("Install the binary to GOBIN (or GOPATH/bin if unset)")]
 install:
   bin_dir="${GOBIN:-$(go env GOBIN)}"; \
   if [ -z "$bin_dir" ]; then bin_dir="$(go env GOPATH)/bin"; fi; \
   mkdir -p "$bin_dir"; \
-  go build {{LDFLAGS}} -o "$bin_dir/{{BINARY_NAME}}$(go env GOEXE)" ./cmd/skillsync; \
+  GOTOOLCHAIN=auto go build {{LDFLAGS}} -o "$bin_dir/{{BINARY_NAME}}$(go env GOEXE)" ./cmd/skillsync; \
   echo "Installed {{BINARY_NAME}} to $bin_dir"
 
 [group("build"), doc("Remove installed binary from GOBIN (or GOPATH/bin if unset)")]
@@ -34,7 +34,7 @@ uninstall:
 
 [group("test"), doc("Run tests with race and coverage")]
 test:
-  go test -v -race -coverprofile=coverage.out ./...
+  GOTOOLCHAIN=auto go test -v -race -coverprofile=coverage.out ./...
 
 [group("test"), doc("Run tests and open coverage report")]
 test-coverage: test
@@ -46,26 +46,26 @@ lint:
 
 [group("quality"), doc("Format code with gofumpt and goimports")]
 fmt:
-  gofumpt -w .
-  goimports -w -local github.com/klauern/skillsync .
+  GOTOOLCHAIN=auto gofumpt -w .
+  GOTOOLCHAIN=auto goimports -w -local github.com/klauern/skillsync .
 
 [group("quality"), doc("Run go vet")]
 vet:
-  go vet ./...
+  GOTOOLCHAIN=auto go vet ./...
 
 [group("quality"), doc("Tidy and verify modules")]
 tidy:
-  go mod tidy
-  go mod verify
+  GOTOOLCHAIN=auto go mod tidy
+  GOTOOLCHAIN=auto go mod verify
 
 [group("tools"), doc("Install gofumpt, goimports, and golangci-lint")]
 install-tools:
   @echo "Installing gofumpt..."
-  @go install mvdan.cc/gofumpt@latest
+  @GOTOOLCHAIN=auto go install mvdan.cc/gofumpt@latest
   @echo "Installing goimports..."
-  @go install golang.org/x/tools/cmd/goimports@latest
+  @GOTOOLCHAIN=auto go install golang.org/x/tools/cmd/goimports@latest
   @echo "Installing golangci-lint..."
-  @go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+  @GOTOOLCHAIN=auto go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
   @echo "All tools installed successfully!"
 
 [group("cleanup"), doc("Remove build artifacts and coverage output")]
@@ -78,7 +78,7 @@ audit: tidy fmt vet lint test
 
 [group("quality"), doc("Check portability docs against the structured snapshot")]
 portability-check:
-  go run ./cmd/skillsync portability-check
+  GOTOOLCHAIN=auto go run ./cmd/skillsync portability-check
 
 [group("build"), doc("Build and run the binary")]
 run: build
