@@ -251,7 +251,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev
+   Supported platforms: ` + model.AllPlatformNames() + `
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -263,7 +263,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev)",
+				Usage:   "Filter by platform (" + model.AllPlatformNames() + ")",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -872,7 +872,7 @@ func syncCommand() *cli.Command {
 		UsageText: "skillsync sync [options] <source> <target>",
 		Description: `Synchronize skills between AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev
+   Supported platforms: ` + model.AllPlatformNames() + `
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -930,7 +930,7 @@ func deleteCommand() *cli.Command {
 		UsageText: "skillsync delete [options] <source> <target>",
 		Description: `Delete skills from the target platform that also exist in the source.
 
-   Supported platforms: claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev
+   Supported platforms: ` + model.AllPlatformNames() + `
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -2107,7 +2107,7 @@ func exportCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (" + model.AllPlatformNames() + ")",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2277,7 +2277,7 @@ func backupCreateCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to back up (claude-code, cursor, codex, pi.dev, all)",
+				Usage:   "Platform to back up (" + model.AllPlatformNames() + ", all)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -2358,7 +2358,7 @@ func backupListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (" + model.AllPlatformNames() + ")",
 			},
 			&cli.StringFlag{
 				Name:    "format",
@@ -2577,7 +2577,7 @@ func backupDeleteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (" + model.AllPlatformNames() + ")",
 			},
 			&cli.BoolFlag{
 				Name:    "force",
@@ -2637,7 +2637,7 @@ func backupVerifyCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (" + model.AllPlatformNames() + ")",
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
