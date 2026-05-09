@@ -1920,3 +1920,183 @@ func TestSyncScopeSpecParsing(t *testing.T) {
 		})
 	}
 }
+
+// TestSyncClaudeCodeToCopilot verifies sync from Claude Code to GitHub Copilot.
+func TestSyncClaudeCodeToCopilot(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture.WriteSkill("copilot-test.md", "copilot-test", "Test for Copilot", "# Copilot Test\n\nContent for Copilot.")
+
+	copilotFixture := h.CopilotFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "copilot")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, copilotFixture.Path("agents/copilot-test.agent.md"))
+}
+
+// TestSyncCopilotToClaudeCode verifies sync from GitHub Copilot to Claude Code.
+func TestSyncCopilotToClaudeCode(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	copilotFixture := h.CopilotFixture()
+	copilotFixture.WriteFile("copilot-instructions.md", "# Copilot Instructions\n\nAlways follow best practices.")
+
+	claudeFixture := h.ClaudeCodeFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "copilot", "claudecode")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, claudeFixture.Path("copilot-instructions.md"))
+}
+
+// TestDiscoverCopilot verifies Copilot skills can be discovered directly.
+func TestDiscoverCopilot(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	copilotFixture := h.CopilotFixture()
+	copilotFixture.WriteFile("copilot-instructions.md", "# Copilot Instructions\n\nWorkspace rules.")
+
+	result := h.Run("discover", "--platform", "copilot", "--format", "json")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, `"platform": "copilot"`)
+}
+
+// TestSyncClaudeCodeToGemini verifies sync from Claude Code to Gemini CLI.
+func TestSyncClaudeCodeToGemini(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture.WriteSkill("gemini-test.md", "gemini-test", "Test for Gemini", "# Gemini Test\n\nContent for Gemini.")
+
+	geminiFixture := h.GeminiFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "gemini")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, geminiFixture.Path("gemini-test.md"))
+}
+
+// TestSyncGeminiToClaudeCode verifies sync from Gemini CLI to Claude Code.
+func TestSyncGeminiToClaudeCode(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	geminiFixture := h.GeminiFixture()
+	if err := os.MkdirAll(geminiFixture.Path("skills/gemini-skill"), 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	geminiFixture.WriteSkill("skills/gemini-skill/SKILL.md", "gemini-skill", "Gemini to Claude", "# Gemini Skill\n\nContent.")
+
+	claudeFixture := h.ClaudeCodeFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "gemini", "claudecode")
+
+	e2e.AssertSuccess(t, result)
+	// Gemini SKILL.md skills are synced as directories (directory-based source type)
+	e2e.AssertFileExists(t, claudeFixture.Path("gemini-skill/SKILL.md"))
+}
+
+// TestDiscoverGemini verifies Gemini skills can be discovered directly.
+func TestDiscoverGemini(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	geminiFixture := h.GeminiFixture()
+	if err := os.MkdirAll(geminiFixture.Path("skills/my-gemini"), 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	geminiFixture.WriteSkill("skills/my-gemini/SKILL.md", "my-gemini", "Gemini discovery", "# My Gemini Skill\n")
+
+	result := h.Run("discover", "--platform", "gemini", "--format", "json")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, `"platform": "gemini"`)
+	e2e.AssertOutputContains(t, result, `"name": "my-gemini"`)
+}
+
+// TestDiscoverGeminiTOMLCommands verifies Gemini TOML commands are discovered.
+func TestDiscoverGeminiTOMLCommands(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	geminiFixture := h.GeminiFixture()
+	if err := os.MkdirAll(geminiFixture.Path("commands"), 0o750); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+	geminiFixture.WriteFile("commands/review.toml", `description = "Review code"
+prompt = "Review this: {{args}}"
+`)
+
+	result := h.Run("discover", "--platform", "gemini", "--format", "json")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, `"platform": "gemini"`)
+	e2e.AssertOutputContains(t, result, `"name": "review"`)
+}
+
+// TestSyncClaudeCodeToPiDev verifies sync from Claude Code to Pi.dev.
+func TestSyncClaudeCodeToPiDev(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture.WriteSkill("pidev-test.md", "pidev-test", "Test for Pi.dev", "# PiDev Test\n\nContent for Pi.dev.")
+
+	piDevFixture := h.PiDevFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "pi.dev")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, piDevFixture.Path("pidev-test.md"))
+}
+
+// TestSyncPiDevToClaudeCode verifies sync from Pi.dev to Claude Code.
+func TestSyncPiDevToClaudeCode(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	piDevFixture := h.PiDevFixture()
+	if err := os.MkdirAll(piDevFixture.Path("pidev-skill"), 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	piDevFixture.WriteSkill("pidev-skill/SKILL.md", "pidev-skill", "Pi.dev to Claude", "# PiDev Skill\n\nContent.")
+
+	claudeFixture := h.ClaudeCodeFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi.dev", "claudecode")
+
+	e2e.AssertSuccess(t, result)
+	// PiDev SKILL.md skills are synced as directories (directory-based source type)
+	e2e.AssertFileExists(t, claudeFixture.Path("pidev-skill/SKILL.md"))
+}
+
+// TestSyncCodexToPiDev verifies sync from Codex to Pi.dev.
+func TestSyncCodexToPiDev(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	codexFixture := h.CodexFixture()
+	codexFixture.WriteSkill("codex-to-pi/SKILL.md", "codex-to-pi", "Codex to Pi.dev", "# Codex To Pi\n\nContent.")
+
+	piDevFixture := h.PiDevFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "codex", "pi.dev")
+
+	e2e.AssertSuccess(t, result)
+	// Codex SKILL.md skills are synced as directories
+	e2e.AssertFileExists(t, piDevFixture.Path("codex-to-pi/SKILL.md"))
+}
+
+// TestDiscoverPiDev verifies Pi.dev skills can be discovered directly.
+func TestDiscoverPiDev(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	piDevFixture := h.PiDevFixture()
+	if err := os.MkdirAll(piDevFixture.Path("discoverable"), 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	piDevFixture.WriteSkill("discoverable/SKILL.md", "discoverable", "Pi.dev discovery", "# Discoverable\n")
+
+	result := h.Run("discover", "--platform", "pi.dev", "--format", "json")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, `"platform": "pi.dev"`)
+	e2e.AssertOutputContains(t, result, `"name": "discoverable"`)
+}

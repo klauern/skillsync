@@ -2,8 +2,10 @@
 package tiered
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
@@ -82,8 +84,7 @@ func ParserFactoryFor(platform model.Platform) ParserFactory {
 	case model.PiDev:
 		return PiDevParserFactory()
 	default:
-		// Return a factory that creates Claude parsers as a fallback
-		return ClaudeCodeParserFactory()
+		panic(fmt.Sprintf("no parser factory for platform %q", platform))
 	}
 }
 
@@ -120,7 +121,9 @@ func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
 	}
 	if platform == model.PiAgent {
 		searchPaths, err := piagent.DiscoverSearchPaths(workingDir)
-		if err == nil {
+		if err != nil {
+			logging.Warn("failed to discover pi-agent search paths", logging.Err(err))
+		} else {
 			cfg.SearchPaths = searchPaths
 		}
 	}

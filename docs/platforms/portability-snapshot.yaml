@@ -38,31 +38,34 @@ platform_support:
       - First-class parser and sync support in SkillSync.
       - Deprecated custom prompts are compatibility metadata only.
   copilot:
-    status: reference-only
+    status: implemented
     artifact_surfaces:
       - instructions
       - prompts
       - agents
     notes:
-      - Documented for mapping and portability analysis only.
+      - First-class parser and sync support in SkillSync.
+      - Supports copilot-instructions.md, .github/prompts/*.prompt.md, .github/instructions/*.md, and .github/agents/*.md.
   gemini:
-    status: reference-only
+    status: implemented
     artifact_surfaces:
       - instructions
       - skills
       - commands
       - agents
     notes:
-      - Documented for mapping and portability analysis only.
+      - First-class parser and sync support in SkillSync.
+      - Parses GEMINI.md, skills/*.md, and commands/*.toml files.
+      - Gemini extensions/hooks/subagents/themes have no cross-platform equivalent and are not sync targets.
   pidev:
-    status: reference-only
+    status: implemented
     artifact_surfaces:
       - skills
       - prompts
       - instructions
       - system-prompt layers
     notes:
-      - Documented for mapping and portability analysis only.
+      - First-class parser and sync support in SkillSync.
       - Packages, extensions, and themes remain out of scope for first-pass sync.
 
 artifact_portability:

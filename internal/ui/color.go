@@ -26,6 +26,8 @@ var (
 	Header = color.New(color.FgCyan, color.Bold).SprintFunc()
 	// Magenta is used for development/special items (magenta).
 	Magenta = color.New(color.FgMagenta).SprintFunc()
+	// Blue is used for additional platform distinction (blue).
+	Blue = color.New(color.FgBlue).SprintFunc()
 )
 
 // Status symbols with colors.

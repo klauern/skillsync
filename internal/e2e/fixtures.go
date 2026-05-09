@@ -181,6 +181,38 @@ func (h *Harness) PiDevFixture() *Fixture {
 	return NewFixture(h.t, skillsDir)
 }
 
+// CopilotFixture creates a fixture helper for GitHub Copilot skills directory.
+// It sets up the expected ~/.github structure in the isolated home.
+func (h *Harness) CopilotFixture() *Fixture {
+	h.t.Helper()
+
+	skillsDir := h.env["SKILLSYNC_COPILOT_PATH"]
+	if skillsDir == "" {
+		skillsDir = filepath.Join(h.homeDir, ".github")
+	}
+	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
+		h.t.Fatalf("failed to create Copilot skills directory: %v", err)
+	}
+
+	return NewFixture(h.t, skillsDir)
+}
+
+// GeminiFixture creates a fixture helper for Gemini CLI skills directory.
+// It sets up the expected ~/.gemini structure in the isolated home.
+func (h *Harness) GeminiFixture() *Fixture {
+	h.t.Helper()
+
+	skillsDir := h.env["SKILLSYNC_GEMINI_PATH"]
+	if skillsDir == "" {
+		skillsDir = filepath.Join(h.homeDir, ".gemini")
+	}
+	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
+		h.t.Fatalf("failed to create Gemini skills directory: %v", err)
+	}
+
+	return NewFixture(h.t, skillsDir)
+}
+
 // TempFixture creates a fixture helper for a new temporary directory.
 func (h *Harness) TempFixture() *Fixture {
 	h.t.Helper()
