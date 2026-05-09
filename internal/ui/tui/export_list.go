@@ -261,6 +261,8 @@ func (m ExportListModel) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
+//
+//nolint:gocyclo // interactive table/event handling is intentionally central here
 func (m ExportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
