@@ -1193,8 +1193,8 @@ func syncCommand() *cli.Command {
 				TargetScope: cfg.targetSpec.TargetScope(),
 			}
 
-			// Check permissions before sync (unless dry-run or --yes flag used)
-			if !cfg.dryRun && !cfg.yesFlag {
+			// Check permissions before sync (skip for dry-run; --yes suppresses prompt only)
+			if !cfg.dryRun {
 				permConfig, err := permissions.Load()
 				if err != nil {
 					logging.Warn("failed to load permissions config, using defaults", logging.Err(err))
@@ -1207,13 +1207,19 @@ func syncCommand() *cli.Command {
 					return fmt.Errorf("permission denied: %w", err)
 				}
 
-				// Check if write operation is permitted and get confirmation
 				targetDesc := fmt.Sprintf("sync %d skills to %s:%s",
 					len(cfg.sourceSkills),
 					cfg.targetSpec.Platform,
 					opts.TargetScope)
-				if err := checker.CheckAndConfirm(permissions.OpWrite, targetDesc); err != nil {
-					return fmt.Errorf("permission denied: %w", err)
+				if cfg.yesFlag {
+					// --yes skips the confirmation prompt but still enforces permission rules
+					if err := checker.CheckOperation(permissions.OpWrite); err != nil {
+						return fmt.Errorf("permission denied: %w", err)
+					}
+				} else {
+					if err := checker.CheckAndConfirm(permissions.OpWrite, targetDesc); err != nil {
+						return fmt.Errorf("permission denied: %w", err)
+					}
 				}
 			}
 			logging.Info("executing sync",
@@ -2161,6 +2167,11 @@ func runImport(cmd *cli.Command) error {
 			return fmt.Errorf("invalid platform: %w", err)
 		}
 		platform = p
+	}
+
+	// Require --target-dir unless this is a dry-run preview
+	if cmd.String("target-dir") == "" && !cmd.Bool("dry-run") {
+		return fmt.Errorf("--target-dir is required for import (use --dry-run to preview without writing)")
 	}
 
 	// Open archive file

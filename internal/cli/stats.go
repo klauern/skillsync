@@ -149,9 +149,8 @@ func collectPlatformStats(name string, cfg config.PlatformConfig) (PlatformStats
 }
 
 // getLastBackupTime returns the timestamp of the most recent backup.
-func getLastBackupTime(cfg *config.Config) (*time.Time, error) {
-	backupDir := util.ExpandPath(cfg.Backup.Location, "")
-	backups, err := backup.ListBackups(backupDir)
+func getLastBackupTime(_ *config.Config) (*time.Time, error) {
+	backups, err := backup.ListBackups("")
 	if err != nil {
 		return nil, err
 	}

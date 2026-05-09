@@ -242,22 +242,16 @@ func writeSkillToDir(skill model.Skill, targetDir string) error {
 		platformDir = string(skill.Platform)
 	}
 
-	targetPath := filepath.Join(targetDir, platformDir)
-	if err := os.MkdirAll(targetPath, 0o750); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
+	// Each skill gets its own named subdirectory with a SKILL.md file so that
+	// platform parsers (which discover SKILL.md rather than JSON dumps) can read it.
+	skillDir := filepath.Join(targetDir, platformDir, sanitizeFilename(skill.Name))
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", skillDir, err)
 	}
 
-	// Write skill file
-	filename := sanitizeFilename(skill.Name) + ".json"
-	filePath := filepath.Join(targetPath, filename)
-
-	data, err := json.MarshalIndent(skill, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize skill: %w", err)
-	}
-
-	if err := os.WriteFile(filePath, data, 0o644); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", filePath, err)
+	filePath := filepath.Join(skillDir, "SKILL.md")
+	if err := os.WriteFile(filePath, []byte(skill.Content), 0o644); err != nil {
+		return fmt.Errorf("failed to write skill file %s: %w", filePath, err)
 	}
 
 	return nil
