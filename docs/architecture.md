@@ -18,6 +18,9 @@ graph TD
     tiered --> cursor[parser/cursor]
     tiered --> codex[parser/codex]
     tiered --> piagent[parser/piagent]
+    tiered --> copilot[parser/copilot]
+    tiered --> gemini[parser/gemini]
+    tiered --> pidev[parser/pidev]
 ```
 
 ## Core Interfaces
@@ -32,7 +35,7 @@ type Parser interface {
 }
 ```
 
-**Platform**: `ClaudeCode | Cursor | Codex | Copilot | Gemini | Pi.dev` (`internal/model/platform.go`); `PiAgent` remains a legacy alias for compatibility.
+**Platform**: `ClaudeCode | Cursor | Codex | PiAgent | Copilot | Gemini | PiDev` (`internal/model/platform.go`) — all 7 are first-class implementations.
 
 See `docs/platforms/` for per-platform format references and `docs/platforms/cross-platform-mapping.md` for conversion rules.
 
