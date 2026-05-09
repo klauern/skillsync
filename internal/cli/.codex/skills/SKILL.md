@@ -1,185 +1,148 @@
-# YNAB Transaction Management
+# Startup Hook Skill for Claude Code on the web
 
-This Skill helps you efficiently manage your YNAB (You Need A Budget) transactions through natural language commands. It leverages the mcp-ynab server to interact with your budget.
+Create SessionStart hooks that install dependencies so tests and linters work in Claude Code on the web sessions.
 
-## Common Workflows
+## Hook Basics
 
-### 1. Review Transactions Needing Attention
+### Input (via stdin)
+```json
+{
+  "session_id": "abc123",
+  "source": "startup|resume|clear|compact",
+  "transcript_path": "/path/to/transcript.jsonl",
+  "permission_mode": "default",
+  "hook_event_name": "SessionStart",
+  "cwd": "/workspace/repo"
+}
+```
 
-**When to use**: User wants to categorize transactions, approve transactions, or clean up their budget.
+### Async Mode
+```bash
+#!/bin/bash
+set -euo pipefail
 
-**Workflow**:
-1. First, ensure we have a budget ID. If not cached, call `get_budgets()` and ask the user which budget to use
-2. Call `set_preferred_budget_id(budget_id)` to cache it for future use
-3. Call `get_categories(budget_id)` to see available categories
-4. Call `cache_categories(budget_id)` to cache them for future use
-5. Call `get_transactions_needing_attention(budget_id, filter_type="both")` to see what needs work
-6. Present the results and offer to help categorize transactions
+echo '{"async": true, "asyncTimeout": 300000}'
 
-**Example user requests**:
-- "Show me my uncategorized transactions"
-- "What transactions need my attention?"
-- "Help me clean up my budget"
+npm install
+```
 
-### 2. Categorize Transactions
+The hook runs in background while the session starts. Using async mode reduces latency, but introduces a race condition where the agent loop might depend on something that is being done in the startup hook before it completed.
 
-**When to use**: User wants to assign categories to one or more transactions.
+### Environment Variables
 
-**Workflow**:
-1. Get the transaction ID from previous output or ask the user
-2. Get the category ID from cached categories or ask the user
-3. Call `categorize_transaction(budget_id, transaction_id, category_id)`
-4. Confirm the categorization was successful
+Available environment variables:
+- `$CLAUDE_PROJECT_DIR` - Repository root path
+- `$CLAUDE_ENV_FILE` - Path to write environment variables
+- `$CLAUDE_CODE_REMOTE` - If running in a remote environment (i.e. Claude code on the web)
 
-**Example user requests**:
-- "Categorize transaction beads-abc as Groceries"
-- "Put that coffee purchase in Dining Out"
-- "Mark all these as Gas & Fuel"
+Use `$CLAUDE_ENV_FILE` to persist variables for the session:
+```bash
+echo 'export PYTHONPATH="."' >> "$CLAUDE_ENV_FILE"
+```
 
-### 3. Create New Transaction
+Use `$CLAUDE_CODE_REMOTE` to only run a script in a remote env:
+```bash
+if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+  exit 0
+fi
+```
 
-**When to use**: User wants to manually add a transaction to YNAB.
+## Workflow
 
-**Workflow**:
-1. Ensure we have budget_id and account_id (get accounts if needed)
-2. Gather: amount (in dollars), payee_name, optional category_name, optional memo
-3. Call `create_transaction(account_id, amount, payee_name, category_name, memo)`
-4. Confirm creation and show the transaction details
+Make a todo list for all the tasks in this workflow and work on them one after another
 
-**Example user requests**:
-- "Add a $5.50 transaction for coffee at Starbucks"
-- "Create a transaction: $42 to Amazon in the Shopping category"
-- "Log a cash purchase"
+### 1. Analyze Dependencies
 
-### 4. Analyze Spending
+Find dependency manifests and analyze them. Examples:
+- `package.json` / `package-lock.json` → npm
+- `pyproject.toml` / `requirements.txt` → pip/Poetry
+- `Cargo.toml` → cargo
+- `go.mod` → go
+- `Gemfile` → bundler
 
-**When to use**: User wants to understand their spending patterns.
+Additionally, read though any documentation (i.e. README.md or similar) to see if you can get additional context on how the environment setup works
 
-**Workflow**:
-1. Get accounts and transactions for the relevant period
-2. Call `get_transactions(budget_id, account_id)` for recent transactions
-3. Analyze and summarize by category, payee, or time period
-4. Present insights in an easy-to-understand format
+### 2. Design Hook
 
-**Example user requests**:
-- "How much did I spend on dining out this month?"
-- "Show me all my Amazon purchases"
-- "What's my spending pattern?"
+Create a script that installs dependencies.
 
-### 5. Account Balance Check
+**Key principles:**
+- Don't use async mode in the first iteration. Only switch to it if the user asks for it
+- Write the hook only for the web unless user asks otherwise (see $CLAUDE_CODE_REMOTE)
+- The container state gets cached after the hook completes, prefer dependency install methods that take advantage of that (i.e. prefer npm install over npm ci)
+- Be idempotent (safe to run multiple times)
+- Non-interactive (no user input)
 
-**When to use**: User wants to know their current account balance.
+### 3. Create Hook File
 
-**Workflow**:
-1. Get account_id if not provided
-2. Call `get_account_balance(account_id)`
-3. Present the balance clearly
+```bash
+mkdir -p .claude/hooks
+cat > .claude/hooks/session-start.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
 
-**Example user requests**:
-- "What's my checking account balance?"
-- "How much is in my savings?"
-- "Show all account balances"
+echo '{"async": true, "asyncTimeout": 300000}'
+# Install dependencies here
+EOF
 
-## Best Practices
+chmod +x .claude/hooks/session-start.sh
+```
 
-### Starting Fresh
-Always check if we have a preferred budget ID cached:
-1. Try to use cached budget_id from preferences
-2. If none exists, call `get_budgets()` and let user select
-3. Cache the selection with `set_preferred_budget_id(budget_id)`
+### 4. Register in Settings
 
-### Category Management
-Cache categories once per session to avoid repeated API calls:
-1. Call `get_categories(budget_id)` to see all categories
-2. Call `cache_categories(budget_id)` to cache them
-3. Reference cached categories when categorizing
+Add to `.claude/settings.json` (create if doesn't exist):
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-### Transaction IDs
-YNAB uses different types of transaction IDs:
-- **id**: Direct transaction ID (most common, shown in tables)
-- **import_id**: YNAB import format (YNAB:[amount]:[date]:[occurrence])
-- **transfer_transaction_id**: For transfer transactions
-- **matched_transaction_id**: For matched transactions
+If `.claude/settings.json` exists, merge the hooks configuration.
 
-Always use the `id` from the transaction table unless the user specifically provides an import_id.
+### 5. Validate Hook
 
-### Handling Multiple Transactions
-When categorizing multiple transactions:
-1. Present them in a clear table format
-2. Process them one at a time
-3. Confirm each categorization
-4. Summarize the batch at the end
+Run the hook script directly:
 
-### Error Handling
-If a tool call fails:
-1. Check if the budget_id is still valid
-2. Verify the account_id exists and is open
-3. Ensure category_id is valid (not deleted or hidden)
-4. Provide helpful error messages to the user
+```bash
+CLAUDE_CODE_REMOTE=true ./.claude/hooks/session-start.sh
+```
 
-## Quick Reference
+IMPORTANT: Verify dependencies are installed and script completes successfully.
 
-### Filter Types for `get_transactions_needing_attention`
-- `"uncategorized"`: Only show transactions without a category
-- `"unapproved"`: Only show transactions not yet approved
-- `"both"`: Show all transactions needing attention (default)
+### 6. Validate Linter
 
-### Amount Format
-All amounts in tool calls are in **dollars** (not YNAB's milliunits):
-- User says: "$42.50"
-- You call: `create_transaction(..., amount=42.50, ...)`
+IMPORTANT: Figure out what the right command is to run the linters and run it for an example file. No need to lint the whole project. If there are any issues, update the startup script accordingly and re-test.
 
-### Date Handling
-- Most tools use current month by default
-- Use `days_back` parameter to look further back
-- Transactions are sorted by date (most recent first)
+### 7. Validate Test
 
-## Example Conversations
+IMPORTANT: Figure out what the right command is to run the tests and run it for one test. No need to run the whole test suite. If there are any issues, update the startup script accordingly and re-test.
 
-### Example 1: Clean Up Budget
-**User**: "Help me categorize my recent transactions"
+### 8. Commit and push
 
-**Claude**:
-1. Calls `get_budgets()` → shows "Personal Budget"
-2. Calls `set_preferred_budget_id("budget-123")`
-3. Calls `get_categories("budget-123")` → displays all categories
-4. Calls `cache_categories("budget-123")`
-5. Calls `get_transactions_needing_attention("budget-123", "both")`
-6. Shows table of uncategorized/unapproved transactions
-7. Offers to help categorize them one by one or in bulk
+Make a commit and push it to the remote branch
 
-### Example 2: Quick Transaction Entry
-**User**: "Add a $15 transaction for lunch at Chipotle"
+## Wrap up
 
-**Claude**:
-1. Uses cached budget_id (or gets it if not cached)
-2. Calls `get_accounts(budget_id)` → shows checking account
-3. Asks: "Which account?" or uses default checking
-4. Asks: "Which category?" or offers "Dining Out"
-5. Calls `create_transaction(account_id, 15.00, "Chipotle", "Dining Out")`
-6. Confirms: "Created $15.00 transaction to Chipotle in Dining Out category"
+We're all done. In your last message to the user, Provide a detailed summary to the user with the format below:
 
-### Example 3: Spending Analysis
-**User**: "How much did I spend on groceries this month?"
-
-**Claude**:
-1. Uses cached budget_id
-2. Calls `get_categories(budget_id)` → finds "Groceries" category_id
-3. Calls `get_transactions(budget_id, account_id)` for each account
-4. Filters transactions by category_name == "Groceries"
-5. Sums amounts and presents: "You spent $342.50 on groceries this month across 12 transactions"
-
-## Tips for Effective Use
-
-1. **Be conversational**: Users don't need to know about budget_id or account_id - Claude handles the technical details
-2. **Batch operations**: When possible, handle multiple related tasks in sequence
-3. **Provide context**: Always show what you're doing and why
-4. **Confirm actions**: Especially for categorization and transaction creation
-5. **Use tables**: Present transaction data in clear markdown tables
-6. **Cache intelligently**: Reuse budget_id and categories across the session
-
-## See Also
-
-- [WORKFLOWS.md](WORKFLOWS.md) - Detailed workflow examples
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
-- [MCP Server Documentation](../../README.md) - Technical API reference
+* Summary of the changes made
+* Validation results
+  1. ✅/‼️ Session hook execution (include details if it failed)
+  2. ✅/‼️ linter execution (include details if it failed)
+  3. ✅/‼️ test execution (include details if it failed)
+* Hook execution mode: Syncronous
+  * inform user that hook is running syncronous and the below trade-offs. Let them know that we can change it to async if they prefer faster session startup.
+    * Pros: Guarantees dependencies are installed before your session starts, preventing race conditions where Claude might try to run tests or linters before they're ready
+    * Cons: Your remote session will only start once the session start hook is completed
+* inform user that once they merge the session start hook into their repo's default branch, all future sessions will use it.
