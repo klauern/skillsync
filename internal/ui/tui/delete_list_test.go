@@ -164,6 +164,58 @@ func TestDeleteListModel_FilterByPlatform(t *testing.T) {
 	}
 }
 
+func TestDeleteListModel_PlatformFilterCycle(t *testing.T) {
+	skills := []model.Skill{
+		{Name: "claude-skill", Platform: model.ClaudeCode, Scope: model.ScopeUser},
+		{Name: "cursor-skill", Platform: model.Cursor, Scope: model.ScopeRepo},
+	}
+
+	m := NewDeleteListModel(skills)
+
+	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	dm := newModel.(DeleteListModel)
+
+	if dm.platformIndex != 0 {
+		t.Fatalf("expected platform index 0, got %d", dm.platformIndex)
+	}
+	if len(dm.filtered) != 1 || dm.filtered[0].Platform != model.ClaudeCode {
+		t.Fatalf("expected only claude skills after first cycle, got %+v", dm.filtered)
+	}
+	if !strings.Contains(dm.View(), "[claude-code]") {
+		t.Fatalf("expected view to show active platform tab, got %q", dm.View())
+	}
+
+	newModel, _ = dm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	dm = newModel.(DeleteListModel)
+
+	if dm.platformIndex != -1 {
+		t.Fatalf("expected platform index -1 after cycling back to all, got %d", dm.platformIndex)
+	}
+	if len(dm.filtered) != 2 {
+		t.Fatalf("expected all skills after cycling back, got %d", len(dm.filtered))
+	}
+}
+
+func TestDeleteListModel_PlatformFilterComposesWithTextFilter(t *testing.T) {
+	skills := []model.Skill{
+		{Name: "alpha", Description: "shared", Platform: model.ClaudeCode, Scope: model.ScopeUser},
+		{Name: "beta", Description: "shared", Platform: model.Cursor, Scope: model.ScopeRepo},
+		{Name: "gamma", Description: "other", Platform: model.ClaudeCode, Scope: model.ScopeRepo},
+	}
+
+	m := NewDeleteListModel(skills)
+	m.platformIndex = 0
+	m.filter = "shared"
+	m.applyFilter()
+
+	if len(m.filtered) != 1 {
+		t.Fatalf("expected one skill after combined filters, got %d", len(m.filtered))
+	}
+	if m.filtered[0].Name != "alpha" {
+		t.Fatalf("expected alpha to remain after combined filters, got %s", m.filtered[0].Name)
+	}
+}
+
 func TestDeleteListModel_Toggle(t *testing.T) {
 	skills := []model.Skill{
 		{

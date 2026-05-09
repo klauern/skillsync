@@ -57,6 +57,8 @@ type promoteDemoteListKeyMap struct {
 	ToggleMove  key.Binding
 	Filter      key.Binding
 	ClearFlt    key.Binding
+	NextPlat    key.Binding
+	PrevPlat    key.Binding
 	Help        key.Binding
 	Quit        key.Binding
 	ScrollLeft  key.Binding
@@ -101,6 +103,14 @@ func defaultPromoteDemoteListKeyMap() promoteDemoteListKeyMap {
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "clear filter"),
 		),
+		NextPlat: key.NewBinding(
+			key.WithKeys("l"),
+			key.WithHelp("l", "next platform"),
+		),
+		PrevPlat: key.NewBinding(
+			key.WithKeys("shift+tab", "h"),
+			key.WithHelp("S-tab/h", "prev platform"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -122,51 +132,57 @@ func defaultPromoteDemoteListKeyMap() promoteDemoteListKeyMap {
 
 // PromoteDemoteListModel is the BubbleTea model for interactive skill promotion/demotion.
 type PromoteDemoteListModel struct {
-	table         table.Model
-	hScroll       horizontalTableState
-	skills        []model.Skill
-	filtered      []model.Skill
-	selected      map[string]bool // map of skill key to selected state
-	keys          promoteDemoteListKeyMap
-	result        PromoteDemoteListResult
-	filter        string
-	filtering     bool
-	showHelp      bool
-	confirmMode   bool
-	confirmAction PromoteDemoteAction
-	width         int
-	height        int
-	quitting      bool
-	removeSource  bool // move instead of copy
-	columnWidths  promoteDemoteColumnWidths
-	hOffset       int // horizontal column scroll offset (0 = show all, max = promoteDemoteMaxHOffset)
+	table           table.Model
+	hScroll         horizontalTableState
+	skills          []model.Skill
+	filtered        []model.Skill
+	selected        map[string]bool // map of skill key to selected state
+	keys            promoteDemoteListKeyMap
+	result          PromoteDemoteListResult
+	filter          string
+	filtering       bool
+	platformOptions []model.Platform
+	platformIndex   int // Index into platformOptions (-1 = all)
+	showHelp        bool
+	confirmMode     bool
+	confirmAction   PromoteDemoteAction
+	width           int
+	height          int
+	quitting        bool
+	removeSource    bool // move instead of copy
+	columnWidths    promoteDemoteColumnWidths
+	hOffset         int // horizontal column scroll offset (0 = show all, max = promoteDemoteMaxHOffset)
 }
 
 // Styles for the promote/demote list TUI.
 var promoteDemoteListStyles = struct {
-	Title       lipgloss.Style
-	Help        lipgloss.Style
-	Filter      lipgloss.Style
-	FilterInput lipgloss.Style
-	Confirm     lipgloss.Style
-	Status      lipgloss.Style
-	Info        lipgloss.Style
-	Checkbox    lipgloss.Style
-	Promote     lipgloss.Style
-	Demote      lipgloss.Style
-	Option      lipgloss.Style
+	Title          lipgloss.Style
+	Help           lipgloss.Style
+	Filter         lipgloss.Style
+	FilterInput    lipgloss.Style
+	Confirm        lipgloss.Style
+	Status         lipgloss.Style
+	Info           lipgloss.Style
+	Checkbox       lipgloss.Style
+	Promote        lipgloss.Style
+	Demote         lipgloss.Style
+	Option         lipgloss.Style
+	PlatformTab    lipgloss.Style
+	PlatformActive lipgloss.Style
 }{
-	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
-	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
-	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	Info:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	Promote:     lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Demote:      lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
-	Option:      lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
+	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Filter:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	FilterInput:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Confirm:        lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
+	Status:         lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Info:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Checkbox:       lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	Promote:        lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Demote:         lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+	Option:         lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
 }
 
 type promoteDemoteColumnWidths struct {
@@ -286,18 +302,32 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 		return strings.ToLower(movableSkills[i].Name) < strings.ToLower(movableSkills[j].Name)
 	})
 
+	platformSet := make(map[model.Platform]bool)
+	for _, s := range movableSkills {
+		platformSet[s.Platform] = true
+	}
+
+	var platformOptions []model.Platform
+	for _, platform := range model.AllPlatforms() {
+		if platformSet[platform] {
+			platformOptions = append(platformOptions, platform)
+		}
+	}
+
 	columns, columnWidths := promoteDemoteListColumns(0, movableSkills, 0)
 
 	// Initialize with no skills selected
 	selected := make(map[string]bool)
 
 	m := PromoteDemoteListModel{
-		skills:       movableSkills,
-		filtered:     movableSkills,
-		selected:     selected,
-		keys:         defaultPromoteDemoteListKeyMap(),
-		columnWidths: columnWidths,
-		hScroll:      newHorizontalTableState(columns),
+		skills:          movableSkills,
+		filtered:        movableSkills,
+		selected:        selected,
+		keys:            defaultPromoteDemoteListKeyMap(),
+		columnWidths:    columnWidths,
+		hScroll:         newHorizontalTableState(columns),
+		platformOptions: platformOptions,
+		platformIndex:   -1,
 	}
 
 	rows := m.skillsToRows(movableSkills)
@@ -431,13 +461,13 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Normal mode key handling
 		switch {
-		case msg.String() == "left" || msg.String() == "h":
+		case msg.String() == "left":
 			if m.hScroll.MoveLeft() {
 				m.refreshTable()
 			}
 			return m, nil
 
-		case msg.String() == "right" || msg.String() == "l":
+		case msg.String() == "right":
 			if m.hScroll.MoveRight(m.width) {
 				m.refreshTable()
 			}
@@ -458,6 +488,26 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.ClearFlt):
 			m.filter = ""
 			m.applyFilter()
+			return m, nil
+
+		case key.Matches(msg, m.keys.NextPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex++
+				if m.platformIndex >= len(m.platformOptions) {
+					m.platformIndex = -1
+				}
+				m.applyFilter()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.PrevPlat):
+			if len(m.platformOptions) > 0 {
+				m.platformIndex--
+				if m.platformIndex < -1 {
+					m.platformIndex = len(m.platformOptions) - 1
+				}
+				m.applyFilter()
+			}
 			return m, nil
 
 		case key.Matches(msg, m.keys.Toggle):
@@ -542,21 +592,34 @@ func (m *PromoteDemoteListModel) refreshTable() {
 }
 
 func (m *PromoteDemoteListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.skills
-	} else {
-		var filtered []model.Skill
+	filtered := m.skills
+
+	if m.platformIndex >= 0 && m.platformIndex < len(m.platformOptions) {
+		selectedPlatform := m.platformOptions[m.platformIndex]
+		var platformFiltered []model.Skill
+		for _, s := range filtered {
+			if s.Platform == selectedPlatform {
+				platformFiltered = append(platformFiltered, s)
+			}
+		}
+		filtered = platformFiltered
+	}
+
+	if m.filter != "" {
+		var textFiltered []model.Skill
 		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.skills {
+		for _, s := range filtered {
 			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
 				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
 				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
+				textFiltered = append(textFiltered, s)
 			}
 		}
-		m.filtered = filtered
+		filtered = textFiltered
 	}
+
+	m.filtered = filtered
 	m.refreshTable()
 }
 
@@ -627,6 +690,9 @@ func (m PromoteDemoteListModel) View() string {
 	b.WriteString(optionStr)
 	b.WriteString("\n\n")
 
+	b.WriteString(m.renderPlatformTabs())
+	b.WriteString("\n\n")
+
 	// Filter indicator
 	if m.filter != "" || m.filtering {
 		filterStr := promoteDemoteListStyles.Filter.Render("Filter: ")
@@ -674,7 +740,7 @@ func (m PromoteDemoteListModel) View() string {
 
 	status := fmt.Sprintf("%d selected (%d promotable, %d demotable) of %d",
 		selectedCount, promotableCount, demotableCount, len(m.filtered))
-	if m.filter != "" {
+	if m.filter != "" || m.platformIndex >= 0 {
 		status = fmt.Sprintf("%d selected (%d↑, %d↓), %d of %d shown (filtered)",
 			selectedCount, promotableCount, demotableCount, len(m.filtered), len(m.skills))
 	}
@@ -702,6 +768,7 @@ func (m PromoteDemoteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
 		"←/→ scroll cols",
+		"tab/S-tab platform",
 		"space toggle",
 		"a toggle all",
 		"p promote",
@@ -724,6 +791,10 @@ func (m PromoteDemoteListModel) renderFullHelp() string {
   G/End    Go to bottom
   ←/→      Scroll columns left/right
 
+Platform Filtering:
+  h/S-tab   Previous platform
+  l         Next platform
+
 Selection:
   Space/Tab  Toggle current skill
   a          Toggle all skills
@@ -742,6 +813,26 @@ General:
   ?        Toggle full help
   q        Quit without changes`
 	return promoteDemoteListStyles.Help.Render(help)
+}
+
+func (m PromoteDemoteListModel) renderPlatformTabs() string {
+	var tabs []string
+
+	if m.platformIndex == -1 {
+		tabs = append(tabs, promoteDemoteListStyles.PlatformActive.Render("[All]"))
+	} else {
+		tabs = append(tabs, promoteDemoteListStyles.PlatformTab.Render(" All "))
+	}
+
+	for i, platform := range m.platformOptions {
+		if i == m.platformIndex {
+			tabs = append(tabs, promoteDemoteListStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
+		} else {
+			tabs = append(tabs, promoteDemoteListStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
+		}
+	}
+
+	return strings.Join(tabs, "")
 }
 
 // Result returns the result of the user interaction.
