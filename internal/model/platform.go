@@ -86,6 +86,16 @@ func AllPlatforms() []Platform {
 	return []Platform{ClaudeCode, Cursor, Codex, PiAgent, Copilot, Gemini, PiDev}
 }
 
+// AllPlatformNames returns a comma-separated string of all supported platform names.
+func AllPlatformNames() string {
+	ps := AllPlatforms()
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = string(p)
+	}
+	return strings.Join(names, ", ")
+}
+
 // ParsePlatform converts a string to a Platform type.
 // Accepts both kebab-case (claude-code) and single-word (claudecode) formats.
 // Returns an error if the platform is not recognized.
