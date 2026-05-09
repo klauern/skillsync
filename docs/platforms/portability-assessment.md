@@ -1,11 +1,8 @@
-# Portability Assessment: Claude Code, Codex CLI, Pi.dev, and SkillSync
+# Portability Assessment: All 7 Platforms and SkillSync
 
-This note summarizes what is genuinely portable between Claude Code, Codex CLI,
-and Pi.dev, what is only partially portable, and where this repository still
-leaves gaps.
-
-Pi.dev is included here as a reference portability surface, not as a statement
-of implemented runtime support in SkillSync today.
+This note summarizes what is genuinely portable across Claude Code, Codex CLI,
+Cursor, Pi Agent, Copilot, Gemini CLI, and Pi.dev — what is only partially
+portable, and where this repository still leaves gaps.
 
 It is intentionally narrower than `docs/platforms/cross-platform-mapping.md`.
 The goal here is not to restate every file location, but to answer a practical
@@ -75,17 +72,17 @@ The rest of this note uses those labels deliberately:
 
 ## Current Repo Support Status
 
-This repository documents six platforms, but it does not implement them all at
-the same level.
+All 7 platforms have first-class parser, sync-source, and sync-target support.
 
 | Platform | Repo status | Current emphasis |
 |---|---|---|
 | Claude Code | Implemented | Parser + sync + portability baseline |
 | Cursor | Implemented | Parser + sync + Agent Skills/rules mapping |
 | Codex CLI | Implemented | Parser + sync for skills/instructions; deprecated prompts are compatibility metadata only |
-| Copilot | Reference-only | Mapping target and portability comparison |
-| Gemini CLI | Reference-only | Mapping target and portability comparison |
-| Pi.dev | Reference-only | Mapping target and portability comparison; first-pass sync boundary only |
+| Pi Agent | Implemented | Parser + sync; `.pi-agent/` and legacy search paths |
+| Copilot | Implemented | Parser + sync; copilot-instructions.md, prompts, instructions, agents |
+| Gemini CLI | Implemented | Parser + sync; GEMINI.md, skills, commands; extensions/hooks are non-portable |
+| Pi.dev | Implemented | Parser + sync; skills, prompts, instructions, SYSTEM.md layers |
 
 The machine-readable source of truth for this status table is
 `docs/platforms/portability-snapshot.yaml`.
