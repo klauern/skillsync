@@ -1,6 +1,7 @@
 package tiered
 
 import (
+	"os"
 	"testing"
 
 	"github.com/klauern/skillsync/internal/model"
@@ -78,6 +79,29 @@ func TestNewForPlatformWithDir_PiAgent(t *testing.T) {
 	p := NewForPlatformWithDir(model.PiAgent, workingDir)
 	if p == nil {
 		t.Fatal("NewForPlatformWithDir(PiAgent) returned nil parser")
+	}
+	if p.Platform() != model.PiAgent {
+		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiAgent)
+	}
+}
+
+// TestNewForPlatformWithDir_PiAgent_MalformedSettings verifies that a malformed
+// .pi/settings.json does not crash NewForPlatformWithDir — the error is logged
+// and the parser is returned with an empty search-path set.
+func TestNewForPlatformWithDir_PiAgent_MalformedSettings(t *testing.T) {
+	workingDir := t.TempDir()
+
+	piDir := workingDir + "/.pi"
+	if err := os.MkdirAll(piDir, 0o750); err != nil {
+		t.Fatalf("failed to create .pi dir: %v", err)
+	}
+	if err := os.WriteFile(piDir+"/settings.json", []byte("not valid json {{"), 0o600); err != nil {
+		t.Fatalf("failed to write malformed settings.json: %v", err)
+	}
+
+	p := NewForPlatformWithDir(model.PiAgent, workingDir)
+	if p == nil {
+		t.Fatal("NewForPlatformWithDir returned nil; expected graceful degradation")
 	}
 	if p.Platform() != model.PiAgent {
 		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiAgent)
