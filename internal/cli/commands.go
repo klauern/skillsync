@@ -251,7 +251,7 @@ func discoveryCommand() *cli.Command {
    skillsync discover --format json`,
 		Description: `Discover and list skills from all supported AI coding platforms.
 
-   Supported platforms: claude-code, cursor, codex, gemini, pi.dev
+   Supported platforms: claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev
 
    Plugin discovery: By default, skills from installed Claude Code plugins
    are included from ~/.skillsync/plugins/. Use --no-plugins to exclude them,
@@ -263,7 +263,7 @@ func discoveryCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, gemini, pi.dev)",
+				Usage:   "Filter by platform (claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev)",
 			},
 			&cli.StringFlag{
 				Name:    "scope",
@@ -772,6 +772,12 @@ func colorPlatform(platform string, width int) string {
 		return ui.Warning(formatted)
 	case "pi.dev":
 		return ui.Magenta(formatted)
+	case "copilot":
+		return ui.Blue(formatted)
+	case "gemini":
+		return ui.Bold(formatted)
+	case "pi-agent":
+		return ui.Dim(formatted)
 	default:
 		return formatted
 	}
@@ -866,7 +872,7 @@ func syncCommand() *cli.Command {
 		UsageText: "skillsync sync [options] <source> <target>",
 		Description: `Synchronize skills between AI coding platforms.
 
-   Supported platforms: claudecode, cursor, codex, pi.dev
+   Supported platforms: claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)
@@ -924,7 +930,7 @@ func deleteCommand() *cli.Command {
 		UsageText: "skillsync delete [options] <source> <target>",
 		Description: `Delete skills from the target platform that also exist in the source.
 
-   Supported platforms: claudecode, cursor, codex, pi.dev
+   Supported platforms: claude-code, cursor, codex, pi-agent, copilot, gemini, pi.dev
 
    Platform spec format: platform[:scope[,scope2,...]]
      - cursor           All scopes from cursor (source), user scope (target)

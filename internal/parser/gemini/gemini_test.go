@@ -117,3 +117,113 @@ func TestParser_Parse_WithSkillsRootInput(t *testing.T) {
 		t.Fatalf("Parse() returned %d skills, want 2", len(skills))
 	}
 }
+
+func TestParser_Parse_TOMLCommands(t *testing.T) {
+	tmpDir := t.TempDir()
+	commandsDir := filepath.Join(tmpDir, "commands")
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsDir, "review.toml"), []byte(`
+description = "Review code for quality"
+prompt = "Please review the following code: {{args}}"
+args = "<code>"
+`), 0o644); err != nil {
+		t.Fatalf("failed to write review.toml: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("Parse() returned %d skills, want 1", len(skills))
+	}
+	cmd := skills[0]
+	if cmd.Name != "review" {
+		t.Errorf("Name = %q, want %q", cmd.Name, "review")
+	}
+	if cmd.Trigger != "/review" {
+		t.Errorf("Trigger = %q, want %q", cmd.Trigger, "/review")
+	}
+	if cmd.Type != model.SkillTypePrompt {
+		t.Errorf("Type = %v, want SkillTypePrompt", cmd.Type)
+	}
+	if cmd.Metadata["type"] != "command" {
+		t.Errorf("Metadata[type] = %q, want %q", cmd.Metadata["type"], "command")
+	}
+}
+
+func TestParser_Parse_TOMLCommands_MalformedTOML(t *testing.T) {
+	tmpDir := t.TempDir()
+	commandsDir := filepath.Join(tmpDir, "commands")
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsDir, "bad.toml"), []byte("not valid toml [[["), 0o644); err != nil {
+		t.Fatalf("failed to write bad.toml: %v", err)
+	}
+	// Good command alongside the bad one
+	if err := os.WriteFile(filepath.Join(commandsDir, "good.toml"), []byte(`
+description = "Good command"
+prompt = "Do something good"
+`), 0o644); err != nil {
+		t.Fatalf("failed to write good.toml: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	// Malformed file is skipped; good one is parsed
+	if len(skills) != 1 {
+		t.Fatalf("Parse() returned %d skills, want 1 (malformed TOML should be skipped)", len(skills))
+	}
+	if skills[0].Name != "good" {
+		t.Errorf("expected good command, got %q", skills[0].Name)
+	}
+}
+
+func TestParser_Parse_TOMLAndSkillsMixed(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Skill file
+	skillsDir := filepath.Join(tmpDir, "skills", "refactor")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		t.Fatalf("failed to create skills dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsDir, "SKILL.md"), []byte("# Refactor"), 0o644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+	// TOML command
+	commandsDir := filepath.Join(tmpDir, "commands")
+	if err := os.MkdirAll(commandsDir, 0o755); err != nil {
+		t.Fatalf("failed to create commands dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsDir, "explain.toml"), []byte(`
+description = "Explain code"
+prompt = "Explain this: {{args}}"
+`), 0o644); err != nil {
+		t.Fatalf("failed to write explain.toml: %v", err)
+	}
+
+	p := New(tmpDir)
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 2 {
+		t.Fatalf("Parse() returned %d skills, want 2 (1 skill + 1 command)", len(skills))
+	}
+	byName := make(map[string]model.Skill, len(skills))
+	for _, s := range skills {
+		byName[s.Name] = s
+	}
+	if _, ok := byName["refactor"]; !ok {
+		t.Error("expected refactor skill")
+	}
+	if _, ok := byName["explain"]; !ok {
+		t.Error("expected explain command")
+	}
+}

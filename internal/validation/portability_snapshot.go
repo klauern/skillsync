@@ -43,9 +43,9 @@ var DefaultWantPlatformSupport = map[string]string{
 	"claude":  "implemented",
 	"cursor":  "implemented",
 	"codex":   "implemented",
-	"copilot": "reference-only",
-	"gemini":  "reference-only",
-	"pidev":   "reference-only",
+	"copilot": "implemented",
+	"gemini":  "implemented",
+	"pidev":   "implemented",
 }
 
 // DefaultWantPrecedence is the expected scope precedence per platform.
