@@ -1,11 +1,11 @@
 # SkillSync
 
-Synchronize AI coding skills across Claude Code, Cursor, and Codex with a
-single CLI.
+Synchronize AI coding skills across Claude Code, Cursor, Codex, PiAgent,
+Copilot, Gemini, and Pi.dev with a single CLI.
 
 ## Requirements
 
-- Go 1.25.4
+- Go 1.26.1
 - `just` (https://just.systems) for task running
 
 ## Build and Run
@@ -69,6 +69,10 @@ override them with colon-separated environment variables:
 - `SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS`
 - `SKILLSYNC_CURSOR_SKILLS_PATHS`
 - `SKILLSYNC_CODEX_SKILLS_PATHS`
+- `SKILLSYNC_PI_AGENT_SKILLS_PATHS`
+- `SKILLSYNC_COPILOT_SKILLS_PATHS`
+- `SKILLSYNC_GEMINI_SKILLS_PATHS`
+- `SKILLSYNC_PI_DEV_SKILLS_PATHS`
 
 By default, Claude Code discovery checks both `commands` and `skills` paths
 (`.claude/commands`, `.claude/skills`, `~/.claude/commands`, `~/.claude/skills`)
@@ -120,6 +124,10 @@ Legacy single-path overrides are still supported:
 - `SKILLSYNC_CLAUDE_CODE_PATH`
 - `SKILLSYNC_CURSOR_PATH`
 - `SKILLSYNC_CODEX_PATH`
+- `SKILLSYNC_PI_AGENT_PATH`
+- `SKILLSYNC_COPILOT_PATH`
+- `SKILLSYNC_GEMINI_PATH`
+- `SKILLSYNC_PI_DEV_PATH`
 
 Use `SKILLSYNC_HOME` to relocate the config directory.
 
@@ -131,6 +139,7 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 - Portability assessment: `docs/platforms/portability-assessment.md`
 - Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
 - Implemented platform support: Claude Code, Cursor, Codex, Pi Agent, Copilot, Gemini, Pi.dev
+- PiAgent reference: `docs/platforms/pi-agent.md`
 - Claude Code reference: `docs/platforms/claude.md`
 - Codex reference: `docs/platforms/codex.md`
 - Cursor reference: `docs/platforms/cursor.md`
