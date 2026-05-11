@@ -123,14 +123,10 @@ func defaultImportListKeyMap() importListKeyMap {
 
 // ImportListModel is the BubbleTea model for interactive skill import.
 type ImportListModel struct {
+	selectableListModel[model.Skill]
+
 	// File picker for source selection
 	filepicker filepicker.Model
-
-	// Skill selection table
-	table    table.Model
-	skills   []model.Skill
-	filtered []model.Skill
-	selected map[string]bool
 
 	// Destination options
 	targetPlatform model.Platform
@@ -145,8 +141,6 @@ type ImportListModel struct {
 	result     ImportListResult
 	phase      importPhase
 	sourcePath string
-	filter     string
-	filtering  bool
 	showHelp   bool
 	width      int
 	height     int
@@ -190,6 +184,31 @@ func importSkillKey(s model.Skill) string {
 	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
 }
 
+func importListColumns() []table.Column {
+	return []table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: 20},
+		{Title: "Platform", Width: 12},
+		{Title: "Description", Width: 30},
+		{Title: "Scope", Width: 10},
+	}
+}
+
+func importSkillRow(s model.Skill, selected bool) table.Row {
+	checkbox := "[ ]"
+	if selected {
+		checkbox = "[✓]"
+	}
+
+	return table.Row{
+		checkbox,
+		truncateTableValue(s.Name, 20),
+		truncateTableValue(string(s.Platform), 12),
+		truncateTableValue(s.Description, 30),
+		truncateTableValue(s.DisplayScope(), 10),
+	}
+}
+
 // NewImportListModel creates a new import list model.
 func NewImportListModel() ImportListModel {
 	// Initialize file picker
@@ -216,6 +235,7 @@ func NewImportListModel() ImportListModel {
 	}
 
 	return ImportListModel{
+		selectableListModel: newSelectableListModel(nil, false, importListColumns(), 15, importSkillKey, skillListFilterMatch, importSkillRow),
 		filepicker:     fp,
 		keys:           defaultImportListKeyMap(),
 		phase:          phaseFilePicker,
@@ -223,7 +243,6 @@ func NewImportListModel() ImportListModel {
 		scopes:         scopes,
 		targetPlatform: model.ClaudeCode, // Default to Claude Code
 		targetScope:    model.ScopeRepo,  // Default to repo scope
-		selected:       make(map[string]bool),
 	}
 }
 
@@ -362,28 +381,12 @@ func (m *ImportListModel) updateSkillSelection(msg tea.KeyMsg) (tea.Model, tea.C
 		m.applyFilter()
 		return *m, nil
 
-	case key.Matches(msg, m.keys.Toggle):
-		if len(m.filtered) > 0 {
-			skill := m.getSelectedSkill()
-			k := importSkillKey(skill)
-			m.selected[k] = !m.selected[k]
-			m.table.SetRows(m.skillsToRows(m.filtered))
-		}
-		return *m, nil
-
-	case key.Matches(msg, m.keys.ToggleAll):
-		selectedCount := 0
-		for _, s := range m.filtered {
-			if m.selected[importSkillKey(s)] {
-				selectedCount++
-			}
-		}
-		selectAll := selectedCount < len(m.filtered)/2+1
-		for _, s := range m.filtered {
-			m.selected[importSkillKey(s)] = selectAll
-		}
-		m.table.SetRows(m.skillsToRows(m.filtered))
-		return *m, nil
+		case key.Matches(msg, m.keys.Toggle):
+			m.toggleCurrentSelection()
+			return *m, nil
+		case key.Matches(msg, m.keys.ToggleAll):
+			m.toggleAllSelection()
+			return *m, nil
 
 	case key.Matches(msg, m.keys.Select):
 		if len(m.getSelectedSkills()) > 0 {
@@ -502,6 +505,7 @@ func (m *ImportListModel) loadSkillsFromPath(path string) error {
 	})
 
 	m.filtered = m.skills
+	m.selected = make(map[string]bool, len(m.skills))
 
 	// Select all skills by default
 	for _, s := range m.skills {
@@ -512,22 +516,7 @@ func (m *ImportListModel) loadSkillsFromPath(path string) error {
 }
 
 func (m *ImportListModel) initSkillTable() {
-	columns := []table.Column{
-		{Title: " ", Width: 3},
-		{Title: "Name", Width: 20},
-		{Title: "Platform", Width: 12},
-		{Title: "Description", Width: 30},
-		{Title: "Scope", Width: 10},
-	}
-
-	rows := m.skillsToRows(m.filtered)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
+	m.selectableListModel = newSelectableListModel(m.skills, true, importListColumns(), 15, importSkillKey, skillListFilterMatch, importSkillRow)
 
 	s := table.DefaultStyles()
 	s.Header = s.Header.
@@ -539,22 +528,7 @@ func (m *ImportListModel) initSkillTable() {
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
 		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
-}
-
-func (m ImportListModel) skillsToRows(skills []model.Skill) []table.Row {
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		checkbox := "[ ]"
-		if m.selected[importSkillKey(s)] {
-			checkbox = "[✓]"
-		}
-
-		rows[i] = table.Row{checkbox, truncateTableValue(s.Name, 20), truncateTableValue(string(s.Platform), 12), truncateTableValue(s.Description, 30), truncateTableValue(s.DisplayScope(), 10)}
-	}
-	return rows
+	m.table.SetStyles(s)
 }
 
 func (m *ImportListModel) applyFilter() {

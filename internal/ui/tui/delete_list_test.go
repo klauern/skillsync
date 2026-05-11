@@ -811,8 +811,8 @@ func TestDeleteListModel_SkillsToRows_WithCheckbox(t *testing.T) {
 
 	row := rows[0]
 	// First column should be checkbox
-	if row[0] != "[x]" {
-		t.Errorf("expected checkbox '[x]', got '%s'", row[0])
+	if row[0] != "[✓]" {
+		t.Errorf("expected checkbox '[✓]', got '%s'", row[0])
 	}
 	if row[1] != "test-skill" {
 		t.Errorf("expected name 'test-skill', got '%s'", row[1])

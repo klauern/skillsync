@@ -125,15 +125,10 @@ const (
 
 // DeleteListModel is the BubbleTea model for interactive skill deletion.
 type DeleteListModel struct {
-	table           table.Model
+	selectableListModel[model.Skill]
 	hScroll         horizontalTableState
-	skills          []model.Skill
-	filtered        []model.Skill
-	selected        map[string]bool // map of skill key to selected state
 	keys            deleteListKeyMap
 	result          DeleteListResult
-	filter          string
-	filtering       bool
 	platformOptions []model.Platform
 	platformIndex   int // Index into platformOptions (-1 = all)
 	showHelp        bool
@@ -306,13 +301,7 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 
 	columns, columnWidths := deleteListColumns(0, deletableSkills, 0)
 
-	// Initialize with no skills selected (deletion is opt-in)
-	selected := make(map[string]bool)
-
 	m := DeleteListModel{
-		skills:          deletableSkills,
-		filtered:        deletableSkills,
-		selected:        selected,
 		keys:            defaultDeleteListKeyMap(),
 		columnWidths:    columnWidths,
 		phase:           deleteListPhaseList,
@@ -321,14 +310,20 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		platformIndex:   -1,
 	}
 
-	rows := m.skillsToRows(deletableSkills)
+	m.selectableListModel = newSelectableListModel(deletableSkills, false, columns, 15, deleteSkillKey, skillListFilterMatch, func(s model.Skill, selected bool) table.Row {
+		checkbox := "[ ]"
+		if selected {
+			checkbox = "[✓]"
+		}
 
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
+		return table.Row{
+			checkbox,
+			truncateTableValue(s.Name, columnWidths.name),
+			truncateTableValue(string(s.Platform), columnWidths.platform),
+			truncateTableValue(s.DisplayScope(), columnWidths.scope),
+			truncateTableValue(s.Description, columnWidths.desc),
+		}
+	})
 
 	s := table.DefaultStyles()
 	s.Header = s.Header.
@@ -340,34 +335,9 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("52")).
 		Bold(false)
-	t.SetStyles(s)
+	m.table.SetStyles(s)
 
-	m.table = t
 	return m
-}
-
-func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		checkbox := "[ ]"
-		if m.selected[deleteSkillKey(s)] {
-			checkbox = "[x]"
-		}
-
-		row := table.Row{
-			checkbox,
-			truncateTableValue(s.Name, m.columnWidths.name),
-		}
-		if m.hOffset == 0 {
-			row = append(row, truncateTableValue(string(s.Platform), m.columnWidths.platform))
-		}
-		if m.hOffset <= 1 {
-			row = append(row, truncateTableValue(s.DisplayScope(), m.columnWidths.scope))
-		}
-		row = append(row, truncateTableValue(s.Description, m.columnWidths.desc))
-		rows[i] = row
-	}
-	return rows
 }
 
 func (m *DeleteListModel) shiftHOffset(delta int) {
@@ -542,27 +512,11 @@ func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Toggle):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.selected[deleteSkillKey(skill)] = !m.selected[deleteSkillKey(skill)]
-				m.refreshTable()
-			}
+			m.toggleCurrentSelection()
 			return m, nil
 
 		case key.Matches(msg, m.keys.ToggleAll):
-			// Count how many are currently selected
-			selectedCount := 0
-			for _, s := range m.filtered {
-				if m.selected[deleteSkillKey(s)] {
-					selectedCount++
-				}
-			}
-			// If all or most are selected, deselect all; otherwise select all
-			selectAll := selectedCount < len(m.filtered)/2+1
-			for _, s := range m.filtered {
-				m.selected[deleteSkillKey(s)] = selectAll
-			}
-			m.refreshTable()
+			m.toggleAllSelection()
 			return m, nil
 
 		case key.Matches(msg, m.keys.View):
@@ -657,25 +611,6 @@ func (m *DeleteListModel) applyFilter() {
 	m.refreshTable()
 }
 
-func (m DeleteListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
-func (m DeleteListModel) getSelectedSkills() []model.Skill {
-	var selected []model.Skill
-	for _, s := range m.skills {
-		if m.selected[deleteSkillKey(s)] {
-			selected = append(selected, s)
-		}
-	}
-	return selected
-}
-
-// View implements tea.Model.
 func (m DeleteListModel) View() string {
 	if m.quitting {
 		return ""

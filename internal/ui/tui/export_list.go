@@ -110,14 +110,9 @@ func defaultExportListKeyMap() exportListKeyMap {
 
 // ExportListModel is the BubbleTea model for interactive export skill selection.
 type ExportListModel struct {
-	table           table.Model
-	skills          []model.Skill
-	filtered        []model.Skill
-	selected        map[string]bool // map of skill name+platform to selected state
+	selectableListModel[model.Skill]
 	keys            exportListKeyMap
 	result          ExportListResult
-	filter          string
-	filtering       bool
 	platformOptions []model.Platform
 	platformIndex   int // Index into platformOptions (-1 = all)
 	showHelp        bool
@@ -193,16 +188,7 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		}
 	}
 
-	// Initialize all skills as selected by default
-	selected := make(map[string]bool)
-	for _, s := range skills {
-		selected[skillKey(s)] = true
-	}
-
 	m := ExportListModel{
-		skills:          skills,
-		filtered:        skills,
-		selected:        selected,
 		keys:            defaultExportListKeyMap(),
 		format:          export.FormatJSON,
 		includeMetadata: true,
@@ -211,14 +197,19 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		platformIndex:   -1,
 	}
 
-	rows := m.skillsToRows(skills)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
+	m.selectableListModel = newSelectableListModel(skills, true, columns, 15, skillKey, skillListFilterMatch, func(s model.Skill, selected bool) table.Row {
+		checkbox := "[ ]"
+		if selected {
+			checkbox = "[✓]"
+		}
+		return table.Row{
+			checkbox,
+			truncateTableValue(s.Name, 25),
+			truncateTableValue(string(s.Platform), 12),
+			truncateTableValue(s.DisplayScope(), 10),
+			truncateTableValue(s.Description, 40),
+		}
+	})
 
 	s := table.DefaultStyles()
 	s.Header = s.Header.
@@ -230,29 +221,9 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 		Foreground(lipgloss.Color("229")).
 		Background(lipgloss.Color("57")).
 		Bold(false)
-	t.SetStyles(s)
+	m.table.SetStyles(s)
 
-	m.table = t
 	return m
-}
-
-func (m ExportListModel) skillsToRows(skills []model.Skill) []table.Row {
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		checkbox := "[ ]"
-		if m.selected[skillKey(s)] {
-			checkbox = "[✓]"
-		}
-
-		rows[i] = table.Row{
-			checkbox,
-			truncateTableValue(s.Name, 25),
-			truncateTableValue(string(s.Platform), 12),
-			truncateTableValue(s.DisplayScope(), 10),
-			truncateTableValue(s.Description, 40),
-		}
-	}
-	return rows
 }
 
 // Init implements tea.Model.
@@ -361,27 +332,11 @@ func (m ExportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Toggle):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.selected[skillKey(skill)] = !m.selected[skillKey(skill)]
-				m.table.SetRows(m.skillsToRows(m.filtered))
-			}
+			m.toggleCurrentSelection()
 			return m, nil
 
 		case key.Matches(msg, m.keys.ToggleAll):
-			// Count how many are currently selected
-			selectedCount := 0
-			for _, s := range m.filtered {
-				if m.selected[skillKey(s)] {
-					selectedCount++
-				}
-			}
-			// If all or most are selected, deselect all; otherwise select all
-			selectAll := selectedCount < len(m.filtered)/2+1
-			for _, s := range m.filtered {
-				m.selected[skillKey(s)] = selectAll
-			}
-			m.table.SetRows(m.skillsToRows(m.filtered))
+			m.toggleAllSelection()
 			return m, nil
 
 		case key.Matches(msg, m.keys.Format):
@@ -442,28 +397,9 @@ func (m *ExportListModel) applyFilter() {
 	}
 
 	m.filtered = filtered
-	m.table.SetRows(m.skillsToRows(m.filtered))
+	m.refreshTable()
 }
 
-func (m ExportListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
-func (m ExportListModel) getSelectedSkills() []model.Skill {
-	var selected []model.Skill
-	for _, s := range m.skills {
-		if m.selected[skillKey(s)] {
-			selected = append(selected, s)
-		}
-	}
-	return selected
-}
-
-// View implements tea.Model.
 func (m ExportListModel) View() string {
 	if m.quitting {
 		return ""
