@@ -45,6 +45,27 @@ digging into the full mapping details below.
 | Lifecycle hook events | Non-portable | Runtime boundaries such as `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, and `Stop` are control-plane behavior, not shared file-backed content. |
 | Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
 
+## Gemini-only Surfaces (Non-Portable)
+
+Gemini has several runtime-owned surfaces that SkillSync treats as non-portable.
+They are useful to know about when reading sync behavior, but they are not
+round-tripped as first-class targets because no other platform exposes the same
+file-backed model:
+
+- `hooks/hooks.json` and extension hooks — Gemini extension-level hook wiring
+  is runtime-owned, not a shared sync artifact.
+- `mcpServers` — Gemini's MCP server configuration lives in workspace settings
+  and does not map cleanly to other platforms' config surfaces.
+- Subagents — Gemini subagent definitions are Gemini-specific runtime assets,
+  not a shared agent file format.
+- Themes — editor/theme state belongs to the Gemini runtime and is not synced
+  across platforms.
+- Package install state — installed extensions/packages are environment state,
+  not portable content.
+
+This matches the portability snapshot: portable narrative content can travel,
+but Gemini's extension/runtime surfaces stay local to the Gemini environment.
+
 ## Artifact Type Equivalences
 
 Detailed mapping of which artifact types serve the same purpose across platforms.
