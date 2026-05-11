@@ -192,7 +192,7 @@ skill-only by default for safety.
 skillsync discover --type prompt
 
 # Sync both skills and prompts
-skillsync sync --include-prompts claude-code codex
+skillsync sync --type skill,prompt claude-code codex
 
 # Sync prompts only
 skillsync sync --type prompt claude-code cursor

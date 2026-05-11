@@ -1223,7 +1223,7 @@ argument-hint: "<path>"
 Review this code.`)
 
 	codexFixture := h.CodexFixture()
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "--include-prompts", "claudecode", "codex")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "--type", "skill,prompt", "claudecode", "codex")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "lossy mapping")

@@ -19,6 +19,7 @@ func TestSyncCopilotToCodex(t *testing.T) {
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "--include-prompts", "copilot", "codex")
 
 	e2e.AssertSuccess(t, result)
+	e2e.AssertOutputContains(t, result, "--include-prompts is deprecated; use --type skill,prompt instead")
 	e2e.AssertOutputContains(t, result, "Created")
 }
 

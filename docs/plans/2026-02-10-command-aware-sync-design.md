@@ -74,7 +74,7 @@ Add type-scoped controls to `sync` and `delete`:
 
 - New flags:
   - `--type` / `-t`: `skill`, `prompt`, `all` (comma-separated allowed)
-  - `--include-prompts` (alias for `--type skill,prompt`)
+  - `--include-prompts` (deprecated compatibility alias for `--type skill,prompt`)
 - Default for `sync` and `delete`: `--type skill`
   - This is the explicit guardrail for transport-layer prompt sync being opt-in.
 
@@ -181,6 +181,6 @@ Warnings must include source path and target artifact path.
   - This design defines model semantics and precedence.
   - `docs/architecture.md` updated with transport-layer prompt support.
 - AC2 (CLI behavior):
-  - `sync/delete --type` and `--include-prompts` behavior specified.
+  - `sync/delete --type` and the deprecated `--include-prompts` compatibility path are specified.
 - AC3 (compat/migration):
   - Skills-only default + migration policy + lossy-warning strategy defined.

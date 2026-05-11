@@ -411,12 +411,16 @@ func parseTypeFilter(typeStr string) ([]model.SkillType, error) {
 }
 
 // resolveSyncTypeFilter resolves sync/delete type filtering policy:
-// 1. CLI --type/--include-prompts overrides config
-// 2. sync.include_types config
+// 1. CLI --type overrides config
+// 2. --include-prompts is a deprecated compatibility alias for --type skill,prompt
+// 3. sync.include_types config
 // 3. default: skill only
 func resolveSyncTypeFilter(cmd *cli.Command) ([]model.SkillType, error) {
 	typeStr := cmd.String("type")
 	includePrompts := cmd.Bool("include-prompts")
+	if includePrompts {
+		fmt.Println("--include-prompts is deprecated; use --type skill,prompt instead")
+	}
 
 	typeFilter, err := parseTypeFilter(typeStr)
 	if err != nil {
@@ -856,7 +860,7 @@ func syncFlags() []cli.Flag {
 		},
 		&cli.BoolFlag{
 			Name:  "include-prompts",
-			Usage: "Include prompt/command artifacts (equivalent to --type skill,prompt)",
+			Usage: "Deprecated compatibility alias for --type skill,prompt",
 		},
 		&cli.BoolFlag{
 			Name:  "delete",
@@ -890,8 +894,8 @@ func syncCommand() *cli.Command {
 
    Artifact Types:
      By default, sync only includes skill artifacts.
-     Use --include-prompts or --type prompt (or skill,prompt) to include
-     command/prompt artifacts.
+     Use --type skill,prompt (preferred) or --include-prompts (deprecated
+     compatibility alias) to include command/prompt artifacts.
 
    Strategies:
      overwrite   - Replace target skills unconditionally (default)
@@ -910,7 +914,7 @@ func syncCommand() *cli.Command {
      skillsync sync --strategy=skip cursor codex
      skillsync sync --include-plugins claudecode cursor  # Include plugin skills
      skillsync sync claudecode:plugin cursor      # Sync only plugin skills
-     skillsync sync --include-prompts claudecode codex   # Include prompts/commands
+     skillsync sync --type skill,prompt claudecode codex # Include prompts/commands
      skillsync sync --type prompt claudecode codex       # Prompts only
      skillsync sync --delete cursor claudecode          # Sync and remove orphaned skills from target
 
@@ -948,8 +952,8 @@ func deleteCommand() *cli.Command {
 
    Artifact Types:
      By default, delete only includes skill artifacts.
-     Use --include-prompts or --type prompt (or skill,prompt) to include
-     command/prompt artifacts.
+     Use --type skill,prompt (preferred) or --include-prompts (deprecated
+     compatibility alias) to include command/prompt artifacts.
 
    Flags:
      Delete supports the same flags as sync (including --dry-run).

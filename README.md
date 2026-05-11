@@ -85,8 +85,8 @@ SkillSync models both traditional skills and prompt-like transport artifacts.
 - Discovery includes both artifact types. Filter with `discover --type`.
 - Sync/delete default to `skill` artifacts only (safe default).
 - Include prompt artifacts explicitly with:
-  - `--include-prompts`
-  - `--type prompt` (or `--type skill,prompt`)
+  - `--type skill,prompt` (preferred)
+  - `--include-prompts` (deprecated compatibility alias)
 
 Examples:
 
@@ -95,7 +95,7 @@ Examples:
 skillsync discover --platform claudecode --type prompt
 
 # Sync Claude prompt artifacts to Codex (opt-in)
-skillsync sync --include-prompts claudecode codex
+skillsync sync --type skill,prompt claudecode codex
 
 # Sync prompt artifacts only from Claude to Cursor
 skillsync sync --type prompt claudecode cursor
