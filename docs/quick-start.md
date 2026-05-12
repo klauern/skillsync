@@ -322,7 +322,7 @@ If conflicts are detected, they're marked with conflict markers:
 ```
 [<<<<<<< SOURCE]
 [source version]
-=======
+[=======]
 [target version]
 [>>>>>>> TARGET]
 ```

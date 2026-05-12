@@ -45,7 +45,7 @@ platform_support:
       - agents
     notes:
       - First-class parser and sync support in SkillSync.
-      - Supports copilot-instructions.md, .github/prompts/*.prompt.md, .github/instructions/*.md, and .github/agents/*.md.
+      - Supports copilot-instructions.md, .github/prompts/*.prompt.md, .github/instructions/*.md, and .github/agents/*.agent.md.
   gemini:
     status: implemented
     artifact_surfaces:
@@ -55,7 +55,7 @@ platform_support:
       - agents
     notes:
       - First-class parser and sync support in SkillSync.
-      - Parses GEMINI.md, skills/*.md, and commands/*.toml files.
+      - Parses GEMINI.md, skills/*/SKILL.md, and commands/*.toml files.
       - Gemini extensions/hooks/subagents/themes have no cross-platform equivalent and are not sync targets.
   pidev:
     status: implemented

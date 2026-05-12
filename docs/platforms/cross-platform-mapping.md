@@ -1,10 +1,9 @@
 # Cross-Platform Mapping
 
-> Unified reference for concept mapping and conversion rules across all 6 documented platforms.
+> Unified reference for concept mapping and conversion rules across all 7 documented platforms.
 >
-> SkillSync currently implements first-class parsing and sync for Claude Code, Cursor, and Codex.
-> Copilot, Gemini CLI, and Pi.dev are documented here as reference mappings and portability targets,
-> not as first-class runtime support in the current CLI.
+> SkillSync implements first-class parsing and sync for all 7 platforms: Claude Code, Cursor, Codex,
+> Copilot, Gemini CLI, Pi Agent, and Pi.dev.
 
 ## Support Status
 
@@ -13,9 +12,10 @@
 | Claude Code | Implemented | First-class parser and sync target |
 | Cursor | Implemented | First-class parser and sync target |
 | Codex | Implemented | First-class parser and sync target; deprecated prompts remain compatibility-only |
-| Copilot | Reference-only | Documented for concept mapping and portability analysis |
-| Gemini CLI | Reference-only | Documented for concept mapping and portability analysis |
-| Pi.dev | Reference-only | Documented for concept mapping and portability analysis |
+| Copilot | Implemented | First-class parser and sync target |
+| Gemini CLI | Implemented | First-class parser and sync target |
+| Pi Agent | Implemented | First-class parser and sync target |
+| Pi.dev | Implemented | First-class parser and sync target |
 
 ## Concept Mapping
 
