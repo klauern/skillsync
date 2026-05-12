@@ -1463,31 +1463,31 @@ func outputSyncResultsJSON(result *sync.Result) error {
 }
 
 type syncResultJSON struct {
-	Source   model.Platform       `json:"source"`
-	Target   model.Platform       `json:"target"`
-	Strategy sync.Strategy        `json:"strategy"`
-	DryRun   bool                 `json:"dry_run"`
-	Summary  syncSummaryJSON      `json:"summary"`
+	Source   model.Platform        `json:"source"`
+	Target   model.Platform        `json:"target"`
+	Strategy sync.Strategy         `json:"strategy"`
+	DryRun   bool                  `json:"dry_run"`
+	Summary  syncSummaryJSON       `json:"summary"`
 	Skills   []syncSkillResultJSON `json:"skills"`
 }
 
 type syncSummaryJSON struct {
-	Created  int `json:"created"`
-	Updated  int `json:"updated"`
-	Merged   int `json:"merged"`
-	Deleted  int `json:"deleted"`
-	Skipped  int `json:"skipped"`
+	Created   int `json:"created"`
+	Updated   int `json:"updated"`
+	Merged    int `json:"merged"`
+	Deleted   int `json:"deleted"`
+	Skipped   int `json:"skipped"`
 	Conflicts int `json:"conflicts"`
-	Failed   int `json:"failed"`
+	Failed    int `json:"failed"`
 }
 
 type syncSkillResultJSON struct {
-	Skill               model.Skill  `json:"skill"`
-	Action              sync.Action  `json:"action"`
-	TargetPath          string       `json:"target_path,omitempty"`
-	Message             string       `json:"message,omitempty"`
-	Error               string       `json:"error,omitempty"`
-	PortabilityWarnings []string     `json:"portability_warnings,omitempty"`
+	Skill               model.Skill    `json:"skill"`
+	Action              sync.Action    `json:"action"`
+	TargetPath          string         `json:"target_path,omitempty"`
+	Message             string         `json:"message,omitempty"`
+	Error               string         `json:"error,omitempty"`
+	PortabilityWarnings []string       `json:"portability_warnings,omitempty"`
 	Conflict            *sync.Conflict `json:"conflict,omitempty"`
 }
 
@@ -1498,13 +1498,13 @@ func buildSyncResultJSON(result *sync.Result) syncResultJSON {
 		Strategy: result.Strategy,
 		DryRun:   result.DryRun,
 		Summary: syncSummaryJSON{
-			Created:  len(result.Created()),
-			Updated:  len(result.Updated()),
-			Merged:   len(result.Merged()),
-			Deleted:  len(result.Deleted()),
-			Skipped:  len(result.Skipped()),
+			Created:   len(result.Created()),
+			Updated:   len(result.Updated()),
+			Merged:    len(result.Merged()),
+			Deleted:   len(result.Deleted()),
+			Skipped:   len(result.Skipped()),
 			Conflicts: len(result.Conflicts()),
-			Failed:   len(result.Failed()),
+			Failed:    len(result.Failed()),
 		},
 		Skills: make([]syncSkillResultJSON, 0, len(result.Skills)),
 	}
@@ -1753,8 +1753,6 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 // For PiAgent, discovered PiAgent search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
 // for backward compatibility. If the platform is unsupported or discovery fails, an error is returned. The second return value is the
 // discovered repository root (may be empty).
-//
-//nolint:gocyclo // intentional platform dispatch — each case is a distinct platform, refactoring would obscure intent
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -1762,97 +1760,96 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	}
 	repoRoot := util.GetRepoRoot(cwd)
 
-	var rawPaths []string
-	switch platform {
-	case model.ClaudeCode:
-		rawPaths = cfg.Platforms.ClaudeCode.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.ClaudeCode.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.ClaudeCode.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Cursor:
-		rawPaths = cfg.Platforms.Cursor.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Cursor.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Cursor.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Codex:
-		rawPaths = cfg.Platforms.Codex.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.PiAgent:
-		rawPaths = cfg.Platforms.PiAgent.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.PiAgent.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.PiAgent.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Copilot:
-		rawPaths = cfg.Platforms.Copilot.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Copilot.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Copilot.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Gemini:
-		rawPaths = cfg.Platforms.Gemini.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Gemini.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Gemini.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.PiDev:
-		rawPaths = cfg.Platforms.PiDev.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.PiDev.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.PiDev.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	default:
-		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
+	rawPaths, err := platformRawSkillsPaths(cfg, platform)
+	if err != nil {
+		return nil, repoRoot, err
 	}
 
 	if platform == model.PiAgent {
-		discoveredPaths, err := piagent.DiscoverSearchPaths(cwd)
-		if err != nil {
-			return nil, repoRoot, err
-		}
-
-		paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))
-		seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
-		for _, sp := range discoveredPaths {
-			if !seen[sp.Path] {
-				paths = append(paths, sp)
-				seen[sp.Path] = true
-			}
-		}
-
-		for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
-			if !seen[p] {
-				paths = append(paths, util.ScopedPath{
-					Path:  p,
-					Scope: inferScopeForPath(p, repoRoot),
-				})
-				seen[p] = true
-			}
-		}
-
-		return paths, repoRoot, nil
+		return piAgentScopedPaths(cwd, repoRoot, rawPaths)
 	}
 
 	paths := scopedPathsFromStrings(resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot)
-
-	// Backward compatibility: older config files may only include .claude/skills
-	// paths and omit .claude/commands paths. Always include command paths for
-	// Claude Code so prompt artifacts can be discovered when requested.
 	if platform == model.ClaudeCode {
-		commandPaths := resolveSkillsPaths([]string{".claude/commands", "~/.claude/commands"}, cwd, repoRoot)
-		seen := make(map[string]bool, len(paths))
-		for _, p := range paths {
-			seen[p.Path] = true
+		paths = appendClaudeCommandPaths(paths, cwd, repoRoot)
+	}
+
+	return paths, repoRoot, nil
+}
+
+//nolint:staticcheck // backward compatibility with deprecated SkillsPath fields
+func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, error) {
+	switch platform {
+	case model.ClaudeCode:
+		return skillsPathsOrLegacy(cfg.Platforms.ClaudeCode.SkillsPaths, cfg.Platforms.ClaudeCode.SkillsPath), nil
+	case model.Cursor:
+		return skillsPathsOrLegacy(cfg.Platforms.Cursor.SkillsPaths, cfg.Platforms.Cursor.SkillsPath), nil
+	case model.Codex:
+		return skillsPathsOrLegacy(cfg.Platforms.Codex.SkillsPaths, cfg.Platforms.Codex.SkillsPath), nil
+	case model.PiAgent:
+		return skillsPathsOrLegacy(cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.PiAgent.SkillsPath), nil
+	case model.Copilot:
+		return skillsPathsOrLegacy(cfg.Platforms.Copilot.SkillsPaths, cfg.Platforms.Copilot.SkillsPath), nil
+	case model.Gemini:
+		return skillsPathsOrLegacy(cfg.Platforms.Gemini.SkillsPaths, cfg.Platforms.Gemini.SkillsPath), nil
+	case model.PiDev:
+		return skillsPathsOrLegacy(cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.PiDev.SkillsPath), nil
+	default:
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+}
+
+//nolint:staticcheck // backward compatibility with deprecated SkillsPath fields
+func skillsPathsOrLegacy(paths []string, legacyPath string) []string {
+	if len(paths) == 0 && legacyPath != "" {
+		return []string{legacyPath}
+	}
+	return paths
+}
+
+func piAgentScopedPaths(cwd, repoRoot string, rawPaths []string) ([]util.ScopedPath, string, error) {
+	discoveredPaths, err := piagent.DiscoverSearchPaths(cwd)
+	if err != nil {
+		return nil, repoRoot, err
+	}
+
+	paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))
+	seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
+	for _, sp := range discoveredPaths {
+		if !seen[sp.Path] {
+			paths = append(paths, sp)
+			seen[sp.Path] = true
 		}
-		for _, p := range commandPaths {
-			if !seen[p] {
-				paths = append(paths, util.ScopedPath{
-					Path:  p,
-					Scope: inferScopeForPath(p, repoRoot),
-				})
-			}
+	}
+
+	for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
+		if !seen[p] {
+			paths = append(paths, util.ScopedPath{
+				Path:  p,
+				Scope: inferScopeForPath(p, repoRoot),
+			})
+			seen[p] = true
 		}
 	}
 
 	return paths, repoRoot, nil
+}
+
+func appendClaudeCommandPaths(paths []util.ScopedPath, cwd, repoRoot string) []util.ScopedPath {
+	commandPaths := resolveSkillsPaths([]string{".claude/commands", "~/.claude/commands"}, cwd, repoRoot)
+	seen := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		seen[p.Path] = true
+	}
+	for _, p := range commandPaths {
+		if !seen[p] {
+			paths = append(paths, util.ScopedPath{
+				Path:  p,
+				Scope: inferScopeForPath(p, repoRoot),
+			})
+		}
+	}
+	return paths
 }
 
 func resolveSkillsPaths(rawPaths []string, cwd, repoRoot string) []string {

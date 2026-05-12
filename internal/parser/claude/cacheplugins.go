@@ -191,8 +191,6 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 }
 
 // parseSkillFile parses a single SKILL.md file with plugin metadata.
-//
-//nolint:gocyclo // handles all Claude skill/command field combinations in one pass
 func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexEntry) (model.Skill, error) {
 	// #nosec G304 - filePath is from trusted plugin index
 	content, err := os.ReadFile(filePath)
@@ -200,128 +198,17 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 		return model.Skill{}, fmt.Errorf("failed to read file %q: %w", filePath, err)
 	}
 
-	// Split frontmatter from content
 	result := parser.SplitFrontmatter(content)
-
-	// Extract metadata from frontmatter
-	var name, description string
-	var tools []string
-	metadata := make(map[string]string)
-
-	if result.HasFrontmatter {
-		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
-		if err != nil {
-			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
-		}
-
-		// Extract name
-		if nameVal, ok := fm["name"]; ok {
-			if nameStr, ok := nameVal.(string); ok {
-				name = nameStr
-			}
-		}
-
-		// Extract description
-		if descVal, ok := fm["description"]; ok {
-			if descStr, ok := descVal.(string); ok {
-				description = descStr
-			}
-		}
-
-		// Extract tools array — command files use "allowed-tools", skills use "tools".
-		for _, toolsKey := range []string{"tools", "allowed-tools"} {
-			if toolsVal, ok := fm[toolsKey]; ok {
-				switch v := toolsVal.(type) {
-				case []any:
-					tools = make([]string, 0, len(v))
-					for _, tool := range v {
-						if toolStr, ok := tool.(string); ok {
-							tools = append(tools, toolStr)
-						}
-					}
-				case string:
-					for _, part := range strings.Split(v, ",") {
-						if t := strings.TrimSpace(part); t != "" {
-							tools = append(tools, t)
-						}
-					}
-				}
-				if len(tools) > 0 {
-					break
-				}
-			}
-		}
-
-		// Store remaining fields in metadata
-		for key, val := range fm {
-			if key != "name" && key != "description" && key != "tools" && key != "allowed-tools" {
-				if strVal, ok := val.(string); ok {
-					metadata[key] = strVal
-				} else {
-					metadata[key] = fmt.Sprintf("%v", val)
-				}
-			}
-		}
+	fields, err := extractCachePluginFields(filePath, result, entry)
+	if err != nil {
+		return model.Skill{}, err
 	}
 
-	// Detect whether this file is a Claude command (lives inside a commands/ directory).
-	isCommand := parser.IsCommandFile(filePath)
-
-	// Derive name from filename (for commands) or parent directory (for SKILL.md files).
-	if name == "" {
-		if isCommand {
-			base := filepath.Base(filePath)
-			name = base[:len(base)-len(filepath.Ext(base))]
-		} else {
-			name = filepath.Base(filepath.Dir(filePath))
-		}
-	}
-
-	// Validate skill name, falling back to directory name for non-conforming plugin skills.
-	if err := parser.ValidateSkillName(name); err != nil {
-		fallback := filepath.Base(filepath.Dir(filePath))
-		if fallback != name {
-			if fallbackErr := parser.ValidateSkillName(fallback); fallbackErr == nil {
-				name = fallback
-			} else {
-				return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
-			}
-		} else {
-			return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", name, filePath, err)
-		}
-	}
-
-	// Add plugin metadata
-	metadata["plugin"] = entry.PluginName
-	metadata["marketplace"] = entry.Marketplace
-	if entry.Version != "" {
-		metadata["plugin_version"] = entry.Version
-	}
-	if entry.Scope != "" {
-		metadata["install_scope"] = entry.Scope
-	}
-	metadata["source"] = "plugin-cache"
-
-	// Get file modification time
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return model.Skill{}, fmt.Errorf("failed to stat file %q: %w", filePath, err)
 	}
 
-	// Normalize content
-	normalizedContent := parser.NormalizeContent(result.Content)
-
-	// For command files: default to prompt type and derive slash trigger from filename.
-	skillType := model.SkillTypeSkill
-	var trigger string
-	if isCommand {
-		skillType = model.SkillTypePrompt
-		base := filepath.Base(filePath)
-		stem := base[:len(base)-len(filepath.Ext(base))]
-		trigger = "/" + stem
-	}
-
-	// Create PluginInfo for this skill
 	pluginInfo := &model.PluginInfo{
 		PluginName:   entry.PluginKey,
 		Marketplace:  entry.Marketplace,
@@ -332,19 +219,148 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 	}
 
 	return model.Skill{
-		Name:        name,
-		Description: description,
+		Name:        fields.name,
+		Description: fields.description,
 		Platform:    model.ClaudeCode,
 		Path:        filePath,
-		Tools:       tools,
-		Metadata:    metadata,
-		Content:     normalizedContent,
+		Tools:       fields.tools,
+		Metadata:    fields.metadata,
+		Content:     parser.NormalizeContent(result.Content),
 		ModifiedAt:  fileInfo.ModTime(),
 		Scope:       model.ScopePlugin,
 		PluginInfo:  pluginInfo,
-		Type:        skillType,
-		Trigger:     trigger,
+		Type:        fields.skillType,
+		Trigger:     fields.trigger,
 	}, nil
+}
+
+type cachePluginFields struct {
+	name        string
+	description string
+	tools       []string
+	metadata    map[string]string
+	skillType   model.SkillType
+	trigger     string
+}
+
+func extractCachePluginFields(filePath string, result parser.FrontmatterResult, entry *PluginIndexEntry) (cachePluginFields, error) {
+	fields := cachePluginFields{
+		metadata:  make(map[string]string),
+		skillType: model.SkillTypeSkill,
+	}
+
+	if result.HasFrontmatter {
+		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
+		if err != nil {
+			return cachePluginFields{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
+		}
+
+		fields.name = stringFrontmatterValue(fm, "name")
+		fields.description = stringFrontmatterValue(fm, "description")
+		fields.tools = frontmatterTools(fm)
+		fields.metadata = stringFrontmatterMetadata(fm)
+	}
+
+	isCommand := parser.IsCommandFile(filePath)
+	fields.name = cachePluginName(filePath, isCommand, fields.name)
+
+	if err := parser.ValidateSkillName(fields.name); err != nil {
+		fallback := filepath.Base(filepath.Dir(filePath))
+		if fallback != fields.name {
+			if fallbackErr := parser.ValidateSkillName(fallback); fallbackErr == nil {
+				fields.name = fallback
+			} else {
+				return cachePluginFields{}, fmt.Errorf("invalid skill name %q in %q: %w", fields.name, filePath, err)
+			}
+		} else {
+			return cachePluginFields{}, fmt.Errorf("invalid skill name %q in %q: %w", fields.name, filePath, err)
+		}
+	}
+
+	fields.metadata["plugin"] = entry.PluginName
+	fields.metadata["marketplace"] = entry.Marketplace
+	if entry.Version != "" {
+		fields.metadata["plugin_version"] = entry.Version
+	}
+	if entry.Scope != "" {
+		fields.metadata["install_scope"] = entry.Scope
+	}
+	fields.metadata["source"] = "plugin-cache"
+
+	if isCommand {
+		fields.skillType = model.SkillTypePrompt
+		fields.trigger = "/" + strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	}
+
+	return fields, nil
+}
+
+func frontmatterTools(fm map[string]any) []string {
+	for _, toolsKey := range []string{"tools", "allowed-tools"} {
+		tools := parseToolList(fm[toolsKey])
+		if len(tools) > 0 {
+			return tools
+		}
+	}
+	return nil
+}
+
+func parseToolList(value any) []string {
+	switch v := value.(type) {
+	case []any:
+		tools := make([]string, 0, len(v))
+		for _, tool := range v {
+			if toolStr, ok := tool.(string); ok {
+				tools = append(tools, toolStr)
+			}
+		}
+		return tools
+	case string:
+		tools := make([]string, 0)
+		for _, part := range strings.Split(v, ",") {
+			if t := strings.TrimSpace(part); t != "" {
+				tools = append(tools, t)
+			}
+		}
+		return tools
+	default:
+		return nil
+	}
+}
+
+func stringFrontmatterValue(fm map[string]any, key string) string {
+	if val, ok := fm[key]; ok {
+		if strVal, ok := val.(string); ok {
+			return strVal
+		}
+	}
+	return ""
+}
+
+func stringFrontmatterMetadata(fm map[string]any) map[string]string {
+	metadata := make(map[string]string)
+	for key, val := range fm {
+		if key == "name" || key == "description" || key == "tools" || key == "allowed-tools" {
+			continue
+		}
+		if strVal, ok := val.(string); ok {
+			metadata[key] = strVal
+			continue
+		}
+		metadata[key] = fmt.Sprintf("%v", val)
+	}
+	return metadata
+}
+
+func cachePluginName(filePath string, isCommand bool, name string) string {
+	if name != "" {
+		return name
+	}
+	if isCommand {
+		base := filepath.Base(filePath)
+		return base[:len(base)-len(filepath.Ext(base))]
+	}
+	return filepath.Base(filepath.Dir(filePath))
 }
 
 // Platform returns the platform identifier for this parser.
