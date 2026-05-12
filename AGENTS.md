@@ -41,6 +41,7 @@ preventing duplication and ensuring consistency.
 ### Issue Tracking (bd)
 Track work in beads issues:
 - `bd ready` → `bd show <id>` → `bd update <id> --status in_progress` → `bd close <id>`
+- `just setup` - ensure `~/.beads` exists with `0700` permissions before using `bd`
 
 **Session completion**: `bd sync --flush-only` (local export)
 

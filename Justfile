@@ -94,3 +94,7 @@ next-task:
 [group("dev"), doc("Show next open beads task with a suggested claude prompt")]
 next-task-prompt:
   @bash scripts/next-task.sh --prompt
+
+[group("setup"), doc("Ensure ~/.beads has secure permissions")]
+setup:
+  @if [ -d "$HOME/.beads" ]; then chmod 700 "$HOME/.beads"; fi
