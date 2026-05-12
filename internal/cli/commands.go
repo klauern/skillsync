@@ -853,6 +853,10 @@ func syncFlags() []cli.Flag {
 			Name:  "include-plugins",
 			Usage: "Include skills from Claude Code plugins (excluded by default)",
 		},
+		&cli.BoolFlag{
+			Name:  "json",
+			Usage: "Emit machine-readable JSON output",
+		},
 		&cli.StringFlag{
 			Name:    "type",
 			Aliases: []string{"t"},
@@ -1006,8 +1010,8 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 		}
 	}
 
-	// Show summary and request confirmation (unless --yes or --dry-run)
-	if !cfg.dryRun && !cfg.yesFlag {
+	// Show summary and request confirmation (unless --yes, --dry-run, or --json)
+	if !cfg.dryRun && !cfg.yesFlag && !cfg.jsonOutput {
 		confirmed, err := showSyncSummaryAndConfirm(cfg)
 		if err != nil {
 			return fmt.Errorf("confirmation error: %w", err)
@@ -1041,7 +1045,13 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 		return err
 	}
 
-	displaySyncResults(result)
+	if cfg.jsonOutput {
+		if err := outputSyncResultsJSON(result); err != nil {
+			return fmt.Errorf("write JSON output: %w", err)
+		}
+	} else {
+		displaySyncResults(result)
+	}
 
 	// Post-sync orphan deletion (--delete flag)
 	if err := runSyncOrphanDeletion(cfg); err != nil {
@@ -1170,6 +1180,7 @@ type syncConfig struct {
 	deleteMode     bool
 	deleteOrphans  bool
 	includePlugins bool
+	jsonOutput     bool
 	typeFilter     []model.SkillType
 	sourceSkills   []model.Skill
 }
@@ -1226,6 +1237,7 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		deleteMode:     deleteMode,
 		deleteOrphans:  cmd.Bool("delete"),
 		includePlugins: cmd.Bool("include-plugins"),
+		jsonOutput:     cmd.Bool("json"),
 		typeFilter:     typeFilter,
 		sourceSkills:   make([]model.Skill, 0),
 	}, nil
@@ -1233,7 +1245,9 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 
 // validateSourceSkills validates source skills (assumes skills are already parsed in cfg.sourceSkills)
 func validateSourceSkills(cfg *syncConfig) error {
-	fmt.Println("Validating source skills...")
+	if !cfg.jsonOutput {
+		fmt.Println("Validating source skills...")
+	}
 
 	// Validate skill formats
 	formatResult, err := validation.ValidateSkillsFormat(cfg.sourceSkills, cfg.sourceSpec.Platform)
@@ -1242,23 +1256,29 @@ func validateSourceSkills(cfg *syncConfig) error {
 	}
 
 	// Show warnings
-	for _, warning := range formatResult.Warnings {
-		fmt.Printf("  Warning: %s\n", warning)
+	if !cfg.jsonOutput {
+		for _, warning := range formatResult.Warnings {
+			fmt.Printf("  Warning: %s\n", warning)
+		}
 	}
 
 	// Check for validation errors
 	if formatResult.HasErrors() {
-		fmt.Println("\nValidation failed - the following issues were found:")
-		for i, e := range formatResult.Errors {
-			fmt.Printf("  %d. %s\n", i+1, formatValidationError(e, cfg.sourceSkills))
+		if !cfg.jsonOutput {
+			fmt.Println("\nValidation failed - the following issues were found:")
+			for i, e := range formatResult.Errors {
+				fmt.Printf("  %d. %s\n", i+1, formatValidationError(e, cfg.sourceSkills))
+			}
 		}
 		return errors.New("skill validation failed - fix the issues above and try again")
 	}
 
-	if len(cfg.sourceSkills) == 0 {
-		fmt.Println("  No skills found in source directory")
-	} else {
-		fmt.Printf("  Found %d valid skill(s)\n", len(cfg.sourceSkills))
+	if !cfg.jsonOutput {
+		if len(cfg.sourceSkills) == 0 {
+			fmt.Println("  No skills found in source directory")
+		} else {
+			fmt.Printf("  Found %d valid skill(s)\n", len(cfg.sourceSkills))
+		}
 	}
 
 	// Validate target path and permissions
@@ -1269,7 +1289,9 @@ func validateSourceSkills(cfg *syncConfig) error {
 		return err
 	}
 
-	fmt.Println("Validation passed")
+	if !cfg.jsonOutput {
+		fmt.Println("Validation passed")
+	}
 	return nil
 }
 
@@ -1420,12 +1442,87 @@ func displaySyncResults(result *sync.Result) {
 			if sr.Message != "" {
 				fmt.Printf(" (%s)", sr.Message)
 			}
+			if len(sr.PortabilityWarnings) > 0 {
+				fmt.Printf("\n    portability warnings:")
+				for _, warning := range sr.PortabilityWarnings {
+					fmt.Printf("\n      - %s", warning)
+				}
+			}
 			if sr.Error != nil {
 				fmt.Printf(" - Error: %v", sr.Error)
 			}
 			fmt.Println()
 		}
 	}
+}
+
+func outputSyncResultsJSON(result *sync.Result) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(buildSyncResultJSON(result))
+}
+
+type syncResultJSON struct {
+	Source   model.Platform       `json:"source"`
+	Target   model.Platform       `json:"target"`
+	Strategy sync.Strategy        `json:"strategy"`
+	DryRun   bool                 `json:"dry_run"`
+	Summary  syncSummaryJSON      `json:"summary"`
+	Skills   []syncSkillResultJSON `json:"skills"`
+}
+
+type syncSummaryJSON struct {
+	Created  int `json:"created"`
+	Updated  int `json:"updated"`
+	Merged   int `json:"merged"`
+	Deleted  int `json:"deleted"`
+	Skipped  int `json:"skipped"`
+	Conflicts int `json:"conflicts"`
+	Failed   int `json:"failed"`
+}
+
+type syncSkillResultJSON struct {
+	Skill               model.Skill  `json:"skill"`
+	Action              sync.Action  `json:"action"`
+	TargetPath          string       `json:"target_path,omitempty"`
+	Message             string       `json:"message,omitempty"`
+	Error               string       `json:"error,omitempty"`
+	PortabilityWarnings []string     `json:"portability_warnings,omitempty"`
+	Conflict            *sync.Conflict `json:"conflict,omitempty"`
+}
+
+func buildSyncResultJSON(result *sync.Result) syncResultJSON {
+	payload := syncResultJSON{
+		Source:   result.Source,
+		Target:   result.Target,
+		Strategy: result.Strategy,
+		DryRun:   result.DryRun,
+		Summary: syncSummaryJSON{
+			Created:  len(result.Created()),
+			Updated:  len(result.Updated()),
+			Merged:   len(result.Merged()),
+			Deleted:  len(result.Deleted()),
+			Skipped:  len(result.Skipped()),
+			Conflicts: len(result.Conflicts()),
+			Failed:   len(result.Failed()),
+		},
+		Skills: make([]syncSkillResultJSON, 0, len(result.Skills)),
+	}
+	for _, sr := range result.Skills {
+		entry := syncSkillResultJSON{
+			Skill:               sr.Skill,
+			Action:              sr.Action,
+			TargetPath:          sr.TargetPath,
+			Message:             sr.Message,
+			PortabilityWarnings: sr.PortabilityWarnings,
+			Conflict:            sr.Conflict,
+		}
+		if sr.Error != nil {
+			entry.Error = sr.Error.Error()
+		}
+		payload.Skills = append(payload.Skills, entry)
+	}
+	return payload
 }
 
 // syncDeleteMode handles the delete sync mode: removing skills from target that exist in source.
@@ -1563,7 +1660,13 @@ func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, confirmed boo
 		return fmt.Errorf("delete sync failed: %w", err)
 	}
 
-	displaySyncResults(result)
+	if cfg.jsonOutput {
+		if err := outputSyncResultsJSON(result); err != nil {
+			return fmt.Errorf("write JSON output: %w", err)
+		}
+	} else {
+		displaySyncResults(result)
+	}
 
 	if !result.Success() {
 		return errors.New("delete sync completed with errors")

@@ -50,6 +50,9 @@ type SkillResult struct {
 	// Message provides additional context about the action.
 	Message string
 
+	// PortabilityWarnings enumerates lossy mappings discovered for this skill.
+	PortabilityWarnings []string `json:"portability_warnings,omitempty"`
+
 	// Conflict holds conflict details when Action is ActionConflict.
 	Conflict *Conflict
 }

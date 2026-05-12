@@ -263,7 +263,7 @@ func TestMappingWarning_DisableModelInvocation(t *testing.T) {
 		},
 	}
 
-	const warnSubstring = "lossy mapping: disable-model-invocation preserved as metadata only"
+	const warnSubstring = "lossy mapping: disable-model-invocation preserve as metadata only"
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

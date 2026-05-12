@@ -586,15 +586,6 @@ func TestMappingWarning(t *testing.T) {
 			target:   model.Codex,
 			contains: nil,
 		},
-		"prompt to codex warns about trigger semantics": {
-			skill: model.Skill{
-				Name:    "review",
-				Type:    model.SkillTypePrompt,
-				Trigger: "/review",
-			},
-			target:   model.Codex,
-			contains: []string{"lossy mapping: prompt trigger semantics"},
-		},
 		"prompt with argument hint warns for non-claude target": {
 			skill: model.Skill{
 				Name: "review",
@@ -604,7 +595,7 @@ func TestMappingWarning(t *testing.T) {
 				},
 			},
 			target:   model.Cursor,
-			contains: []string{"lossy mapping: argument-hint preserved as metadata only"},
+			contains: []string{"lossy mapping: argument-hint preserve as metadata only"},
 		},
 		"prompt to claude has no non-portable warning": {
 			skill: model.Skill{
@@ -616,7 +607,7 @@ func TestMappingWarning(t *testing.T) {
 			contains:   nil,
 			notContain: []string{"lossy mapping"},
 		},
-		"copilot instruction applyTo preserved as metadata outside cursor": {
+		"copilot instruction applyTo has no portable equivalent outside cursor": {
 			skill: model.Skill{
 				Name: "react-standards",
 				Metadata: map[string]string{
@@ -624,7 +615,7 @@ func TestMappingWarning(t *testing.T) {
 				},
 			},
 			target:   model.Codex,
-			contains: []string{"lossy mapping: applyTo preserved as metadata only"},
+			contains: []string{"lossy mapping: applyTo no native portable equivalent"},
 		},
 		"copilot per-skill model preserved as metadata outside claude": {
 			skill: model.Skill{
@@ -634,31 +625,15 @@ func TestMappingWarning(t *testing.T) {
 				},
 			},
 			target:   model.Codex,
-			contains: []string{"lossy mapping: model preserved as metadata only"},
+			contains: []string{"lossy mapping: model preserve as metadata only"},
 		},
-		"copilot agent-only fields warn when dropped": {
-			skill: model.Skill{
-				Name: "reviewer",
-				Metadata: map[string]string{
-					"handoffs":    "[{\"agent\":\"implementer\"}]",
-					"target":      "vscode",
-					"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
-				},
-			},
-			target: model.Codex,
-			contains: []string{
-				"lossy mapping: handoffs dropped without target equivalent",
-				"lossy mapping: target dropped without target equivalent",
-				"lossy mapping: mcp-servers dropped without target equivalent",
-			},
-		},
-		"tools preserved as metadata for pidev": {
+		"tools preserved as intent for pidev": {
 			skill: model.Skill{
 				Name:  "portable-skill",
 				Tools: []string{"Read", "Write"},
 			},
 			target:   model.PiDev,
-			contains: []string{"lossy mapping: allowed-tools preserved as metadata only"},
+			contains: []string{"lossy mapping: allowed-tools preserve as intent, not identical enforcement"},
 		},
 	}
 
@@ -677,6 +652,54 @@ func TestMappingWarning(t *testing.T) {
 			}
 			if len(tt.contains) == 0 && msg != "" {
 				t.Errorf("mappingWarning() = %q, want empty", msg)
+			}
+		})
+	}
+}
+
+// TestLegacyPortabilityWarnings covers behaviors not yet encoded in portability-snapshot.yaml
+// (prompt trigger semantics, copilot agent-only metadata fields) that the legacy fallback still handles.
+func TestLegacyPortabilityWarnings(t *testing.T) {
+	tests := map[string]struct {
+		skill    model.Skill
+		target   model.Platform
+		contains []string
+	}{
+		"prompt to codex warns about trigger semantics": {
+			skill: model.Skill{
+				Name:    "review",
+				Type:    model.SkillTypePrompt,
+				Trigger: "/review",
+			},
+			target:   model.Codex,
+			contains: []string{"lossy mapping: prompt trigger semantics"},
+		},
+		"copilot agent-only fields warn when dropped": {
+			skill: model.Skill{
+				Name: "reviewer",
+				Metadata: map[string]string{
+					"handoffs":    "[{\"agent\":\"implementer\"}]",
+					"target":      "vscode",
+					"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+				},
+			},
+			target: model.Codex,
+			contains: []string{
+				"lossy mapping: handoffs dropped without target equivalent",
+				"lossy mapping: target dropped without target equivalent",
+				"lossy mapping: mcp-servers dropped without target equivalent",
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			warnings := legacyPortabilityWarnings(tt.skill, tt.target)
+			msg := strings.Join(warnings, "; ")
+			for _, want := range tt.contains {
+				if !strings.Contains(msg, want) {
+					t.Errorf("legacyPortabilityWarnings() = %q, want substring %q", msg, want)
+				}
 			}
 		})
 	}

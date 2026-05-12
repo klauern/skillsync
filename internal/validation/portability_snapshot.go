@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/klauern/skillsync/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,9 +19,9 @@ type PortabilitySnapshot struct {
 		Structured string `yaml:"structured"`
 	} `yaml:"generated_from"`
 	PlatformSupport map[string]struct {
-		Status           string   `yaml:"status"`
+		Status          string   `yaml:"status"`
 		ArtifactSurfaces []string `yaml:"artifact_surfaces"`
-		Notes            []string `yaml:"notes"`
+		Notes           []string `yaml:"notes"`
 	} `yaml:"platform_support"`
 	ArtifactPortability map[string]struct {
 		Portability        string   `yaml:"portability"`
@@ -28,14 +29,102 @@ type PortabilitySnapshot struct {
 		SupportedPlatforms []string `yaml:"supported_platforms"`
 		Notes              []string `yaml:"notes"`
 	} `yaml:"artifact_portability"`
-	Precedence         map[string][]string `yaml:"precedence"`
-	LossyFieldMappings []struct {
+	Precedence          map[string][]string `yaml:"precedence"`
+	LossyFieldMappings   []struct {
 		Field         string   `yaml:"field"`
 		SupportedBy   []string `yaml:"supported_by"`
 		UnsupportedBy []string `yaml:"unsupported_by"`
 		Behavior      string   `yaml:"behavior"`
 	} `yaml:"lossy_field_mappings"`
 	NonportableBehaviors []string `yaml:"nonportable_behaviors"`
+}
+
+// LoadPortabilitySnapshot reads and parses docs/platforms/portability-snapshot.yaml from the repo root.
+func LoadPortabilitySnapshot(root string) (*PortabilitySnapshot, error) {
+	snapshotPath := filepath.Join(root, "docs", "platforms", "portability-snapshot.yaml")
+
+	// #nosec G304 -- reads only repo-controlled documentation paths.
+	snapshotBytes, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read portability snapshot: %w", err)
+	}
+
+	var snapshot PortabilitySnapshot
+	if err := yaml.Unmarshal(snapshotBytes, &snapshot); err != nil {
+		return nil, fmt.Errorf("parse portability snapshot: %w", err)
+	}
+
+	return &snapshot, nil
+}
+
+// PortabilityWarningsForSkill returns lossy-mapping warnings for a skill when syncing to a target platform.
+func (snapshot *PortabilitySnapshot) PortabilityWarningsForSkill(skill model.Skill, target model.Platform) []string {
+	if snapshot == nil {
+		return nil
+	}
+
+	warnings := make([]string, 0, len(snapshot.LossyFieldMappings))
+	for _, mapping := range snapshot.LossyFieldMappings {
+		if platformSupported(mapping.SupportedBy, target) {
+			continue
+		}
+		if !skillHasLossyField(skill, mapping.Field) {
+			continue
+		}
+		warnings = append(warnings, fmt.Sprintf("lossy mapping: %s %s", mapping.Field, mapping.Behavior))
+	}
+
+	return warnings
+}
+
+// platformSupported reports whether target appears in the YAML platforms list.
+// It uses ParsePlatform so YAML short names ("claude") match model constants ("claude-code").
+func platformSupported(platforms []string, target model.Platform) bool {
+	for _, name := range platforms {
+		if p, err := model.ParsePlatform(name); err == nil && p == target {
+			return true
+		}
+	}
+	return false
+}
+
+func skillHasLossyField(skill model.Skill, field string) bool {
+	if skill.Metadata == nil {
+		skill.Metadata = map[string]string{}
+	}
+
+	switch field {
+	case "disable-model-invocation":
+		if skill.DisableModelInvocation {
+			return true
+		}
+		_, ok := skill.Metadata[field]
+		return ok
+	case "argument-hint", "applyTo", "globs", "model", "user-invocable", "context", "hooks":
+		_, ok := skill.Metadata[field]
+		return ok
+	case "allowed-tools":
+		return len(skill.Tools) > 0
+	case "SYSTEM.md":
+		if _, ok := skill.Metadata[field]; ok {
+			return true
+		}
+		_, ok := skill.Metadata[strings.ToLower(field)]
+		return ok
+	case "gemini extension runtime surfaces":
+		if skill.Platform == model.Gemini {
+			return true
+		}
+		for _, key := range []string{"mcpServers", "hooks", "subagents", "themes", "package/install"} {
+			if _, ok := skill.Metadata[key]; ok {
+				return true
+			}
+		}
+		return false
+	default:
+		_, ok := skill.Metadata[field]
+		return ok
+	}
 }
 
 // DefaultWantPlatformSupport is the expected platform support status.

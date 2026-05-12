@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	stdsync "sync"
 	"time"
 
 	"github.com/klauern/skillsync/internal/logging"
@@ -449,8 +450,9 @@ func (s *Synchronizer) processSkill(
 	if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
 		extras = append(extras, "linked Claude skill directory")
 	}
-	if warning := mappingWarning(source, targetPlatform); warning != "" {
-		extras = append(extras, warning)
+	warnings := portabilityWarnings(source, targetPlatform)
+	if len(warnings) > 0 {
+		result.PortabilityWarnings = warnings
 	}
 	if len(extras) > 0 {
 		if result.Message != "" {
@@ -639,11 +641,43 @@ func (s *Synchronizer) processSkill(
 	return result
 }
 
+var portabilitySnapshotCache struct {
+	once     stdsync.Once
+	snapshot *validation.PortabilitySnapshot
+	err      error
+}
+
+func getPortabilitySnapshot() (*validation.PortabilitySnapshot, error) {
+	portabilitySnapshotCache.once.Do(func() {
+		root, err := validation.FindRepoRoot()
+		if err != nil {
+			portabilitySnapshotCache.err = err
+			return
+		}
+		portabilitySnapshotCache.snapshot, portabilitySnapshotCache.err = validation.LoadPortabilitySnapshot(root)
+	})
+	return portabilitySnapshotCache.snapshot, portabilitySnapshotCache.err
+}
+
+// portabilityWarnings returns lossy-mapping warnings for a skill, preferring the portability snapshot
+// as the source of truth and falling back to legacy heuristics if the snapshot cannot be loaded.
+func portabilityWarnings(skill model.Skill, target model.Platform) []string {
+	snapshot, err := getPortabilitySnapshot()
+	if err == nil && snapshot != nil {
+		return snapshot.PortabilityWarningsForSkill(skill, target)
+	}
+	return legacyPortabilityWarnings(skill, target)
+}
+
 // mappingWarning builds a semicolon-separated warning string describing lossy mappings
 // when converting a skill to the given target platform.
 // It reports fields that will be preserved only as metadata, may require target-specific
 // configuration, or will be dropped. The returned string is empty if no warnings apply.
 func mappingWarning(skill model.Skill, target model.Platform) string {
+	return strings.Join(portabilityWarnings(skill, target), "; ")
+}
+
+func legacyPortabilityWarnings(skill model.Skill, target model.Platform) []string {
 	warnings := []string{}
 	if skill.Type == model.SkillTypePrompt && target == model.Codex {
 		warnings = append(warnings, "lossy mapping: prompt trigger semantics are not guaranteed on Codex")
@@ -676,7 +710,7 @@ func mappingWarning(skill model.Skill, target model.Platform) string {
 		warnings = append(warnings, "lossy mapping: mcp-servers dropped without target equivalent")
 	}
 
-	return strings.Join(warnings, "; ")
+	return warnings
 }
 
 // determineAction decides what action to take based on strategy.
