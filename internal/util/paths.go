@@ -365,60 +365,43 @@ func FilterExistingPaths(paths []ScopedPath) []ScopedPath {
 	return result
 }
 
+type platformPathInfo struct {
+	userSkillsPath func() string
+	repoSkillsPath func(string) string
+}
+
+var platformPathInfos = map[model.Platform]platformPathInfo{
+	model.ClaudeCode: {userSkillsPath: ClaudeCodeSkillsPath, repoSkillsPath: func(repoRoot string) string { return filepath.Join(repoRoot, ".claude", "skills") }},
+	model.Cursor:     {userSkillsPath: CursorSkillsPath, repoSkillsPath: func(repoRoot string) string { return filepath.Join(repoRoot, ".cursor", "skills") }},
+	model.Codex:      {userSkillsPath: CodexSkillsPath, repoSkillsPath: func(repoRoot string) string { return filepath.Join(repoRoot, ".codex", "skills") }},
+	model.PiAgent:    {userSkillsPath: PiAgentSkillsPath, repoSkillsPath: func(repoRoot string) string { return filepath.Join(repoRoot, ".agents", "skills") }},
+	model.Copilot:    {userSkillsPath: CopilotSkillsPath, repoSkillsPath: func(repoRoot string) string { return filepath.Join(repoRoot, ".github") }},
+	model.Gemini:     {userSkillsPath: GeminiPath, repoSkillsPath: GeminiRepoPath},
+	model.PiDev:      {userSkillsPath: PiDevSkillsPath, repoSkillsPath: PiDevRepoSkillsPath},
+}
+
 // platformDirName returns the platform-specific directory name.
 func platformDirName(p model.Platform) string {
-	switch p {
-	case model.ClaudeCode:
-		return ".claude"
-	case model.Cursor:
-		return ".cursor"
-	case model.Codex:
-		return ".codex"
-	case model.PiAgent:
-		return ".pi"
-	case model.Gemini:
-		return ".gemini"
-	case model.PiDev:
-		return ".pi/agent"
-	case model.Copilot:
-		return ".github"
-	default:
-		return "." + strings.ToLower(string(p))
+	if info, ok := model.PlatformInfoFor(p); ok {
+		return info.DotDir
 	}
+	return "." + strings.ToLower(string(p))
 }
 
 // PlatformSkillsPath returns the user-level skills path for a platform.
 func PlatformSkillsPath(p model.Platform) string {
-	switch p {
-	case model.PiAgent:
-		return PiAgentSkillsPath()
-	case model.Copilot:
-		return CopilotSkillsPath()
-	case model.Gemini:
-		return GeminiPath()
-	case model.Codex:
-		return CodexSkillsPath()
-	case model.PiDev:
-		return PiDevSkillsPath()
-	default:
-		return filepath.Join(HomeDir(), platformDirName(p), "skills")
+	if info, ok := platformPathInfos[p]; ok && info.userSkillsPath != nil {
+		return info.userSkillsPath()
 	}
+	return filepath.Join(HomeDir(), platformDirName(p), "skills")
 }
 
 // RepoSkillsPath returns the repo-level skills path for a platform.
 func RepoSkillsPath(p model.Platform, repoRoot string) string {
-	switch p {
-	case model.PiAgent:
-		return filepath.Join(repoRoot, ".agents", "skills")
-	case model.Copilot:
-		return filepath.Join(repoRoot, ".github")
-	case model.Gemini:
-		return GeminiRepoPath(repoRoot)
-	case model.PiDev:
-		return PiDevRepoSkillsPath(repoRoot)
-	default:
-		return filepath.Join(repoRoot, platformDirName(p), "skills")
+	if info, ok := platformPathInfos[p]; ok && info.repoSkillsPath != nil {
+		return info.repoSkillsPath(repoRoot)
 	}
+	return filepath.Join(repoRoot, platformDirName(p), "skills")
 }
 
 // ExpandPath expands a path by replacing ~ with the home directory

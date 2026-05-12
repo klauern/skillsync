@@ -516,7 +516,22 @@ func ValidatePath(path string, _ model.Platform) error {
 	return nil
 }
 
-// GetPlatformPath returns the default path for a platform.
+type platformPathSpec struct {
+	envKeys  []string
+	pathFunc func() string
+}
+
+var platformPathSpecs = map[model.Platform]platformPathSpec{
+	model.ClaudeCode: {envKeys: []string{"SKILLSYNC_CLAUDE_CODE_PATH"}, pathFunc: util.ClaudeCodeSkillsPath},
+	model.Cursor:     {envKeys: []string{"SKILLSYNC_CURSOR_PATH"}, pathFunc: util.CursorSkillsPath},
+	model.Codex:      {envKeys: []string{"SKILLSYNC_CODEX_PATH"}, pathFunc: util.CodexSkillsPath},
+	model.Copilot:    {envKeys: []string{"SKILLSYNC_COPILOT_PATH"}, pathFunc: util.CopilotSkillsPath},
+	model.Gemini:     {envKeys: []string{"SKILLSYNC_GEMINI_PATH"}, pathFunc: util.GeminiPath},
+	model.PiDev:      {envKeys: []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"}, pathFunc: util.PiDevSkillsPath},
+	model.PiAgent:    {envKeys: []string{"SKILLSYNC_PI_AGENT_PATH"}, pathFunc: util.PiAgentSkillsPath},
+}
+
+// GetPlatformPath returns the filesystem path for a platform's skills directory.
 // It respects environment variable overrides:
 //   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
 //   - SKILLSYNC_CURSOR_PATH for Cursor
@@ -525,48 +540,15 @@ func ValidatePath(path string, _ model.Platform) error {
 //   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
 //   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
 func GetPlatformPath(platform model.Platform) (string, error) {
-	switch platform {
-	case model.ClaudeCode:
-		if envPath := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); envPath != "" {
-			return envPath, nil
-		}
-		return util.ClaudeCodeSkillsPath(), nil
-	case model.Cursor:
-		if envPath := os.Getenv("SKILLSYNC_CURSOR_PATH"); envPath != "" {
-			return envPath, nil
-		}
-		return util.CursorSkillsPath(), nil
-	case model.Codex:
-		if envPath := os.Getenv("SKILLSYNC_CODEX_PATH"); envPath != "" {
-			return envPath, nil
-		}
-		// Default to the preferred user-level Codex skills directory.
-		return util.CodexSkillsPath(), nil
-	case model.Copilot:
-		if envPath := os.Getenv("SKILLSYNC_COPILOT_PATH"); envPath != "" {
-			return envPath, nil
-		}
-		return util.CopilotSkillsPath(), nil
-	case model.Gemini:
-		if envPath := os.Getenv("SKILLSYNC_GEMINI_PATH"); envPath != "" {
-			return envPath, nil
-		}
-		return util.GeminiPath(), nil
-	case model.PiDev:
-		for _, key := range []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"} {
+	if spec, ok := platformPathSpecs[platform]; ok {
+		for _, key := range spec.envKeys {
 			if envPath := os.Getenv(key); envPath != "" {
 				return envPath, nil
 			}
 		}
-		return util.PiDevSkillsPath(), nil
-	case model.PiAgent:
-		if envPath := os.Getenv("SKILLSYNC_PI_AGENT_PATH"); envPath != "" {
-			return envPath, nil
-		}
-		return util.PiAgentSkillsPath(), nil
-	default:
-		return "", fmt.Errorf("unsupported platform: %s", platform)
+		return spec.pathFunc(), nil
 	}
+	return "", fmt.Errorf("unsupported platform: %s", platform)
 }
 
 // GetPlatformPathForScope returns the path for a platform and specific scope.

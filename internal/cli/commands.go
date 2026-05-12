@@ -1777,26 +1777,38 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	return paths, repoRoot, nil
 }
 
+type platformSkillsPathGetter func(*config.Config) ([]string, error)
+
+var platformSkillsPathGetters = map[model.Platform]platformSkillsPathGetter{
+	model.ClaudeCode: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.ClaudeCode.SkillsPaths, cfg.Platforms.ClaudeCode.SkillsPath), nil
+	},
+	model.Cursor: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.Cursor.SkillsPaths, cfg.Platforms.Cursor.SkillsPath), nil
+	},
+	model.Codex: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.Codex.SkillsPaths, cfg.Platforms.Codex.SkillsPath), nil
+	},
+	model.PiAgent: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.PiAgent.SkillsPath), nil
+	},
+	model.Copilot: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.Copilot.SkillsPaths, cfg.Platforms.Copilot.SkillsPath), nil
+	},
+	model.Gemini: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.Gemini.SkillsPaths, cfg.Platforms.Gemini.SkillsPath), nil
+	},
+	model.PiDev: func(cfg *config.Config) ([]string, error) {
+		return skillsPathsOrLegacy(cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.PiDev.SkillsPath), nil
+	},
+}
+
 //nolint:staticcheck // backward compatibility with deprecated SkillsPath fields
 func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, error) {
-	switch platform {
-	case model.ClaudeCode:
-		return skillsPathsOrLegacy(cfg.Platforms.ClaudeCode.SkillsPaths, cfg.Platforms.ClaudeCode.SkillsPath), nil
-	case model.Cursor:
-		return skillsPathsOrLegacy(cfg.Platforms.Cursor.SkillsPaths, cfg.Platforms.Cursor.SkillsPath), nil
-	case model.Codex:
-		return skillsPathsOrLegacy(cfg.Platforms.Codex.SkillsPaths, cfg.Platforms.Codex.SkillsPath), nil
-	case model.PiAgent:
-		return skillsPathsOrLegacy(cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.PiAgent.SkillsPath), nil
-	case model.Copilot:
-		return skillsPathsOrLegacy(cfg.Platforms.Copilot.SkillsPaths, cfg.Platforms.Copilot.SkillsPath), nil
-	case model.Gemini:
-		return skillsPathsOrLegacy(cfg.Platforms.Gemini.SkillsPaths, cfg.Platforms.Gemini.SkillsPath), nil
-	case model.PiDev:
-		return skillsPathsOrLegacy(cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.PiDev.SkillsPath), nil
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	if getter, ok := platformSkillsPathGetters[platform]; ok {
+		return getter(cfg)
 	}
+	return nil, fmt.Errorf("unsupported platform: %s", platform)
 }
 
 //nolint:staticcheck // backward compatibility with deprecated SkillsPath fields
