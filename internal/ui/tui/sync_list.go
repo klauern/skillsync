@@ -677,37 +677,6 @@ General:
 	return syncListStyles.Help.Render(help)
 }
 
-func (m *SyncListModel) applyColumnWidths(totalWidth int) {
-	widths := defaultSyncListColumnWidths()
-	if totalWidth > 0 {
-		const checkboxWidth = 3
-		const separatorWidth = 6
-		nameWidth := widths.name
-		scopeWidth := widths.scope
-
-		descWidth := totalWidth - (checkboxWidth + nameWidth + scopeWidth + separatorWidth)
-		if descWidth < 40 {
-			descWidth = 40
-			remaining := totalWidth - (checkboxWidth + scopeWidth + separatorWidth + descWidth)
-			if remaining > 0 {
-				nameWidth = max(15, remaining)
-			}
-		}
-
-		widths.name = nameWidth
-		widths.desc = descWidth
-	}
-
-	m.columnWidths = widths
-	m.table.SetColumns([]table.Column{
-		{Title: " ", Width: 3},
-		{Title: "Name", Width: widths.name},
-		{Title: "Scope", Width: widths.scope},
-		{Title: "Description", Width: widths.desc},
-	})
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
-
 // Result returns the result of the user interaction.
 func (m SyncListModel) Result() SyncListResult {
 	return m.result

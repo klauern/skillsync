@@ -2,19 +2,6 @@ package tui
 
 import "strings"
 
-func truncateText(text string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if len(text) <= width {
-		return text
-	}
-	if width <= 3 {
-		return text[:width]
-	}
-	return text[:width-3] + "..."
-}
-
 func formatDescription(text string, width int) string {
 	return formatDetail("Description: ", text, width)
 }

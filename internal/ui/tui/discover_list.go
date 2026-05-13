@@ -110,15 +110,6 @@ type discoverListColumnWidths struct {
 	desc     int
 }
 
-func defaultDiscoverListColumnWidths() discoverListColumnWidths {
-	return discoverListColumnWidths{
-		name:     25,
-		platform: 12,
-		scope:    15,
-		desc:     60,
-	}
-}
-
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
 	table           table.Model

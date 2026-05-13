@@ -671,33 +671,6 @@ General:
 	return compareListStyles.Help.Render(help)
 }
 
-func (m *CompareListModel) applyColumnWidths(totalWidth int) {
-	widths := defaultCompareListColumnWidths()
-	if totalWidth > 0 {
-		const separatorWidth = 12
-		available := totalWidth - (widths.platform*2 + widths.nameScore + widths.content + widths.changes + separatorWidth)
-		if available > 0 {
-			nameWidth := available / 2
-			if nameWidth < 18 {
-				nameWidth = 18
-			}
-			widths.name = nameWidth
-		}
-	}
-
-	m.columnWidths = widths
-	m.table.SetColumns([]table.Column{
-		{Title: "Skill 1", Width: widths.name},
-		{Title: "Platform", Width: widths.platform},
-		{Title: "Skill 2", Width: widths.name},
-		{Title: "Platform", Width: widths.platform},
-		{Title: "Name%", Width: widths.nameScore},
-		{Title: "Content%", Width: widths.content},
-		{Title: "Changes", Width: widths.changes},
-	})
-	m.table.SetRows(m.comparisonsToRows(m.filtered))
-}
-
 // Result returns the result of the user interaction.
 func (m CompareListModel) Result() CompareListResult {
 	return m.result
