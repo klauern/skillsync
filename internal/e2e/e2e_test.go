@@ -1106,6 +1106,34 @@ func TestSyncClaudeCodeToCursor(t *testing.T) {
 	e2e.AssertFileExists(t, cursorFixture.Path("platform-test.md"))
 }
 
+// TestSyncCursorRuleWithGlobsToClaudeCode verifies that a cursor rule file
+// containing globs and alwaysApply frontmatter is discovered and synced.
+// Globs/alwaysApply are cursor-only fields; the target receives the skill content.
+func TestSyncCursorRuleWithGlobsToClaudeCode(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	cursorFixture := h.CursorFixture()
+	cursorFixture.WriteFile("go-rules.md", `---
+name: go-rules
+description: Go coding rules
+globs:
+  - "**/*.go"
+alwaysApply: true
+---
+# Go Rules
+
+Apply these rules for all Go files.
+`)
+
+	claudeFixture := h.ClaudeCodeFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "cursor", "claudecode")
+
+	e2e.AssertSuccess(t, result)
+	// The rule file was discovered and synced — Claude receives it as a skill
+	e2e.AssertFileExists(t, claudeFixture.Path("go-rules.md"))
+}
+
 // TestSyncCursorToClaudeCode verifies sync from Cursor to Claude Code.
 func TestSyncCursorToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
