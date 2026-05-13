@@ -236,13 +236,13 @@ func NewImportListModel() ImportListModel {
 
 	return ImportListModel{
 		selectableListModel: newSelectableListModel(nil, false, importListColumns(), 15, importSkillKey, skillListFilterMatch, importSkillRow),
-		filepicker:     fp,
-		keys:           defaultImportListKeyMap(),
-		phase:          phaseFilePicker,
-		platforms:      platforms,
-		scopes:         scopes,
-		targetPlatform: model.ClaudeCode, // Default to Claude Code
-		targetScope:    model.ScopeRepo,  // Default to repo scope
+		filepicker:          fp,
+		keys:                defaultImportListKeyMap(),
+		phase:               phaseFilePicker,
+		platforms:           platforms,
+		scopes:              scopes,
+		targetPlatform:      model.ClaudeCode, // Default to Claude Code
+		targetScope:         model.ScopeRepo,  // Default to repo scope
 	}
 }
 
@@ -381,12 +381,12 @@ func (m *ImportListModel) updateSkillSelection(msg tea.KeyMsg) (tea.Model, tea.C
 		m.applyFilter()
 		return *m, nil
 
-		case key.Matches(msg, m.keys.Toggle):
-			m.toggleCurrentSelection()
-			return *m, nil
-		case key.Matches(msg, m.keys.ToggleAll):
-			m.toggleAllSelection()
-			return *m, nil
+	case key.Matches(msg, m.keys.Toggle):
+		m.toggleCurrentSelection()
+		return *m, nil
+	case key.Matches(msg, m.keys.ToggleAll):
+		m.toggleAllSelection()
+		return *m, nil
 
 	case key.Matches(msg, m.keys.Select):
 		if len(m.getSelectedSkills()) > 0 {

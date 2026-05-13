@@ -117,4 +117,3 @@ func skillListFilterMatch(skill model.Skill, lowerFilter string) bool {
 		strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
 		strings.Contains(strings.ToLower(skill.Description), lowerFilter)
 }
-

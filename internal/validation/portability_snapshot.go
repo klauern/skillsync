@@ -19,9 +19,9 @@ type PortabilitySnapshot struct {
 		Structured string `yaml:"structured"`
 	} `yaml:"generated_from"`
 	PlatformSupport map[string]struct {
-		Status          string   `yaml:"status"`
+		Status           string   `yaml:"status"`
 		ArtifactSurfaces []string `yaml:"artifact_surfaces"`
-		Notes           []string `yaml:"notes"`
+		Notes            []string `yaml:"notes"`
 	} `yaml:"platform_support"`
 	ArtifactPortability map[string]struct {
 		Portability        string   `yaml:"portability"`
@@ -29,8 +29,8 @@ type PortabilitySnapshot struct {
 		SupportedPlatforms []string `yaml:"supported_platforms"`
 		Notes              []string `yaml:"notes"`
 	} `yaml:"artifact_portability"`
-	Precedence          map[string][]string `yaml:"precedence"`
-	LossyFieldMappings   []struct {
+	Precedence         map[string][]string `yaml:"precedence"`
+	LossyFieldMappings []struct {
 		Field         string   `yaml:"field"`
 		SupportedBy   []string `yaml:"supported_by"`
 		UnsupportedBy []string `yaml:"unsupported_by"`
