@@ -611,6 +611,7 @@ func (m *DeleteListModel) applyFilter() {
 	m.refreshTable()
 }
 
+// View renders the delete list UI.
 func (m DeleteListModel) View() string {
 	if m.quitting {
 		return ""

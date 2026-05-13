@@ -400,6 +400,7 @@ func (m *ExportListModel) applyFilter() {
 	m.refreshTable()
 }
 
+// View renders the export list UI.
 func (m ExportListModel) View() string {
 	if m.quitting {
 		return ""

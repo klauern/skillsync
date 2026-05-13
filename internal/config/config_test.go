@@ -3,8 +3,10 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
+	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/sync"
 )
 
@@ -431,6 +433,76 @@ func TestGetSkillsPaths(t *testing.T) {
 				if !filepath.IsAbs(paths[0]) {
 					t.Errorf("GetSkillsPaths()[0] should be absolute, got %q", paths[0])
 				}
+			}
+		})
+	}
+}
+
+func TestPlatformConfigRawSkillsPaths(t *testing.T) {
+	tests := []struct {
+		name   string
+		config PlatformConfig
+		want   []string
+	}{
+		{
+			name: "prefers skills_paths",
+			config: PlatformConfig{
+				SkillsPaths: []string{"a", "b"},
+				SkillsPath:  "legacy",
+			},
+			want: []string{"a", "b"},
+		},
+		{
+			name: "falls back to legacy singular path",
+			config: PlatformConfig{
+				SkillsPath: "legacy",
+			},
+			want: []string{"legacy"},
+		},
+		{
+			name:   "empty config",
+			config: PlatformConfig{},
+			want:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.RawSkillsPaths(); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("RawSkillsPaths() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPlatformsConfigFor(t *testing.T) {
+	cfg := PlatformsConfig{}
+	tests := []struct {
+		name     string
+		platform model.Platform
+		wantNil  bool
+	}{
+		{name: "claude-code", platform: model.ClaudeCode},
+		{name: "cursor", platform: model.Cursor},
+		{name: "codex", platform: model.Codex},
+		{name: "pi-agent", platform: model.PiAgent},
+		{name: "copilot", platform: model.Copilot},
+		{name: "gemini", platform: model.Gemini},
+		{name: "pi-dev", platform: model.PiDev},
+		{name: "unsupported", platform: model.Platform("other"), wantNil: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := cfg.For(tt.platform)
+			if tt.wantNil {
+				if ok || got != nil {
+					t.Fatalf("For(%q) = (%v, %v), want nil, false", tt.platform, got, ok)
+				}
+				return
+			}
+			if !ok || got == nil {
+				t.Fatalf("For(%q) = (%v, %v), want non-nil, true", tt.platform, got, ok)
 			}
 		})
 	}

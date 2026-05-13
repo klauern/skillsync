@@ -550,14 +550,6 @@ func (m *ImportListModel) applyFilter() {
 	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
-func (m ImportListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
 func (m ImportListModel) getSelectedSkills() []model.Skill {
 	var selected []model.Skill
 	for _, s := range m.skills {

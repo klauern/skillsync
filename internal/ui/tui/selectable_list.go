@@ -61,23 +61,6 @@ func (m *selectableListModel[T]) refreshTable() {
 	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
-func (m *selectableListModel[T]) applyFilter() {
-	filtered := m.skills
-	if m.filter != "" {
-		var filteredSkills []T
-		lowerFilter := strings.ToLower(m.filter)
-		for _, skill := range filtered {
-			if m.matchFn(skill, lowerFilter) {
-				filteredSkills = append(filteredSkills, skill)
-			}
-		}
-		filtered = filteredSkills
-	}
-
-	m.filtered = filtered
-	m.refreshTable()
-}
-
 func (m selectableListModel[T]) getSelectedSkill() T {
 	cursor := m.table.Cursor()
 	if cursor >= 0 && cursor < len(m.filtered) {

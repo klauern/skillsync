@@ -1777,46 +1777,12 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	return paths, repoRoot, nil
 }
 
-type platformSkillsPathGetter func(*config.Config) ([]string, error)
-
-var platformSkillsPathGetters = map[model.Platform]platformSkillsPathGetter{
-	model.ClaudeCode: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.ClaudeCode.SkillsPaths, cfg.Platforms.ClaudeCode.SkillsPath), nil
-	},
-	model.Cursor: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.Cursor.SkillsPaths, cfg.Platforms.Cursor.SkillsPath), nil
-	},
-	model.Codex: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.Codex.SkillsPaths, cfg.Platforms.Codex.SkillsPath), nil
-	},
-	model.PiAgent: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.PiAgent.SkillsPath), nil
-	},
-	model.Copilot: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.Copilot.SkillsPaths, cfg.Platforms.Copilot.SkillsPath), nil
-	},
-	model.Gemini: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.Gemini.SkillsPaths, cfg.Platforms.Gemini.SkillsPath), nil
-	},
-	model.PiDev: func(cfg *config.Config) ([]string, error) {
-		return skillsPathsOrLegacy(cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.PiDev.SkillsPath), nil
-	},
-}
-
-//nolint:staticcheck // backward compatibility with deprecated SkillsPath fields
 func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, error) {
-	if getter, ok := platformSkillsPathGetters[platform]; ok {
-		return getter(cfg)
+	platformConfig, ok := cfg.Platforms.For(platform)
+	if !ok {
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
-	return nil, fmt.Errorf("unsupported platform: %s", platform)
-}
-
-//nolint:staticcheck // backward compatibility with deprecated SkillsPath fields
-func skillsPathsOrLegacy(paths []string, legacyPath string) []string {
-	if len(paths) == 0 && legacyPath != "" {
-		return []string{legacyPath}
-	}
-	return paths
+	return platformConfig.RawSkillsPaths(), nil
 }
 
 func piAgentScopedPaths(cwd, repoRoot string, rawPaths []string) ([]util.ScopedPath, string, error) {

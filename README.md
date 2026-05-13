@@ -129,6 +129,8 @@ Legacy single-path overrides are still supported:
 - `SKILLSYNC_GEMINI_PATH`
 - `SKILLSYNC_PI_DEV_PATH`
 
+These legacy overrides emit a startup warning and are slated for removal in the next release.
+
 Use `SKILLSYNC_HOME` to relocate the config directory.
 
 ## Docs
