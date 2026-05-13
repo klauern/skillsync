@@ -55,3 +55,9 @@ internal/cli/.codex/skills/
 
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
+
+# Knowledge graph output (graphify tool)
+graphify-out/
+
+# Local automation scripts not part of the CLI
+background_agent.py

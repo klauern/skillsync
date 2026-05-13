@@ -257,7 +257,8 @@ func warnDeprecatedYAMLFields(c *Config) {
 	}
 	for _, p := range platforms {
 		if p.pc.SkillsPath != "" { //nolint:staticcheck
-			logging.Warn("config field skills_path is deprecated; migrate to skills_paths",
+			logging.Warn(
+				"config field skills_path is deprecated; migrate to skills_paths",
 				logging.Platform(p.name),
 			)
 		}

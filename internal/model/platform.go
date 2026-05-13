@@ -106,7 +106,8 @@ func ParsePlatform(s string) (Platform, error) {
 	// Deprecation check: pi-agent aliases should migrate to pi-dev / PiDev.
 	switch normalized {
 	case "pi-agent", "piagent", "pia":
-		slog.Warn("platform name is deprecated; use 'pi-dev' instead",
+		slog.Warn(
+			"platform name is deprecated; use 'pi-dev' instead",
 			"platform", s,
 			"replacement", "pi-dev",
 		)
