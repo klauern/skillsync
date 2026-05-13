@@ -1172,6 +1172,36 @@ func TestSyncPiAgentToCursor(t *testing.T) {
 	e2e.AssertFileExists(t, cursorFixture.Path("pi-to-cursor/SKILL.md"))
 }
 
+// TestSyncPiAgentToClaudeCode verifies sync from Pi Agent to Claude Code (user scope).
+func TestSyncPiAgentToClaudeCode(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	piFixture := h.PiAgentFixture()
+	piFixture.WriteSkill("pi-to-claude/SKILL.md", "pi-to-claude", "Pi to Claude", "# Pi To Claude\n\nContent for Claude.")
+
+	claudeFixture := h.ClaudeCodeFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-agent", "claudecode")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, claudeFixture.Path("pi-to-claude/SKILL.md"))
+}
+
+// TestSyncPiAgentToCodex verifies sync from Pi Agent to Codex.
+func TestSyncPiAgentToCodex(t *testing.T) {
+	h := e2e.NewHarness(t)
+
+	piFixture := h.PiAgentFixture()
+	piFixture.WriteSkill("pi-to-codex/SKILL.md", "pi-to-codex", "Pi to Codex", "# Pi To Codex\n\nContent for Codex.")
+
+	codexFixture := h.CodexFixture()
+
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-agent", "codex")
+
+	e2e.AssertSuccess(t, result)
+	e2e.AssertFileExists(t, codexFixture.Path("pi-to-codex/SKILL.md"))
+}
+
 // TestDiscoverPiAgent verifies Pi Agent skills can be discovered directly.
 func TestDiscoverPiAgent(t *testing.T) {
 	h := e2e.NewHarness(t)
