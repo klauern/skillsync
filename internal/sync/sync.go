@@ -419,6 +419,7 @@ func (s *Synchronizer) processSkill(
 	}
 
 	result.TargetPath = targetEntryPath
+	result.PortabilityWarnings = portabilityWarningsForSkill(source, targetPlatform)
 
 	// Check if skill exists in target
 	existingSkill, exists := existingSkills[source.Name]

@@ -52,6 +52,10 @@ type SkillResult struct {
 
 	// Conflict holds conflict details when Action is ActionConflict.
 	Conflict *Conflict
+
+	// PortabilityWarnings lists metadata fields that will be lossy or silently
+	// degraded at the target platform (e.g. "hooks" when syncing to Codex).
+	PortabilityWarnings []string
 }
 
 // Success returns true if the skill was successfully processed.

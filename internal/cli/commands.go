@@ -709,6 +709,9 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 	result.SelectedCount = len(skills)
 	result.TotalAvailable = totalAvailable
 
+	if cfg.format == "json" {
+		return outputSyncResultJSON(result)
+	}
 	displaySyncResults(result)
 
 	if !result.Success() {
@@ -716,6 +719,52 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 	}
 
 	return nil
+}
+
+// outputSyncResultJSON prints a sync result as JSON, including portability warnings per skill.
+func outputSyncResultJSON(result *sync.Result) error {
+	type skillJSON struct {
+		Name                string   `json:"name"`
+		Action              string   `json:"action"`
+		TargetPath          string   `json:"target_path,omitempty"`
+		Message             string   `json:"message,omitempty"`
+		Error               string   `json:"error,omitempty"`
+		PortabilityWarnings []string `json:"portability_warnings,omitempty"`
+	}
+	type resultJSON struct {
+		Source   string      `json:"source"`
+		Target   string      `json:"target"`
+		Strategy string      `json:"strategy"`
+		DryRun   bool        `json:"dry_run"`
+		Skills   []skillJSON `json:"skills"`
+	}
+
+	skills := make([]skillJSON, 0, len(result.Skills))
+	for _, sr := range result.Skills {
+		sj := skillJSON{
+			Name:                sr.Skill.Name,
+			Action:              string(sr.Action),
+			TargetPath:          sr.TargetPath,
+			Message:             sr.Message,
+			PortabilityWarnings: sr.PortabilityWarnings,
+		}
+		if sr.Error != nil {
+			sj.Error = sr.Error.Error()
+		}
+		skills = append(skills, sj)
+	}
+
+	out := resultJSON{
+		Source:   string(result.Source),
+		Target:   string(result.Target),
+		Strategy: string(result.Strategy),
+		DryRun:   result.DryRun,
+		Skills:   skills,
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }
 
 // outputSkills formats and prints skills in the requested format
@@ -976,6 +1025,11 @@ func syncFlags() []cli.Flag {
 		&cli.BoolFlag{
 			Name:  "delete",
 			Usage: "After sync, delete target skills not present in source (orphan cleanup)",
+		},
+		&cli.StringFlag{
+			Name:  "format",
+			Value: "text",
+			Usage: "Output format: text, json",
 		},
 	}
 }
@@ -1318,6 +1372,7 @@ type syncConfig struct {
 	includePlugins bool
 	typeFilter     []model.SkillType
 	sourceSkills   []model.Skill
+	format         string
 }
 
 // parseSyncConfig parses and validates sync command arguments and flags
@@ -1374,6 +1429,7 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		includePlugins: cmd.Bool("include-plugins"),
 		typeFilter:     typeFilter,
 		sourceSkills:   make([]model.Skill, 0),
+		format:         cmd.String("format"),
 	}, nil
 }
 
@@ -1579,6 +1635,10 @@ func displaySyncResults(result *sync.Result) {
 				fmt.Printf(" - Error: %v", sr.Error)
 			}
 			fmt.Println()
+			if len(sr.PortabilityWarnings) > 0 {
+				fmt.Printf("    ⚠ lossy fields for %s: %s\n",
+					result.Target, strings.Join(sr.PortabilityWarnings, ", "))
+			}
 		}
 	}
 }
