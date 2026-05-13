@@ -1940,7 +1940,31 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 // For PiAgent, discovered PiAgent search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
 // for backward compatibility. If the platform is unsupported or discovery fails, an error is returned. The second return value is the
 // discovered repository root (may be empty).
-//
+var platformConfigGetters = map[model.Platform]func(*config.Config) *config.PlatformConfig{
+	model.ClaudeCode: func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.ClaudeCode },
+	model.Cursor:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Cursor },
+	model.Codex:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Codex },
+	model.PiAgent:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiAgent },
+	model.Copilot:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Copilot },
+	model.Gemini:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Gemini },
+	model.PiDev:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiDev },
+}
+
+func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, error) {
+	getter, ok := platformConfigGetters[platform]
+	if !ok {
+		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	}
+	pc := getter(cfg)
+	if len(pc.SkillsPaths) > 0 {
+		return pc.SkillsPaths, nil
+	}
+	if pc.SkillsPath != "" { //nolint:staticcheck // backward compatibility
+		return []string{pc.SkillsPath}, nil //nolint:staticcheck // backward compatibility
+	}
+	return nil, nil
+}
+
 //nolint:gocyclo // intentional platform dispatch — each case is a distinct platform, refactoring would obscure intent
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
@@ -1949,45 +1973,9 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	}
 	repoRoot := util.GetRepoRoot(cwd)
 
-	var rawPaths []string
-	switch platform {
-	case model.ClaudeCode:
-		rawPaths = cfg.Platforms.ClaudeCode.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.ClaudeCode.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.ClaudeCode.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Cursor:
-		rawPaths = cfg.Platforms.Cursor.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Cursor.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Cursor.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Codex:
-		rawPaths = cfg.Platforms.Codex.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Codex.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Codex.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.PiAgent:
-		rawPaths = cfg.Platforms.PiAgent.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.PiAgent.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.PiAgent.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Copilot:
-		rawPaths = cfg.Platforms.Copilot.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Copilot.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Copilot.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.Gemini:
-		rawPaths = cfg.Platforms.Gemini.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.Gemini.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.Gemini.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	case model.PiDev:
-		rawPaths = cfg.Platforms.PiDev.SkillsPaths
-		if len(rawPaths) == 0 && cfg.Platforms.PiDev.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-			rawPaths = []string{cfg.Platforms.PiDev.SkillsPath} //nolint:staticcheck // backward compatibility
-		}
-	default:
-		return nil, repoRoot, fmt.Errorf("unsupported platform: %s", platform)
+	rawPaths, err := platformRawSkillsPaths(cfg, platform)
+	if err != nil {
+		return nil, repoRoot, err
 	}
 
 	if platform == model.PiAgent {
