@@ -45,6 +45,27 @@ digging into the full mapping details below.
 | Lifecycle hook events | Non-portable | Runtime boundaries such as `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, and `Stop` are control-plane behavior, not shared file-backed content. |
 | Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
 
+## Gemini-Only Surfaces (Non-Portable)
+
+The Gemini CLI exposes several runtime surfaces that have no file-backed equivalent on other
+platforms. SkillSync will not attempt to sync these surfaces; they must be re-authored manually on
+the destination platform.
+
+| Surface | Where it lives | Why it is non-portable |
+|---|---|---|
+| Extension hooks | `~/.gemini/extensions/<ext>/hooks/hooks.json` | Runtime-owned hook registry; hook semantics and event names diverge from all other CLIs |
+| `mcpServers` config | `~/.gemini/settings.json` → `mcpServers` key | MCP server configuration is stored per-tool and cannot be round-tripped without re-authoring connection details for each destination |
+| Subagents | `.gemini/agents/*.md` | Gemini subagent definition files are not yet part of the Agent Skills Standard and have no portable equivalent |
+| Themes | `~/.gemini/settings.json` → `theme` key | UI theme is Gemini-specific and not a shareable skill artifact |
+| Extension install state | `~/.gemini/extensions/` directory | Package install provenance is runtime-owned; extension identifiers and registry membership differ across CLIs |
+
+**What SkillSync does with these surfaces:**
+- `settings.json` hook *intent* (the declared hook entry) may be preserved as `Metadata` on the
+  parsed skill for round-tripping back to Gemini. The runtime behavior is dropped.
+- All other surfaces listed above are silently skipped during sync. A portability warning is
+  emitted when a skill sourced from Gemini carries non-portable metadata and the target is not
+  Gemini.
+
 ## Artifact Type Equivalences
 
 Detailed mapping of which artifact types serve the same purpose across platforms.
