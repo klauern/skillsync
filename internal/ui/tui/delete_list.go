@@ -51,6 +51,22 @@ type deleteListKeyMap struct {
 	ScrollRight key.Binding
 }
 
+type deleteListColumnWidths struct {
+	name     int
+	platform int
+	scope    int
+	desc     int
+}
+
+func defaultDeleteListColumnWidths() deleteListColumnWidths {
+	return deleteListColumnWidths{
+		name:     25,
+		platform: 12,
+		scope:    10,
+		desc:     60,
+	}
+}
+
 func defaultDeleteListKeyMap() deleteListKeyMap {
 	return deleteListKeyMap{
 		Up: key.NewBinding(
@@ -163,6 +179,7 @@ var deleteListStyles = struct {
 	DetailTitle    lipgloss.Style
 	PlatformTab    lipgloss.Style
 	PlatformActive lipgloss.Style
+	Description    lipgloss.Style
 }{
 	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1")).Padding(0, 1),
 	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -176,6 +193,7 @@ var deleteListStyles = struct {
 	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3")),
 	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("52")).Bold(true).Padding(0, 1),
+	Description:    lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 const (
@@ -191,13 +209,6 @@ const (
 	// deleteListMaxHOffset is the maximum horizontal scroll offset (3 scrollable cols - 1).
 	deleteListMaxHOffset = 2
 )
-
-type deleteListColumnWidths struct {
-	name     int
-	platform int
-	scope    int
-	desc     int
-}
 
 // deleteListColumns returns visible table columns for the given terminal width and horizontal
 // scroll offset. Scrollable columns are: platform(0), scope(1), description(2).
@@ -347,6 +358,10 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 }
 
 func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultDeleteListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -739,6 +754,14 @@ func (m DeleteListModel) View() string {
 	}
 	b.WriteString(deleteListStyles.Status.Render(status))
 	b.WriteString("\n")
+
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(deleteListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
 
 	// Help
 	if m.showHelp {

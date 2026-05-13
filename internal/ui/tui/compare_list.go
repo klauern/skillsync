@@ -43,6 +43,24 @@ type compareListKeyMap struct {
 	Quit     key.Binding
 }
 
+type compareListColumnWidths struct {
+	name      int
+	platform  int
+	nameScore int
+	content   int
+	changes   int
+}
+
+func defaultCompareListColumnWidths() compareListColumnWidths {
+	return compareListColumnWidths{
+		name:      24,
+		platform:  5,
+		nameScore: 6,
+		content:   8,
+		changes:   20,
+	}
+}
+
 func defaultCompareListKeyMap() compareListKeyMap {
 	return compareListKeyMap{
 		Up: key.NewBinding(
@@ -78,21 +96,22 @@ func defaultCompareListKeyMap() compareListKeyMap {
 
 // CompareListModel is the BubbleTea model for interactive skill comparison.
 type CompareListModel struct {
-	table       table.Model
-	hScroll     horizontalTableState
-	comparisons []*similarity.ComparisonResult
-	filtered    []*similarity.ComparisonResult
-	keys        compareListKeyMap
-	result      CompareListResult
-	filter      string
-	filtering   bool
-	showHelp    bool
-	viewingDiff bool
-	viewport    viewport.Model
-	width       int
-	height      int
-	quitting    bool
-	ready       bool
+	table        table.Model
+	hScroll      horizontalTableState
+	comparisons  []*similarity.ComparisonResult
+	filtered     []*similarity.ComparisonResult
+	keys         compareListKeyMap
+	result       CompareListResult
+	filter       string
+	filtering    bool
+	showHelp     bool
+	viewingDiff  bool
+	viewport     viewport.Model
+	width        int
+	height       int
+	quitting     bool
+	ready        bool
+	columnWidths compareListColumnWidths
 }
 
 // Styles for the compare list TUI.
@@ -102,6 +121,7 @@ var compareListStyles = struct {
 	Filter      lipgloss.Style
 	FilterInput lipgloss.Style
 	Status      lipgloss.Style
+	Description lipgloss.Style
 	Score       lipgloss.Style
 	HighScore   lipgloss.Style
 	MedScore    lipgloss.Style
@@ -118,6 +138,7 @@ var compareListStyles = struct {
 	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Score:       lipgloss.NewStyle().Foreground(lipgloss.Color("4")),
 	HighScore:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
 	MedScore:    lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
@@ -132,14 +153,15 @@ var compareListStyles = struct {
 
 // NewCompareListModel creates a new compare list model from comparison results.
 func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareListModel {
+	columnWidths := defaultCompareListColumnWidths()
 	columns := []table.Column{
-		{Title: "Skill 1", Width: 22},
-		{Title: "Platform", Width: 5},
-		{Title: "Skill 2", Width: 22},
-		{Title: "Platform", Width: 5},
-		{Title: "Name%", Width: 6},
-		{Title: "Content%", Width: 8},
-		{Title: "Changes", Width: 18},
+		{Title: "Skill 1", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Skill 2", Width: columnWidths.name},
+		{Title: "Platform", Width: columnWidths.platform},
+		{Title: "Name%", Width: columnWidths.nameScore},
+		{Title: "Content%", Width: columnWidths.content},
+		{Title: "Changes", Width: columnWidths.changes},
 	}
 
 	// Sort by content similarity descending (highest similarity first)
@@ -180,6 +202,10 @@ func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareList
 }
 
 func (m CompareListModel) comparisonsToRows(comparisons []*similarity.ComparisonResult) []table.Row {
+	widths := m.columnWidths
+	if widths.name == 0 {
+		widths = defaultCompareListColumnWidths()
+	}
 	rows := make([]table.Row, len(comparisons))
 	for i, c := range comparisons {
 		nameScore := "-"
@@ -517,6 +543,21 @@ func (m CompareListModel) View() string {
 	}
 	b.WriteString(compareListStyles.Status.Render(status))
 	b.WriteString("\n")
+
+	selected := m.getSelectedComparison()
+	if selected != nil && (selected.Skill1.Description != "" || selected.Skill2.Description != "") {
+		descWidth := max(m.width-2, 40)
+		if selected.Skill1.Description != "" {
+			formatted := formatDetail("Skill 1: ", selected.Skill1.Description, descWidth)
+			b.WriteString(compareListStyles.Description.Render(formatted))
+			b.WriteString("\n")
+		}
+		if selected.Skill2.Description != "" {
+			formatted := formatDetail("Skill 2: ", selected.Skill2.Description, descWidth)
+			b.WriteString(compareListStyles.Description.Render(formatted))
+			b.WriteString("\n")
+		}
+	}
 
 	// Help
 	if m.showHelp {

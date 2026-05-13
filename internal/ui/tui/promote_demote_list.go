@@ -169,6 +169,7 @@ var promoteDemoteListStyles = struct {
 	Option         lipgloss.Style
 	PlatformTab    lipgloss.Style
 	PlatformActive lipgloss.Style
+	Description    lipgloss.Style
 }{
 	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
 	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
@@ -183,6 +184,7 @@ var promoteDemoteListStyles = struct {
 	Option:         lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
 	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
 	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
+	Description:    lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 type promoteDemoteColumnWidths struct {
@@ -356,6 +358,10 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 }
 
 func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		_, widths = promoteDemoteListColumns(0, m.skills, 0)
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -750,6 +756,14 @@ func (m PromoteDemoteListModel) View() string {
 	}
 	b.WriteString(promoteDemoteListStyles.Status.Render(status))
 	b.WriteString("\n")
+
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(promoteDemoteListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
 
 	// Help
 	if m.showHelp {

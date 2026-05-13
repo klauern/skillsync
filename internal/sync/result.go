@@ -75,6 +75,12 @@ type Result struct {
 
 	// DryRun indicates if this was a dry run (no changes made).
 	DryRun bool
+
+	// SelectedCount is the number of skills selected for this run.
+	SelectedCount int
+
+	// TotalAvailable is the total number of skills available for selection.
+	TotalAvailable int
 }
 
 // Created returns skills that were created.
@@ -153,6 +159,14 @@ func (r *Result) Summary() string {
 
 	fmt.Fprintf(&sb, "Synced %s -> %s using %s strategy\n",
 		r.Source, r.Target, r.Strategy)
+
+	if r.TotalAvailable > 0 {
+		selected := r.SelectedCount
+		if selected == 0 && len(r.Skills) > 0 {
+			selected = len(r.Skills)
+		}
+		fmt.Fprintf(&sb, "  Selected:  %d of %d\n", selected, r.TotalAvailable)
+	}
 
 	fmt.Fprintf(&sb, "  Created:   %d\n", len(r.Created()))
 	fmt.Fprintf(&sb, "  Updated:   %d\n", len(r.Updated()))

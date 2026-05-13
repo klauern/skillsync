@@ -52,6 +52,20 @@ type syncListKeyMap struct {
 	ScrollRight key.Binding
 }
 
+type syncListColumnWidths struct {
+	name  int
+	scope int
+	desc  int
+}
+
+func defaultSyncListColumnWidths() syncListColumnWidths {
+	return syncListColumnWidths{
+		name:  25,
+		scope: 12,
+		desc:  60,
+	}
+}
+
 func defaultSyncListKeyMap() syncListKeyMap {
 	return syncListKeyMap{
 		Up: key.NewBinding(
@@ -135,6 +149,7 @@ var syncListStyles = struct {
 	FilterInput lipgloss.Style
 	Confirm     lipgloss.Style
 	Status      lipgloss.Style
+	Description lipgloss.Style
 	Selected    lipgloss.Style
 	Checkbox    lipgloss.Style
 	DetailBox   lipgloss.Style
@@ -146,6 +161,7 @@ var syncListStyles = struct {
 	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
 	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 	DetailBox:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
@@ -164,12 +180,6 @@ const (
 	// syncListMaxHOffset is the maximum horizontal scroll offset (2 scrollable cols - 1).
 	syncListMaxHOffset = 1
 )
-
-type syncListColumnWidths struct {
-	name  int
-	scope int
-	desc  int
-}
 
 // syncListColumns returns visible table columns for the given terminal width and horizontal
 // scroll offset. Scrollable columns are: scope(0), description(1).
@@ -288,6 +298,10 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform, initi
 }
 
 func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
+	widths := m.columnWidths
+	if widths.desc == 0 {
+		widths = defaultSyncListColumnWidths()
+	}
 	rows := make([]table.Row, len(skills))
 	for i, s := range skills {
 		checkbox := "[ ]"
@@ -597,6 +611,14 @@ func (m SyncListModel) View() string {
 	}
 	b.WriteString(syncListStyles.Status.Render(status))
 	b.WriteString("\n")
+
+	selected := m.getSelectedSkill()
+	if selected.Name != "" && selected.Description != "" {
+		descWidth := max(m.width-2, 40)
+		formatted := formatDescription(selected.Description, descWidth)
+		b.WriteString(syncListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
 
 	// Help
 	if m.showHelp {
