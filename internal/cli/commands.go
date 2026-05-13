@@ -718,7 +718,6 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 	return nil
 }
 
-
 // outputSkills formats and prints skills in the requested format
 func outputSkills(skills []model.Skill, format string) error {
 	switch format {

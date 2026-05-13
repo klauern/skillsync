@@ -186,8 +186,6 @@ const (
 	discoverListDetailHeight  = discoverListDetailLines + 1 + 2 // title + content + border
 )
 
-
-
 // NewDiscoverListModel creates a new discover list model.
 func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 	columns, columnWidths := discoverListColumns(0, skills)

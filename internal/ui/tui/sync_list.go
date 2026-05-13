@@ -181,8 +181,6 @@ const (
 	syncListMaxHOffset = 1
 )
 
-
-
 // syncListColumns returns visible table columns for the given terminal width and horizontal
 // scroll offset. Scrollable columns are: scope(0), description(1).
 func syncListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]table.Column, syncListColumnWidths) {

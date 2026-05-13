@@ -210,8 +210,6 @@ const (
 	deleteListMaxHOffset = 2
 )
 
-
-
 // deleteListColumns returns visible table columns for the given terminal width and horizontal
 // scroll offset. Scrollable columns are: platform(0), scope(1), description(2).
 func deleteListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]table.Column, deleteListColumnWidths) {
