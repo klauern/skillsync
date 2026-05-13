@@ -3,6 +3,7 @@ package model
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 )
 
@@ -102,6 +103,16 @@ func AllPlatformNames() string {
 func ParsePlatform(s string) (Platform, error) {
 	normalized := strings.ToLower(strings.TrimSpace(s))
 
+	// Deprecation check: pi-agent aliases should migrate to pi-dev / PiDev.
+	switch normalized {
+	case "pi-agent", "piagent", "pia":
+		slog.Warn("platform name is deprecated; use 'pi-dev' instead",
+			"platform", s,
+			"replacement", "pi-dev",
+		)
+		return PiAgent, nil
+	}
+
 	// Try exact match first.
 	p := Platform(normalized)
 	if p.IsValid() {
@@ -116,8 +127,6 @@ func ParsePlatform(s string) (Platform, error) {
 		return Cursor, nil
 	case "codex":
 		return Codex, nil
-	case "pi-agent", "piagent", "pia":
-		return PiAgent, nil
 	case "copilot", "github-copilot", "githubcopilot":
 		return Copilot, nil
 	case "gemini":
