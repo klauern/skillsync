@@ -335,12 +335,14 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 		// Remove Cursor-specific fields
 		delete(metadata, "globs")
 		delete(metadata, "alwaysApply")
+		warnLossyCopilotFields(skill, target, metadata)
 
 	case model.Cursor:
 		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
 			metadata["globs"] = applyTo
 			delete(metadata, "applyTo")
 		}
+		warnLossyCopilotFields(skill, target, metadata)
 
 	case model.Codex:
 		// Codex metadata handling - preserve source info
@@ -348,9 +350,36 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 		delete(metadata, "handoffs")
 		delete(metadata, "target")
 		delete(metadata, "mcp-servers")
+		warnLossyCopilotFields(skill, target, metadata)
+
+	case model.PiAgent, model.PiDev, model.Gemini:
+		warnLossyCopilotFields(skill, target, metadata)
 	}
 
 	return metadata
+}
+
+// copilotOnlyMetadataKeys are frontmatter fields that are meaningful only on Copilot targets.
+// When transforming to another platform these fields become dead weight and are flagged.
+var copilotOnlyMetadataKeys = []string{"applyTo", "target", "handoffs", "mcp-servers"}
+
+// warnLossyCopilotFields emits a warning when a skill carries Copilot-specific metadata
+// and is being transformed to a non-Copilot target.
+func warnLossyCopilotFields(skill model.Skill, target model.Platform, metadata map[string]string) {
+	var lossy []string
+	for _, key := range copilotOnlyMetadataKeys {
+		if _, ok := metadata[key]; ok {
+			lossy = append(lossy, key)
+		}
+	}
+	if len(lossy) > 0 {
+		logging.Warn(
+			"copilot-specific metadata fields are not portable to target platform",
+			logging.Skill(skill.Name),
+			slog.String("target", string(target)),
+			slog.Any("fields", lossy),
+		)
+	}
 }
 
 // CanTransform returns true if transformation between platforms is supported.

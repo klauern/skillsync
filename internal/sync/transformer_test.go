@@ -619,3 +619,88 @@ func TestTransformer_MergeContent(t *testing.T) {
 		t.Error("Merged content should contain separator")
 	}
 }
+
+func TestTransformer_TransformMetadata_CopilotToCopilotPreservesFields(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Platform: model.Copilot,
+		Name:     "my-agent",
+		Metadata: map[string]string{
+			"applyTo":     "**/*.go",
+			"target":      "vscode",
+			"handoffs":    "[{\"agent\":\"implementer\"}]",
+			"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+			"model":       "GPT-4o",
+		},
+	}
+
+	metadata := tr.transformMetadata(skill, model.Copilot)
+
+	for _, key := range []string{"applyTo", "target", "handoffs", "mcp-servers", "model"} {
+		if _, ok := metadata[key]; !ok {
+			t.Errorf("copilot->copilot round-trip: metadata key %q should be preserved", key)
+		}
+	}
+}
+
+func TestTransformer_TransformMetadata_CopilotToClaudeDropsNothing_ButWarns(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Platform: model.Copilot,
+		Name:     "my-agent",
+		Metadata: map[string]string{
+			"applyTo":     "**/*.go",
+			"handoffs":    "[{\"agent\":\"implementer\"}]",
+			"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+			"model":       "GPT-4o",
+		},
+	}
+
+	// transformMetadata does not delete these keys for ClaudeCode target —
+	// they pass through as unknown metadata (a warn is emitted for the lossiness).
+	metadata := tr.transformMetadata(skill, model.ClaudeCode)
+
+	// Cursor-specific keys should still be absent (unrelated to copilot fields)
+	for _, key := range []string{"globs", "alwaysApply"} {
+		if _, ok := metadata[key]; ok {
+			t.Errorf("metadata key %q should not be injected for ClaudeCode target", key)
+		}
+	}
+	// model should survive
+	if metadata["model"] != "GPT-4o" {
+		t.Errorf("model metadata = %q, want GPT-4o", metadata["model"])
+	}
+}
+
+func TestTransformer_TransformMetadata_CopilotToCodexDropsCopilotFields(t *testing.T) {
+	tr := NewTransformer()
+
+	skill := model.Skill{
+		Platform: model.Copilot,
+		Name:     "my-agent",
+		Metadata: map[string]string{
+			"applyTo":     "**/*.go",
+			"target":      "vscode",
+			"handoffs":    "[{\"agent\":\"implementer\"}]",
+			"mcp-servers": "{\"github\":{\"command\":\"gh\"}}",
+			"model":       "GPT-4o",
+		},
+	}
+
+	metadata := tr.transformMetadata(skill, model.Codex)
+
+	for _, key := range []string{"handoffs", "target", "mcp-servers"} {
+		if _, ok := metadata[key]; ok {
+			t.Errorf("metadata key %q should be dropped for Codex target", key)
+		}
+	}
+	// model and source_platform should survive
+	if metadata["model"] != "GPT-4o" {
+		t.Errorf("model = %q, want GPT-4o", metadata["model"])
+	}
+	if metadata["source_platform"] != string(model.Copilot) {
+		t.Errorf("source_platform = %q, want %q", metadata["source_platform"], string(model.Copilot))
+	}
+}
