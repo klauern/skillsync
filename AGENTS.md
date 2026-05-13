@@ -42,6 +42,8 @@ preventing duplication and ensuring consistency.
 Track work in beads issues:
 - `bd ready` → `bd show <id>` → `bd update <id> --status in_progress` → `bd close <id>`
 
+**One-time setup**: `chmod 700 .beads` — silences the recurring "insecure permissions" advisory from bd
+
 **Session completion**: `bd sync --flush-only` (local export)
 
 ### Deep Dives

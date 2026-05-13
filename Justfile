@@ -87,6 +87,10 @@ run: build
 [group("meta"), doc("Run audit and build")]
 all: audit build
 
+[group("dev"), doc("One-time repo setup: fix .beads directory permissions")]
+setup:
+  @chmod 700 .beads 2>/dev/null && echo ".beads permissions set to 700" || true
+
 [group("dev"), doc("Show next open beads task in priority+dependency order")]
 next-task:
   @bash scripts/next-task.sh
