@@ -10,7 +10,10 @@ import (
 // TestParserFactoryFor_PiAgent tests that ParserFactoryFor correctly handles
 // the PiAgent platform, returning a factory that creates a working parser.
 func TestParserFactoryFor_PiAgent(t *testing.T) {
-	factory := ParserFactoryFor(model.PiAgent)
+	factory, err := ParserFactoryFor(model.PiAgent)
+	if err != nil {
+		t.Fatalf("ParserFactoryFor(PiAgent) unexpected error: %v", err)
+	}
 	if factory == nil {
 		t.Fatal("ParserFactoryFor(PiAgent) returned nil factory")
 	}
@@ -40,7 +43,10 @@ func TestParserFactoryFor_AllPlatforms(t *testing.T) {
 
 	for _, platform := range platforms {
 		t.Run(string(platform), func(t *testing.T) {
-			factory := ParserFactoryFor(platform)
+			factory, err := ParserFactoryFor(platform)
+			if err != nil {
+				t.Fatalf("ParserFactoryFor(%s) unexpected error: %v", platform, err)
+			}
 			if factory == nil {
 				t.Fatalf("ParserFactoryFor(%s) returned nil factory", platform)
 			}
@@ -76,7 +82,10 @@ func TestNewForPlatform_PiAgent(t *testing.T) {
 // a specific working directory.
 func TestNewForPlatformWithDir_PiAgent(t *testing.T) {
 	workingDir := t.TempDir()
-	p := NewForPlatformWithDir(model.PiAgent, workingDir)
+	p, err := NewForPlatformWithDir(model.PiAgent, workingDir)
+	if err != nil {
+		t.Fatalf("NewForPlatformWithDir(PiAgent) unexpected error: %v", err)
+	}
 	if p == nil {
 		t.Fatal("NewForPlatformWithDir(PiAgent) returned nil parser")
 	}
@@ -99,7 +108,10 @@ func TestNewForPlatformWithDir_PiAgent_MalformedSettings(t *testing.T) {
 		t.Fatalf("failed to write malformed settings.json: %v", err)
 	}
 
-	p := NewForPlatformWithDir(model.PiAgent, workingDir)
+	p, err := NewForPlatformWithDir(model.PiAgent, workingDir)
+	if err != nil {
+		t.Fatalf("NewForPlatformWithDir(PiAgent) unexpected error: %v", err)
+	}
 	if p == nil {
 		t.Fatal("NewForPlatformWithDir returned nil; expected graceful degradation")
 	}
@@ -125,7 +137,10 @@ func TestNewForPlatformWithDir_AllPlatforms(t *testing.T) {
 
 	for _, platform := range platforms {
 		t.Run(string(platform), func(t *testing.T) {
-			p := NewForPlatformWithDir(platform, workingDir)
+			p, err := NewForPlatformWithDir(platform, workingDir)
+			if err != nil {
+				t.Fatalf("NewForPlatformWithDir(%s) unexpected error: %v", platform, err)
+			}
 			if p == nil {
 				t.Fatalf("NewForPlatformWithDir(%s) returned nil parser", platform)
 			}

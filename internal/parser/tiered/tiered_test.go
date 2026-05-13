@@ -74,7 +74,10 @@ description: A test skill
 	}
 
 	// Create tiered parser
-	p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+	p, err := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+	if err != nil {
+		t.Fatalf("NewForPlatformWithDir() unexpected error: %v", err)
+	}
 
 	skills, err := p.Parse()
 	if err != nil {
@@ -371,7 +374,10 @@ func TestParserFactoryFor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.platform), func(t *testing.T) {
-			factory := ParserFactoryFor(tt.platform)
+			factory, err := ParserFactoryFor(tt.platform)
+			if err != nil {
+				t.Fatalf("ParserFactoryFor() unexpected error: %v", err)
+			}
 			if factory == nil {
 				t.Error("ParserFactoryFor() returned nil")
 			}
@@ -386,6 +392,13 @@ func TestParserFactoryFor(t *testing.T) {
 				t.Errorf("Parser platform = %s, want %s", p.Platform(), tt.platform)
 			}
 		})
+	}
+}
+
+func TestParserFactoryFor_UnknownPlatform(t *testing.T) {
+	_, err := ParserFactoryFor("unknown-platform")
+	if err == nil {
+		t.Error("ParserFactoryFor() expected error for unknown platform, got nil")
 	}
 }
 
@@ -455,7 +468,10 @@ description: A repo-level skill
 	}
 
 	t.Run("filter to repo scope finds repo skills", func(t *testing.T) {
-		p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+		p, err := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+		if err != nil {
+			t.Fatalf("NewForPlatformWithDir() unexpected error: %v", err)
+		}
 
 		skills, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeRepo})
 		if err != nil {
@@ -479,7 +495,10 @@ description: A repo-level skill
 	})
 
 	t.Run("empty scope filter returns no skills", func(t *testing.T) {
-		p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+		p, err := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+		if err != nil {
+			t.Fatalf("NewForPlatformWithDir() unexpected error: %v", err)
+		}
 
 		skills, err := p.ParseWithScopeFilter([]model.SkillScope{})
 		if err != nil {
@@ -492,7 +511,10 @@ description: A repo-level skill
 	})
 
 	t.Run("filter to non-existent scope returns empty", func(t *testing.T) {
-		p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+		p, err := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+		if err != nil {
+			t.Fatalf("NewForPlatformWithDir() unexpected error: %v", err)
+		}
 
 		// Filter to system scope - we haven't created any system skills
 		skills, err := p.ParseWithScopeFilter([]model.SkillScope{model.ScopeSystem})
@@ -780,7 +802,10 @@ func TestParser_GetExistingSearchPaths(t *testing.T) {
 		t.Fatalf("failed to create directory: %v", err)
 	}
 
-	p := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+	p, err := NewForPlatformWithDir(model.ClaudeCode, tmpDir)
+	if err != nil {
+		t.Fatalf("NewForPlatformWithDir() unexpected error: %v", err)
+	}
 
 	existingPaths := p.GetExistingSearchPaths()
 	allPaths := p.GetSearchPaths()

@@ -66,25 +66,27 @@ func PiDevParserFactory() ParserFactory {
 	}
 }
 
-// ParserFactoryFor returns the appropriate ParserFactory for a platform.
-func ParserFactoryFor(platform model.Platform) ParserFactory {
+// ParserFactoryFor returns the appropriate ParserFactory for a platform, or an
+// error if the platform is not recognized. Callers that receive an error should
+// treat the platform as unsupported rather than falling back to another parser.
+func ParserFactoryFor(platform model.Platform) (ParserFactory, error) {
 	switch platform {
 	case model.ClaudeCode:
-		return ClaudeCodeParserFactory()
+		return ClaudeCodeParserFactory(), nil
 	case model.Cursor:
-		return CursorParserFactory()
+		return CursorParserFactory(), nil
 	case model.Codex:
-		return CodexParserFactory()
+		return CodexParserFactory(), nil
 	case model.PiAgent:
-		return PiAgentParserFactory()
+		return PiAgentParserFactory(), nil
 	case model.Copilot:
-		return CopilotParserFactory()
+		return CopilotParserFactory(), nil
 	case model.Gemini:
-		return GeminiParserFactory()
+		return GeminiParserFactory(), nil
 	case model.PiDev:
-		return PiDevParserFactory()
+		return PiDevParserFactory(), nil
 	default:
-		panic(fmt.Sprintf("no parser factory for platform %q", platform))
+		return nil, fmt.Errorf("no parser factory for platform %q", platform)
 	}
 }
 
@@ -96,10 +98,15 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 		return nil, err
 	}
 
+	factory, err := ParserFactoryFor(platform)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := Config{
 		Platform:      platform,
 		WorkingDir:    cwd,
-		ParserFactory: ParserFactoryFor(platform),
+		ParserFactory: factory,
 	}
 	if platform == model.PiAgent {
 		searchPaths, err := piagent.DiscoverSearchPaths(cwd)
@@ -113,11 +120,16 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 }
 
 // NewForPlatformWithDir creates a TieredParser for the given platform and working directory.
-func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
+func NewForPlatformWithDir(platform model.Platform, workingDir string) (*Parser, error) {
+	factory, err := ParserFactoryFor(platform)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := Config{
 		Platform:      platform,
 		WorkingDir:    workingDir,
-		ParserFactory: ParserFactoryFor(platform),
+		ParserFactory: factory,
 	}
 	if platform == model.PiAgent {
 		searchPaths, err := piagent.DiscoverSearchPaths(workingDir)
@@ -127,5 +139,5 @@ func NewForPlatformWithDir(platform model.Platform, workingDir string) *Parser {
 			cfg.SearchPaths = searchPaths
 		}
 	}
-	return New(cfg)
+	return New(cfg), nil
 }

@@ -2035,7 +2035,11 @@ func parsePlatformSkillsFromPaths(
 	scopeFilter []model.SkillScope,
 	includePlugins bool,
 ) []model.Skill {
-	parserFactory := tiered.ParserFactoryFor(platform)
+	parserFactory, err := tiered.ParserFactoryFor(platform)
+	if err != nil {
+		logging.Warn("unsupported platform for skill parsing", logging.Err(err))
+		return nil
+	}
 	skillsByName := make(map[string]model.Skill)
 
 	scopeSet := make(map[model.SkillScope]bool)
