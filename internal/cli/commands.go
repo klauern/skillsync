@@ -923,28 +923,24 @@ func outputTable(skills []model.Skill) error {
 	return nil
 }
 
-// colorPlatform returns a colored platform name for visual distinction
+// platformColorFns maps each platform to its display color function.
+var platformColorFns = map[model.Platform]func(...any) string{
+	model.ClaudeCode: ui.Info,
+	model.Cursor:     ui.Success,
+	model.Codex:      ui.Warning,
+	model.PiDev:      ui.Magenta,
+	model.Copilot:    ui.Blue,
+	model.Gemini:     ui.Bold,
+	model.PiAgent:    ui.Dim,
+}
+
+// colorPlatform returns a colored platform name for visual distinction.
 func colorPlatform(platform string, width int) string {
-	// Use consistent width formatting with colors
 	formatted := fmt.Sprintf("%-*s", width, platform)
-	switch platform {
-	case "claude-code":
-		return ui.Info(formatted)
-	case "cursor":
-		return ui.Success(formatted)
-	case "codex":
-		return ui.Warning(formatted)
-	case "pi.dev":
-		return ui.Magenta(formatted)
-	case "copilot":
-		return ui.Blue(formatted)
-	case "gemini":
-		return ui.Bold(formatted)
-	case "pi-agent":
-		return ui.Dim(formatted)
-	default:
-		return formatted
+	if fn, ok := platformColorFns[model.Platform(platform)]; ok {
+		return fn(formatted)
 	}
+	return formatted
 }
 
 // colorSource returns a colored source string based on the skill's scope and plugin info.

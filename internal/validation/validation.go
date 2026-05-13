@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/util"
@@ -283,66 +285,25 @@ func validateSkill(skill model.Skill, index int, opts Options) error {
 
 // validateFileExtension checks if the skill file has a valid extension for its platform.
 func validateFileExtension(skill model.Skill) error {
-	ext := filepath.Ext(skill.Path)
-
-	switch skill.Platform {
-	case model.ClaudeCode:
-		// Claude Code accepts .md, .txt, or no extension
-		if ext != "" && ext != ".md" && ext != ".txt" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("unexpected file extension %q for Claude Code skill (expected .md, .txt, or no extension)", ext),
-			}
-		}
-	case model.Cursor:
-		// Cursor requires .md or .mdc
-		if ext != ".md" && ext != ".mdc" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Cursor skill (expected .md or .mdc)", ext),
-			}
-		}
-	case model.Codex:
-		// Codex parser produces .md files (AGENTS.md, SKILL.md, *.md) and .toml (config.toml)
-		if ext != ".md" && ext != ".toml" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Codex skill (expected .md or .toml)", ext),
-			}
-		}
-	case model.Copilot:
-		// Copilot artifacts are markdown files with .prompt.md / .agent.md suffixes.
-		if ext != ".md" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Copilot artifact (expected .md)", ext),
-			}
-		}
-	case model.Gemini:
-		if ext != ".md" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Gemini skill (expected .md)", ext),
-			}
-		}
-	case model.PiDev:
-		// Pi.dev skills use the shared SKILL.md format.
-		if ext != ".md" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Pi.dev skill (expected .md)", ext),
-			}
-		}
-	case model.PiAgent:
-		if ext != ".md" {
-			return &Error{
-				Field:   fmt.Sprintf("skill %q", skill.Name),
-				Message: fmt.Sprintf("invalid file extension %q for Pi Agent skill (expected .md)", ext),
-			}
-		}
+	info, ok := model.PlatformInfoFor(skill.Platform)
+	if !ok || len(info.ValidExtensions) == 0 {
+		return nil
 	}
-
-	return nil
+	ext := filepath.Ext(skill.Path)
+	if ext == "" && info.AllowsEmptyExt {
+		return nil
+	}
+	if slices.Contains(info.ValidExtensions, ext) {
+		return nil
+	}
+	expected := strings.Join(info.ValidExtensions, " or ")
+	if info.AllowsEmptyExt {
+		expected += ", or no extension"
+	}
+	return &Error{
+		Field:   fmt.Sprintf("skill %q", skill.Name),
+		Message: fmt.Sprintf("invalid file extension %q for %s skill (expected %s)", ext, info.DisplayName, expected),
+	}
 }
 
 // checkConflicts checks for potential conflicts between source and target skills.
