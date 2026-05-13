@@ -82,7 +82,7 @@ All fields are optional. Only `description` is recommended.
 | `model`                    | `string`   | No          | Claude model override for this skill. Preserve as metadata when translating to other CLIs. |
 | `context`                  | `string`   | No          | Claude-specific subagent context. Set to `fork` to run in a forked subagent context; Codex CLI has no equivalent. |
 | `agent`                    | `string`   | No          | Claude-specific subagent selector when `context: fork` is set. Options: `Explore`, `Plan`, `general-purpose`, or custom agent names from `.claude/agents/`. |
-| `hooks`                    | `object`   | No          | Claude-specific hooks scoped to this skill's lifecycle. Not portable as runtime behavior. |
+| `hooks`                    | `object`   | No          | Claude-specific hook declarations scoped to this skill's lifecycle. Preserve only as frontmatter metadata when syncing; the runtime behavior remains Claude-specific. |
 | `type`                     | `string`   | No          | SkillSync extension: `skill` (default) or `prompt` for slash-command semantics. |
 | `trigger`                  | `string`   | No          | SkillSync extension: explicit slash trigger (e.g., `/my-command`). |
 | `scope`                    | `string`   | No          | SkillSync extension: `user`, `repo`, `system`, `plugin`, etc. |
@@ -95,15 +95,19 @@ schema:
 - Usually portable as native skill content: `name`, `description`, markdown
   body content, and supporting directories.
 - Usually portable only as intent/metadata: `allowed-tools`.
+- Portable only as descriptive metadata, not as behavior: `hooks`.
 - Claude-specific runtime controls with no native Codex skill equivalent:
-  `disable-model-invocation`, `user-invocable`, `model`, `context`, `agent`,
-  and `hooks`.
+  `disable-model-invocation`, `user-invocable`, `model`, `context`, and
+  `agent`.
 - SkillSync extension fields such as `type`, `trigger`, and `scope` are
   transport metadata in this repo. They do not mean Codex will reproduce
   Claude slash-command, invocation, or scope behavior.
 
 When these Claude-only fields move to Codex, treat them as lossy compatibility
-data or re-author them as Codex-native instructions.
+data or re-author them as Codex-native instructions. For `hooks` specifically,
+SkillSync may preserve the declared hook object as metadata for inspection or
+round-tripping, but the trigger timing, lifecycle scope, and side effects do
+not become portable runtime behavior.
 
 #### Invocation Control Matrix
 
@@ -387,10 +391,15 @@ Legacy format fixtures are in `testdata/skills/legacy/`:
 - **Context budget awareness**: SkillSync does not model the 2% context window budget for skill
   description loading.
 - **`hooks` field parsing**: The `hooks` frontmatter field is stored as metadata but not
-  structurally parsed.
+  structurally parsed. That metadata is portable only as a descriptive record of
+  Claude configuration, not as cross-platform hook execution semantics.
 - **Codex portability of Claude-only controls**: `disable-model-invocation`,
-  `user-invocable`, `model`, `context: fork`, `agent`, and `hooks` should be
-  documented and treated as lossy when Claude content is synced to Codex CLI.
+  `user-invocable`, `model`, `context: fork`, and `agent` should be documented
+  and treated as lossy when Claude content is synced to Codex CLI.
+- **Lossy hook translation**: Claude skill hooks can be carried forward as
+  metadata only. Platforms with their own hook systems, such as Codex config
+  hooks or Gemini settings hooks, require manual re-authoring because the event
+  model and runtime ownership differ.
 
 ## Sources
 

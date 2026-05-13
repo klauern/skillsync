@@ -116,13 +116,13 @@ func ParsePlatform(s string) (Platform, error) {
 		return Cursor, nil
 	case "codex":
 		return Codex, nil
-	case "pi-agent", "piagent", "pi":
+	case "pi-agent", "piagent", "pia":
 		return PiAgent, nil
 	case "copilot", "github-copilot", "githubcopilot":
 		return Copilot, nil
 	case "gemini":
 		return Gemini, nil
-	case "pi.dev", "pidev", "pi-dev":
+	case "pi.dev", "pidev", "pi-dev", "pi":
 		return PiDev, nil
 	default:
 		valid := make([]string, 0, len(AllPlatforms()))

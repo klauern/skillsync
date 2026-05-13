@@ -854,7 +854,7 @@ func (m DeleteListModel) renderShortHelp() string {
 	keys := []string{
 		"↑/↓ navigate",
 		"←/→ scroll cols",
-		"tab/S-tab platform",
+		"h/l platform",
 		"space mark/unmark delete",
 		"a toggle all",
 		"enter details",
