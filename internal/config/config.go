@@ -295,7 +295,6 @@ func (c *Config) applyEnvironment() {
 	}
 }
 
-// parseBool parses a boolean from common string representations.
 // splitPaths splits a colon-separated path string into individual paths.
 // Empty segments are filtered out.
 func splitPaths(s string) []string {
