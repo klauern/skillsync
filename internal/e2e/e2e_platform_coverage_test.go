@@ -14,12 +14,17 @@ func TestSyncCopilotToCodex(t *testing.T) {
 	copilotFixture := h.CopilotFixture()
 	copilotFixture.WriteFile("prompts/review.prompt.md", "---\ndescription: Review code\n---\n\nReview the code at $ARGUMENTS.")
 
-	h.CodexFixture()
+	codexFixture := h.CodexFixture()
 
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "--include-prompts", "copilot", "codex")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertOutputContains(t, result, "Created")
+	e2e.AssertOutputContains(t, result, "Synced copilot -> codex using overwrite strategy")
+	e2e.AssertOutputContains(t, result, "  Created:   1")
+	e2e.AssertOutputContains(t, result, "  Failed:    0")
+	e2e.AssertOutputContains(t, result, "  ✓ review: created")
+	e2e.AssertFileExists(t, codexFixture.Path("review/SKILL.md"))
+	e2e.AssertFileContains(t, codexFixture.Path("review/SKILL.md"), "Review the code at $ARGUMENTS.")
 }
 
 // TestSyncCodexToGemini verifies sync from Codex to Gemini CLI.
