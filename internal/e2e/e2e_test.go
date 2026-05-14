@@ -1170,14 +1170,14 @@ func TestSyncClaudeCodeToCodex(t *testing.T) {
 	}
 }
 
-// TestSyncClaudeCodeToPiAgent verifies sync from Claude Code to Pi Agent.
-func TestSyncClaudeCodeToPiAgent(t *testing.T) {
+// TestSyncClaudeCodeToPiDevLegacyAlias verifies the legacy pi-agent alias targets Pi.dev output.
+func TestSyncClaudeCodeToPiDevLegacyAlias(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("pi-test.md", "pi-test", "To Pi Agent", "# Pi Test\n\nContent for Pi.")
+	claudeFixture.WriteSkill("pi-test.md", "pi-test", "To Pi.dev", "# Pi Test\n\nContent for Pi.")
 
-	piFixture := h.PiAgentFixture()
+	piFixture := h.PiDevFixture()
 
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "pi-agent")
 
@@ -1185,62 +1185,62 @@ func TestSyncClaudeCodeToPiAgent(t *testing.T) {
 	e2e.AssertFileExists(t, piFixture.Path("pi-test/SKILL.md"))
 }
 
-// TestSyncPiAgentToCursor verifies sync from Pi Agent to Cursor.
-func TestSyncPiAgentToCursor(t *testing.T) {
+// TestSyncPiDevToCursor verifies sync from Pi.dev to Cursor.
+func TestSyncPiDevToCursor(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiAgentFixture()
+	piFixture := h.PiDevFixture()
 	piFixture.WriteSkill("pi-to-cursor/SKILL.md", "pi-to-cursor", "Pi to Cursor", "# Pi To Cursor\n\nContent for Cursor.")
 
 	cursorFixture := h.CursorFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-agent", "cursor")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-dev", "cursor")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertFileExists(t, cursorFixture.Path("pi-to-cursor/SKILL.md"))
 }
 
-// TestSyncPiAgentToClaudeCode verifies sync from Pi Agent to Claude Code (user scope).
-func TestSyncPiAgentToClaudeCode(t *testing.T) {
+// TestSyncPiDevToClaudeCode verifies sync from Pi.dev to Claude Code (user scope).
+func TestSyncPiDevToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiAgentFixture()
+	piFixture := h.PiDevFixture()
 	piFixture.WriteSkill("pi-to-claude/SKILL.md", "pi-to-claude", "Pi to Claude", "# Pi To Claude\n\nContent for Claude.")
 
 	claudeFixture := h.ClaudeCodeFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-agent", "claudecode")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-dev", "claudecode")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertFileExists(t, claudeFixture.Path("pi-to-claude/SKILL.md"))
 }
 
-// TestSyncPiAgentToCodex verifies sync from Pi Agent to Codex.
-func TestSyncPiAgentToCodex(t *testing.T) {
+// TestSyncPiDevToCodex verifies sync from Pi.dev to Codex.
+func TestSyncPiDevToCodex(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiAgentFixture()
+	piFixture := h.PiDevFixture()
 	piFixture.WriteSkill("pi-to-codex/SKILL.md", "pi-to-codex", "Pi to Codex", "# Pi To Codex\n\nContent for Codex.")
 
 	codexFixture := h.CodexFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-agent", "codex")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-dev", "codex")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertFileExists(t, codexFixture.Path("pi-to-codex/SKILL.md"))
 }
 
-// TestDiscoverPiAgent verifies Pi Agent skills can be discovered directly.
-func TestDiscoverPiAgent(t *testing.T) {
+// TestDiscoverPiDevLegacyAlias verifies the legacy pi-agent alias still discovers Pi.dev skills.
+func TestDiscoverPiDevLegacyAlias(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiAgentFixture()
+	piFixture := h.PiDevFixture()
 	piFixture.WriteSkill("discoverable/SKILL.md", "discoverable", "Pi discovery", "# Discoverable\n")
 
 	result := h.Run("discover", "--platform", "pi-agent", "--format", "json")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertOutputContains(t, result, `"platform": "pi-agent"`)
+	e2e.AssertOutputContains(t, result, `"platform": "pi.dev"`)
 	e2e.AssertOutputContains(t, result, `"name": "discoverable"`)
 }
 
@@ -2104,11 +2104,11 @@ func TestSyncClaudeCodeToPiDev(t *testing.T) {
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "pi.dev")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertFileExists(t, piDevFixture.Path("pidev-test.md"))
+	e2e.AssertFileExists(t, piDevFixture.Path("pidev-test/SKILL.md"))
 }
 
-// TestSyncPiDevToClaudeCode verifies sync from Pi.dev to Claude Code.
-func TestSyncPiDevToClaudeCode(t *testing.T) {
+// TestSyncPiDevToClaudeCodeDotPlatform verifies sync from Pi.dev to Claude Code.
+func TestSyncPiDevToClaudeCodeDotPlatform(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	piDevFixture := h.PiDevFixture()

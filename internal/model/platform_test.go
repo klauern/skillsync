@@ -11,7 +11,6 @@ func TestPlatformValidation(t *testing.T) {
 		"copilot valid":     {platform: Copilot, valid: true},
 		"cursor valid":      {platform: Cursor, valid: true},
 		"codex valid":       {platform: Codex, valid: true},
-		"pi agent valid":    {platform: PiAgent, valid: true},
 		"gemini valid":      {platform: Gemini, valid: true},
 		"pi.dev valid":      {platform: PiDev, valid: true},
 		"empty invalid":     {platform: "", valid: false},
@@ -31,8 +30,8 @@ func TestPlatformValidation(t *testing.T) {
 func TestAllPlatforms(t *testing.T) {
 	platforms := AllPlatforms()
 
-	if len(platforms) != 7 {
-		t.Errorf("AllPlatforms() returned %d platforms, want 7", len(platforms))
+	if len(platforms) != 6 {
+		t.Errorf("AllPlatforms() returned %d platforms, want 6", len(platforms))
 	}
 
 	for _, p := range platforms {
@@ -51,7 +50,6 @@ func TestPlatformShort(t *testing.T) {
 		"copilot":     {platform: Copilot, want: "cop"},
 		"cursor":      {platform: Cursor, want: "cur"},
 		"codex":       {platform: Codex, want: "cdx"},
-		"pi agent":    {platform: PiAgent, want: "pia"},
 		"gemini":      {platform: Gemini, want: "gem"},
 		"pi.dev":      {platform: PiDev, want: "pi"},
 		"unknown":     {platform: "unknown", want: "unknown"},
@@ -76,7 +74,6 @@ func TestPlatformConfigDir(t *testing.T) {
 		"copilot":         {platform: Copilot, want: "github"},
 		"cursor":          {platform: Cursor, want: "cursor"},
 		"codex":           {platform: Codex, want: "codex"},
-		"pi agent":        {platform: PiAgent, want: "agents"},
 		"gemini":          {platform: Gemini, want: "gemini"},
 		"pi.dev":          {platform: PiDev, want: "pi/agent"},
 		"unknown returns": {platform: "unknown", want: "unknown"},
@@ -106,9 +103,9 @@ func TestParsePlatform(t *testing.T) {
 		"github-copilot alias":  {input: "github-copilot", want: Copilot, wantErr: false},
 		"cursor exact":          {input: "cursor", want: Cursor, wantErr: false},
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
-		"pi agent exact":        {input: "pi-agent", want: PiAgent, wantErr: false},
+		"pi agent exact":        {input: "pi-agent", want: PiDev, wantErr: false},
 		"pi shorthand":          {input: "pi", want: PiDev, wantErr: false},
-		"pia shorthand":         {input: "pia", want: PiAgent, wantErr: false},
+		"pia shorthand":         {input: "pia", want: PiDev, wantErr: false},
 		"gemini exact":          {input: "gemini", want: Gemini, wantErr: false},
 		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
 		"pi-dev alias":          {input: "pi-dev", want: PiDev, wantErr: false},

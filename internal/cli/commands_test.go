@@ -1594,7 +1594,7 @@ This is a user skill.
 	}
 }
 
-func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
+func TestPlatformSkillsPaths_PiDevIncludesSettingsDirectories(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -1647,7 +1647,7 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 	})
 
 	cfg := config.Default()
-	paths, gotRepoRoot, err := platformSkillsPaths(cfg, model.PiAgent)
+	paths, gotRepoRoot, err := platformSkillsPaths(cfg, model.PiDev)
 	if err != nil {
 		t.Fatalf("platformSkillsPaths() error = %v", err)
 	}
@@ -1670,9 +1670,12 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 		{Path: filepath.Join(repoRoot, ".agents", "skills"), Scope: model.ScopeRepo},
 		{Path: projectRelative, Scope: model.ScopeRepo},
 		{Path: projectAbsolute, Scope: model.ScopeRepo},
-		{Path: filepath.Join(home, ".agents", "skills"), Scope: model.ScopeUser},
+		{Path: filepath.Join(home, ".pi", "agent", "skills"), Scope: model.ScopeUser},
 		{Path: userRelative, Scope: model.ScopeUser},
 		{Path: userAbsolute, Scope: model.ScopeUser},
+		{Path: filepath.Join(workingDir, ".pi", "skills"), Scope: model.ScopeRepo},
+		{Path: filepath.Join(repoRoot, ".pi", "skills"), Scope: model.ScopeRepo},
+		{Path: filepath.Join(home, ".agents", "skills"), Scope: model.ScopeUser},
 	}
 	if len(paths) != len(wantPaths) {
 		t.Fatalf("platformSkillsPaths() returned %d paths, want %d: %v", len(paths), len(wantPaths), paths)

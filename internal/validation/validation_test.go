@@ -178,8 +178,8 @@ func TestValidateSkill_ValidExtension(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "Pi Agent .md",
-			platform: model.PiAgent,
+			name:     "Pi.dev .md",
+			platform: model.PiDev,
 			path:     "/skills/SKILL.md",
 			wantErr:  false,
 		},

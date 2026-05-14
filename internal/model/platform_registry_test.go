@@ -46,17 +46,6 @@ func TestPlatformInfoFor(t *testing.T) {
 			},
 		},
 		{
-			name: "pi agent",
-			p:    PiAgent,
-			want: PlatformInfo{
-				Short:           "pia",
-				ConfigDir:       "agents",
-				DotDir:          ".pi",
-				DisplayName:     "Pi Agent",
-				ValidExtensions: []string{".md"},
-			},
-		},
-		{
 			name: "copilot",
 			p:    Copilot,
 			want: PlatformInfo{

@@ -17,8 +17,6 @@ const (
 	Cursor Platform = "cursor"
 	// Codex is the identifier for the Codex platform.
 	Codex Platform = "codex"
-	// PiAgent is the identifier for the Pi Agent platform.
-	PiAgent Platform = "pi-agent"
 	// Copilot is the identifier for GitHub Copilot.
 	Copilot Platform = "copilot"
 	// Gemini is the identifier for the Gemini CLI platform.
@@ -49,7 +47,6 @@ var platformRegistry = map[Platform]PlatformInfo{
 	ClaudeCode: {Short: "cc", ConfigDir: "claude", DotDir: ".claude", DisplayName: "Claude Code", ValidExtensions: []string{".md", ".txt"}, AllowsEmptyExt: true},
 	Cursor:     {Short: "cur", ConfigDir: "cursor", DotDir: ".cursor", DisplayName: "Cursor", ValidExtensions: []string{".md", ".mdc"}},
 	Codex:      {Short: "cdx", ConfigDir: "codex", DotDir: ".codex", DisplayName: "Codex", ValidExtensions: []string{".md", ".toml"}},
-	PiAgent:    {Short: "pia", ConfigDir: "agents", DotDir: ".pi", DisplayName: "Pi Agent", ValidExtensions: []string{".md"}},
 	Copilot:    {Short: "cop", ConfigDir: "github", DotDir: ".github", DisplayName: "Copilot", ValidExtensions: []string{".md"}},
 	Gemini:     {Short: "gem", ConfigDir: "gemini", DotDir: ".gemini", DisplayName: "Gemini", ValidExtensions: []string{".md"}},
 	PiDev:      {Short: "pi", ConfigDir: "pi/agent", DotDir: ".pi/agent", DisplayName: "Pi.dev", ValidExtensions: []string{".md"}},
@@ -86,7 +83,7 @@ func (p Platform) Short() string {
 
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
-	return []Platform{ClaudeCode, Cursor, Codex, PiAgent, Copilot, Gemini, PiDev}
+	return []Platform{ClaudeCode, Cursor, Codex, Copilot, Gemini, PiDev}
 }
 
 // AllPlatformNames returns a comma-separated string of all supported platform names.
@@ -113,7 +110,7 @@ func ParsePlatform(s string) (Platform, error) {
 			"platform", s,
 			"replacement", "pi-dev",
 		)
-		return PiAgent, nil
+		return PiDev, nil
 	}
 
 	// Try exact match first.

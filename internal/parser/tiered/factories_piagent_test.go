@@ -7,35 +7,34 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 )
 
-// TestParserFactoryFor_PiAgent tests that ParserFactoryFor correctly handles
-// the PiAgent platform, returning a factory that creates a working parser.
-func TestParserFactoryFor_PiAgent(t *testing.T) {
-	factory, err := ParserFactoryFor(model.PiAgent)
+// TestParserFactoryFor_PiDev tests that ParserFactoryFor correctly handles
+// the Pi.dev platform, returning a factory that creates a working parser.
+func TestParserFactoryFor_PiDev(t *testing.T) {
+	factory, err := ParserFactoryFor(model.PiDev)
 	if err != nil {
-		t.Fatalf("ParserFactoryFor(PiAgent) unexpected error: %v", err)
+		t.Fatalf("ParserFactoryFor(PiDev) unexpected error: %v", err)
 	}
 	if factory == nil {
-		t.Fatal("ParserFactoryFor(PiAgent) returned nil factory")
+		t.Fatal("ParserFactoryFor(PiDev) returned nil factory")
 	}
 
-	p := factory("/test/pi-agent/skills")
+	p := factory("/test/pi-dev/skills")
 	if p == nil {
-		t.Fatal("PiAgentParserFactory returned nil parser")
+		t.Fatal("PiDevParserFactory returned nil parser")
 	}
 
-	if p.Platform() != model.PiAgent {
-		t.Errorf("parser.Platform() = %s, want %s", p.Platform(), model.PiAgent)
+	if p.Platform() != model.PiDev {
+		t.Errorf("parser.Platform() = %s, want %s", p.Platform(), model.PiDev)
 	}
 }
 
 // TestParserFactoryFor_AllPlatforms verifies all supported platforms return
-// a non-nil factory and parser, including PiAgent.
+// a non-nil factory and parser, including Pi.dev.
 func TestParserFactoryFor_AllPlatforms(t *testing.T) {
 	platforms := []model.Platform{
 		model.ClaudeCode,
 		model.Cursor,
 		model.Codex,
-		model.PiAgent,
 		model.Copilot,
 		model.Gemini,
 		model.PiDev,
@@ -63,41 +62,41 @@ func TestParserFactoryFor_AllPlatforms(t *testing.T) {
 	}
 }
 
-// TestNewForPlatform_PiAgent tests that NewForPlatform correctly creates a tiered
-// parser for PiAgent, including the special DiscoverSearchPaths integration.
-func TestNewForPlatform_PiAgent(t *testing.T) {
-	p, err := NewForPlatform(model.PiAgent)
+// TestNewForPlatform_PiDev tests that NewForPlatform correctly creates a tiered
+// parser for Pi.dev, including the special DiscoverSearchPaths integration.
+func TestNewForPlatform_PiDevSearchPaths(t *testing.T) {
+	p, err := NewForPlatform(model.PiDev)
 	if err != nil {
-		t.Fatalf("NewForPlatform(PiAgent) error = %v", err)
+		t.Fatalf("NewForPlatform(PiDev) error = %v", err)
 	}
 	if p == nil {
-		t.Fatal("NewForPlatform(PiAgent) returned nil parser")
+		t.Fatal("NewForPlatform(PiDev) returned nil parser")
 	}
-	if p.Platform() != model.PiAgent {
-		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiAgent)
+	if p.Platform() != model.PiDev {
+		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiDev)
 	}
 }
 
-// TestNewForPlatformWithDir_PiAgent tests NewForPlatformWithDir for PiAgent with
+// TestNewForPlatformWithDir_PiDev tests NewForPlatformWithDir for Pi.dev with
 // a specific working directory.
-func TestNewForPlatformWithDir_PiAgent(t *testing.T) {
+func TestNewForPlatformWithDir_PiDev(t *testing.T) {
 	workingDir := t.TempDir()
-	p, err := NewForPlatformWithDir(model.PiAgent, workingDir)
+	p, err := NewForPlatformWithDir(model.PiDev, workingDir)
 	if err != nil {
-		t.Fatalf("NewForPlatformWithDir(PiAgent) unexpected error: %v", err)
+		t.Fatalf("NewForPlatformWithDir(PiDev) unexpected error: %v", err)
 	}
 	if p == nil {
-		t.Fatal("NewForPlatformWithDir(PiAgent) returned nil parser")
+		t.Fatal("NewForPlatformWithDir(PiDev) returned nil parser")
 	}
-	if p.Platform() != model.PiAgent {
-		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiAgent)
+	if p.Platform() != model.PiDev {
+		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiDev)
 	}
 }
 
-// TestNewForPlatformWithDir_PiAgent_MalformedSettings verifies that a malformed
+// TestNewForPlatformWithDir_PiDev_MalformedSettings verifies that a malformed
 // .pi/settings.json does not crash NewForPlatformWithDir — the error is logged
 // and the parser is returned with an empty search-path set.
-func TestNewForPlatformWithDir_PiAgent_MalformedSettings(t *testing.T) {
+func TestNewForPlatformWithDir_PiDev_MalformedSettings(t *testing.T) {
 	workingDir := t.TempDir()
 
 	piDir := workingDir + "/.pi"
@@ -108,26 +107,25 @@ func TestNewForPlatformWithDir_PiAgent_MalformedSettings(t *testing.T) {
 		t.Fatalf("failed to write malformed settings.json: %v", err)
 	}
 
-	p, err := NewForPlatformWithDir(model.PiAgent, workingDir)
+	p, err := NewForPlatformWithDir(model.PiDev, workingDir)
 	if err != nil {
-		t.Fatalf("NewForPlatformWithDir(PiAgent) unexpected error: %v", err)
+		t.Fatalf("NewForPlatformWithDir(PiDev) unexpected error: %v", err)
 	}
 	if p == nil {
 		t.Fatal("NewForPlatformWithDir returned nil; expected graceful degradation")
 	}
-	if p.Platform() != model.PiAgent {
-		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiAgent)
+	if p.Platform() != model.PiDev {
+		t.Errorf("Platform() = %s, want %s", p.Platform(), model.PiDev)
 	}
 }
 
 // TestNewForPlatformWithDir_AllPlatforms verifies that NewForPlatformWithDir works
-// for every supported platform including the newer ones (PiAgent, Copilot, Gemini, PiDev).
+// for every supported platform including the newer ones (Copilot, Gemini, PiDev).
 func TestNewForPlatformWithDir_AllPlatforms(t *testing.T) {
 	platforms := []model.Platform{
 		model.ClaudeCode,
 		model.Cursor,
 		model.Codex,
-		model.PiAgent,
 		model.Copilot,
 		model.Gemini,
 		model.PiDev,

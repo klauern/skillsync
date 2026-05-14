@@ -26,7 +26,7 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
-	"github.com/klauern/skillsync/internal/parser/piagent"
+	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
@@ -200,7 +200,6 @@ func showConfigPaths() error {
 	fmt.Printf("  Claude Code:     %v\n", cfg.Platforms.ClaudeCode.SkillsPaths)
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
-	fmt.Printf("  Pi Agent:        %v\n", cfg.Platforms.PiAgent.SkillsPaths)
 	fmt.Printf("  Pi.dev:          %v\n", cfg.Platforms.PiDev.SkillsPaths)
 
 	fmt.Println("\nData paths:")
@@ -931,7 +930,6 @@ var platformColorFns = map[model.Platform]func(...any) string{
 	model.PiDev:      ui.Magenta,
 	model.Copilot:    ui.Blue,
 	model.Gemini:     ui.Bold,
-	model.PiAgent:    ui.Dim,
 }
 
 // colorPlatform returns a colored platform name for visual distinction.
@@ -1937,14 +1935,13 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 // platformSkillsPaths returns the list of resolved, deduplicated ScopedPath entries and the repository root for the given platform.
 //
 // The returned paths are derived from the platform-specific skills path settings in cfg with user/home/repo expansions applied.
-// For PiAgent, discovered PiAgent search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
+// For Pi.dev, discovered legacy-compatible search paths are included and de-duplicated. For ClaudeCode, command paths are ensured to be present
 // for backward compatibility. If the platform is unsupported or discovery fails, an error is returned. The second return value is the
 // discovered repository root (may be empty).
 var platformConfigGetters = map[model.Platform]func(*config.Config) *config.PlatformConfig{
 	model.ClaudeCode: func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.ClaudeCode },
 	model.Cursor:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Cursor },
 	model.Codex:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Codex },
-	model.PiAgent:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiAgent },
 	model.Copilot:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Copilot },
 	model.Gemini:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Gemini },
 	model.PiDev:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiDev },
@@ -1975,8 +1972,8 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 		return nil, repoRoot, err
 	}
 
-	if platform == model.PiAgent {
-		discoveredPaths, err := piagent.DiscoverSearchPaths(cwd)
+	if platform == model.PiDev {
+		discoveredPaths, err := pidev.DiscoverSearchPaths(cwd)
 		if err != nil {
 			return nil, repoRoot, err
 		}

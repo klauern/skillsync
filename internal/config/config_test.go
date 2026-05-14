@@ -97,13 +97,13 @@ func TestEnvironmentOverrides(t *testing.T) {
 			check:    func(c *Config) bool { return c.Output.Color == "never" },
 		},
 		{
-			name:     "pi agent paths",
+			name:     "legacy pi agent paths",
 			envKey:   "SKILLSYNC_PI_AGENT_SKILLS_PATHS",
 			envValue: ".agents/skills:~/.agents/skills",
 			check: func(c *Config) bool {
-				return len(c.Platforms.PiAgent.SkillsPaths) == 2 &&
-					c.Platforms.PiAgent.SkillsPaths[0] == ".agents/skills" &&
-					c.Platforms.PiAgent.SkillsPaths[1] == "~/.agents/skills"
+				return len(c.Platforms.PiDev.SkillsPaths) == 2 &&
+					c.Platforms.PiDev.SkillsPaths[0] == ".agents/skills" &&
+					c.Platforms.PiDev.SkillsPaths[1] == "~/.agents/skills"
 			},
 		},
 		{
@@ -132,20 +132,6 @@ func TestEnvironmentOverrides(t *testing.T) {
 				t.Errorf("environment override for %s did not apply correctly", tt.envKey)
 			}
 		})
-	}
-}
-
-func TestDefault_PiAgentPaths(t *testing.T) {
-	cfg := Default()
-
-	if len(cfg.Platforms.PiAgent.SkillsPaths) != 2 {
-		t.Fatalf("PiAgent default paths = %v, want 2 paths", cfg.Platforms.PiAgent.SkillsPaths)
-	}
-	if cfg.Platforms.PiAgent.SkillsPaths[0] != ".agents/skills" {
-		t.Fatalf("PiAgent repo path = %q, want %q", cfg.Platforms.PiAgent.SkillsPaths[0], ".agents/skills")
-	}
-	if cfg.Platforms.PiAgent.SkillsPaths[1] != "~/.agents/skills" {
-		t.Fatalf("PiAgent user path = %q, want %q", cfg.Platforms.PiAgent.SkillsPaths[1], "~/.agents/skills")
 	}
 }
 

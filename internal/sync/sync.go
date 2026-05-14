@@ -16,7 +16,6 @@ import (
 	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
-	"github.com/klauern/skillsync/internal/parser/piagent"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 	"github.com/klauern/skillsync/internal/validation"
 )
@@ -236,8 +235,6 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 		p = copilot.New(basePath)
 	case model.Gemini:
 		p = gemini.New(basePath)
-	case model.PiAgent:
-		p = piagent.New(basePath)
 	case model.PiDev:
 		p = pidev.New(basePath)
 	default:

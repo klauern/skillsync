@@ -31,13 +31,13 @@ type Config struct {
 
 // PlatformsConfig holds platform-specific configuration.
 type PlatformsConfig struct {
-	ClaudeCode PlatformConfig `yaml:"claude_code"`
-	Cursor     PlatformConfig `yaml:"cursor"`
-	Codex      PlatformConfig `yaml:"codex"`
-	PiAgent    PlatformConfig `yaml:"pi_agent"`
-	Copilot    PlatformConfig `yaml:"copilot"`
-	Gemini     PlatformConfig `yaml:"gemini"`
-	PiDev      PlatformConfig `yaml:"pidev"`
+	ClaudeCode    PlatformConfig `yaml:"claude_code"`
+	Cursor        PlatformConfig `yaml:"cursor"`
+	Codex         PlatformConfig `yaml:"codex"`
+	LegacyPiAgent PlatformConfig `yaml:"pi_agent"`
+	Copilot       PlatformConfig `yaml:"copilot"`
+	Gemini        PlatformConfig `yaml:"gemini"`
+	PiDev         PlatformConfig `yaml:"pidev"`
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -99,12 +99,6 @@ func Default() *Config {
 					"~/.agents/skills",  // User alternate (preferred when present)
 					"~/.codex/skills",   // User (absolute)
 					"/etc/codex/skills", // Admin (system-wide)
-				},
-			},
-			PiAgent: PlatformConfig{
-				SkillsPaths: []string{
-					".agents/skills",   // Project (relative)
-					"~/.agents/skills", // User (absolute)
 				},
 			},
 			Copilot: PlatformConfig{
@@ -231,7 +225,6 @@ func (c *Config) SaveToPath(path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-
 // applyEnvironment applies environment variable overrides.
 // Environment variables follow the pattern SKILLSYNC_<SECTION>_<KEY>.
 func (c *Config) applyEnvironment() {
@@ -267,10 +260,13 @@ func (c *Config) applyEnvironment() {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
 	if v := os.Getenv("SKILLSYNC_PI_AGENT_SKILLS_PATHS"); v != "" {
-		c.Platforms.PiAgent.SkillsPaths = splitPaths(v)
+		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
 	}
 	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_SKILLS_PATHS", "SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
 		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
+	}
+	if len(c.Platforms.PiDev.SkillsPaths) == 0 && len(c.Platforms.LegacyPiAgent.SkillsPaths) > 0 {
+		c.Platforms.PiDev.SkillsPaths = append([]string(nil), c.Platforms.LegacyPiAgent.SkillsPaths...)
 	}
 	if v := os.Getenv("SKILLSYNC_COPILOT_SKILLS_PATHS"); v != "" {
 		c.Platforms.Copilot.SkillsPaths = splitPaths(v)

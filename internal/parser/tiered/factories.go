@@ -13,7 +13,6 @@ import (
 	"github.com/klauern/skillsync/internal/parser/copilot"
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
-	"github.com/klauern/skillsync/internal/parser/piagent"
 	"github.com/klauern/skillsync/internal/parser/pidev"
 )
 
@@ -35,13 +34,6 @@ func CursorParserFactory() ParserFactory {
 func CodexParserFactory() ParserFactory {
 	return func(basePath string) parser.Parser {
 		return codex.New(basePath)
-	}
-}
-
-// PiAgentParserFactory returns a ParserFactory for Pi Agent.
-func PiAgentParserFactory() ParserFactory {
-	return func(basePath string) parser.Parser {
-		return piagent.New(basePath)
 	}
 }
 
@@ -77,8 +69,6 @@ func ParserFactoryFor(platform model.Platform) (ParserFactory, error) {
 		return CursorParserFactory(), nil
 	case model.Codex:
 		return CodexParserFactory(), nil
-	case model.PiAgent:
-		return PiAgentParserFactory(), nil
 	case model.Copilot:
 		return CopilotParserFactory(), nil
 	case model.Gemini:
@@ -108,8 +98,8 @@ func NewForPlatform(platform model.Platform) (*Parser, error) {
 		WorkingDir:    cwd,
 		ParserFactory: factory,
 	}
-	if platform == model.PiAgent {
-		searchPaths, err := piagent.DiscoverSearchPaths(cwd)
+	if platform == model.PiDev {
+		searchPaths, err := pidev.DiscoverSearchPaths(cwd)
 		if err != nil {
 			return nil, err
 		}
@@ -131,10 +121,10 @@ func NewForPlatformWithDir(platform model.Platform, workingDir string) (*Parser,
 		WorkingDir:    workingDir,
 		ParserFactory: factory,
 	}
-	if platform == model.PiAgent {
-		searchPaths, err := piagent.DiscoverSearchPaths(workingDir)
+	if platform == model.PiDev {
+		searchPaths, err := pidev.DiscoverSearchPaths(workingDir)
 		if err != nil {
-			logging.Warn("failed to discover pi-agent search paths", logging.Err(err))
+			logging.Warn("failed to discover pi.dev search paths", logging.Err(err))
 		} else {
 			cfg.SearchPaths = searchPaths
 		}

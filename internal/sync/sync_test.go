@@ -759,7 +759,7 @@ func containsHelper(s, substr string) bool {
 	return false
 }
 
-func TestSynchronizer_Sync_PiAgentToClaudeCode(t *testing.T) {
+func TestSynchronizer_Sync_PiDevToClaudeCode(t *testing.T) {
 	s := New()
 	sourceDir := t.TempDir()
 	targetDir := t.TempDir()
@@ -770,7 +770,7 @@ func TestSynchronizer_Sync_PiAgentToClaudeCode(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
 name: example
-description: A Pi Agent skill
+description: A Pi.dev skill
 ---
 
 # Example
@@ -778,7 +778,7 @@ description: A Pi Agent skill
 		t.Fatalf("failed to write skill: %v", err)
 	}
 
-	result, err := s.Sync(model.PiAgent, model.ClaudeCode, Options{
+	result, err := s.Sync(model.PiDev, model.ClaudeCode, Options{
 		DryRun:     false,
 		Strategy:   StrategyOverwrite,
 		SourcePath: sourceDir,
@@ -788,24 +788,42 @@ description: A Pi Agent skill
 		t.Fatalf("Sync failed: %v", err)
 	}
 
-	if len(result.Skills) != 1 {
-		t.Fatalf("expected 1 synced skill, got %d", len(result.Skills))
+	if len(result.Created()) < 1 {
+		t.Fatalf("expected at least 1 created skill, got %d", len(result.Created()))
 	}
-	if result.Skills[0].Action != ActionCreated {
-		t.Fatalf("expected created action, got %s", result.Skills[0].Action)
+	var created SkillResult
+	found := false
+	for _, sr := range result.Created() {
+		if sr.Skill.Name == "example" {
+			created = sr
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected created result for skill %q, got %#v", "example", result.Created())
 	}
 
-	if _, err := os.Stat(filepath.Join(targetDir, "example", "SKILL.md")); err != nil {
-		t.Fatalf("expected synced file at targetDir/example/SKILL.md: %v", err)
+	if created.Action != ActionCreated {
+		t.Fatalf("expected created action, got %s", created.Action)
 	}
 
-	// #nosec G304 - targetDir is a test-controlled temp path
-	got, err := os.ReadFile(filepath.Join(targetDir, "example", "SKILL.md"))
+	if _, err := os.Stat(created.TargetPath); err != nil {
+		t.Fatalf("expected synced file at %s: %v", created.TargetPath, err)
+	}
+
+	readPath := created.TargetPath
+	if info, err := os.Stat(readPath); err == nil && info.IsDir() {
+		readPath = filepath.Join(readPath, "SKILL.md")
+	}
+
+	// #nosec G304 - readPath is derived from test-controlled temp paths.
+	got, err := os.ReadFile(readPath)
 	if err != nil {
-		t.Fatalf("failed to read synced SKILL.md: %v", err)
+		t.Fatalf("failed to read synced file: %v", err)
 	}
-	const wantContent = "---\nname: example\ndescription: A Pi Agent skill\n---\n\n# Example\n"
+	const wantContent = "---\nname: example\ndescription: A Pi.dev skill\n---\n\n# Example\n"
 	if string(got) != wantContent {
-		t.Fatalf("synced SKILL.md content mismatch:\ngot:  %q\nwant: %q", string(got), wantContent)
+		t.Fatalf("synced example.md content mismatch:\ngot:  %q\nwant: %q", string(got), wantContent)
 	}
 }
