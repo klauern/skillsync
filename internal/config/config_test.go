@@ -97,12 +97,6 @@ func TestEnvironmentOverrides(t *testing.T) {
 			check:    func(c *Config) bool { return c.Output.Color == "never" },
 		},
 		{
-			name:     "claude code path",
-			envKey:   "SKILLSYNC_CLAUDE_CODE_PATH",
-			envValue: "/custom/claude/path",
-			check:    func(c *Config) bool { return c.Platforms.ClaudeCode.SkillsPath == "/custom/claude/path" },
-		},
-		{
 			name:     "pi agent paths",
 			envKey:   "SKILLSYNC_PI_AGENT_SKILLS_PATHS",
 			envValue: ".agents/skills:~/.agents/skills",
@@ -111,24 +105,6 @@ func TestEnvironmentOverrides(t *testing.T) {
 					c.Platforms.PiAgent.SkillsPaths[0] == ".agents/skills" &&
 					c.Platforms.PiAgent.SkillsPaths[1] == "~/.agents/skills"
 			},
-		},
-		{
-			name:     "copilot path",
-			envKey:   "SKILLSYNC_COPILOT_PATH",
-			envValue: "/custom/copilot/path",
-			check:    func(c *Config) bool { return c.Platforms.Copilot.SkillsPath == "/custom/copilot/path" },
-		},
-		{
-			name:     "gemini path",
-			envKey:   "SKILLSYNC_GEMINI_PATH",
-			envValue: "/custom/gemini/path",
-			check:    func(c *Config) bool { return c.Platforms.Gemini.SkillsPath == "/custom/gemini/path" },
-		},
-		{
-			name:     "pi.dev path alias",
-			envKey:   "SKILLSYNC_PIDEV_PATH",
-			envValue: "/custom/pi/path",
-			check:    func(c *Config) bool { return c.Platforms.PiDev.SkillsPath == "/custom/pi/path" },
 		},
 		{
 			name:     "pi dev skills paths",
@@ -387,30 +363,12 @@ func TestGetSkillsPaths(t *testing.T) {
 			checkFirst:  tmpDir, // Relative path should be expanded to baseDir
 		},
 		{
-			name: "legacy skills_path fallback",
-			config: PlatformConfig{
-				SkillsPath: "~/.claude/skills",
-			},
-			baseDir:     tmpDir,
-			expectedLen: 1,
-		},
-		{
 			name: "with multiple skills_paths",
 			config: PlatformConfig{
 				SkillsPaths: []string{"~/.cursor/skills", "~/.cursor/rules"},
 			},
 			baseDir:     tmpDir,
 			expectedLen: 2,
-		},
-		{
-			name: "skills_paths takes precedence over skills_path",
-			config: PlatformConfig{
-				SkillsPaths: []string{".cursor/skills"},
-				SkillsPath:  "/should/be/ignored",
-			},
-			baseDir:     tmpDir,
-			expectedLen: 1,
-			checkFirst:  tmpDir,
 		},
 		{
 			name:        "empty config returns empty",

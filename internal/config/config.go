@@ -10,7 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/util"
 )
@@ -46,9 +45,6 @@ type PlatformConfig struct {
 	// SkillsPaths is an ordered list of paths to search for skills (project → user → system)
 	// Paths can use ~ for home directory or be relative (resolved from working directory)
 	SkillsPaths []string `yaml:"skills_paths,omitempty"`
-
-	// Deprecated: Use SkillsPaths instead. Kept for backward compatibility during migration.
-	SkillsPath string `yaml:"skills_path,omitempty"`
 }
 
 // SyncConfig holds synchronization settings.
@@ -177,8 +173,6 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	warnDeprecatedYAMLFields(cfg)
-
 	// Apply environment variable overrides
 	cfg.applyEnvironment()
 
@@ -198,8 +192,6 @@ func LoadFromPath(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
-
-	warnDeprecatedYAMLFields(cfg)
 
 	cfg.applyEnvironment()
 	return cfg, nil
@@ -239,31 +231,6 @@ func (c *Config) SaveToPath(path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// warnDeprecatedYAMLFields logs a warning for each platform that still uses
-// the deprecated singular skills_path YAML field instead of skills_paths.
-func warnDeprecatedYAMLFields(c *Config) {
-	type namedPlatform struct {
-		name string
-		pc   *PlatformConfig
-	}
-	platforms := []namedPlatform{
-		{"claude_code", &c.Platforms.ClaudeCode},
-		{"cursor", &c.Platforms.Cursor},
-		{"codex", &c.Platforms.Codex},
-		{"pi_agent", &c.Platforms.PiAgent},
-		{"pi_dev", &c.Platforms.PiDev},
-		{"copilot", &c.Platforms.Copilot},
-		{"gemini", &c.Platforms.Gemini},
-	}
-	for _, p := range platforms {
-		if p.pc.SkillsPath != "" { //nolint:staticcheck
-			logging.Warn(
-				"config field skills_path is deprecated; migrate to skills_paths",
-				logging.Platform(p.name),
-			)
-		}
-	}
-}
 
 // applyEnvironment applies environment variable overrides.
 // Environment variables follow the pattern SKILLSYNC_<SECTION>_<KEY>.
@@ -310,36 +277,6 @@ func (c *Config) applyEnvironment() {
 	}
 	if v := os.Getenv("SKILLSYNC_GEMINI_SKILLS_PATHS"); v != "" {
 		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
-	}
-
-	// Deprecated: single path environment variables (for backward compatibility)
-	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_CLAUDE_CODE_PATH is deprecated; use SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS instead")
-		c.Platforms.ClaudeCode.SkillsPath = v //nolint:staticcheck
-	}
-	if v := os.Getenv("SKILLSYNC_CURSOR_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_CURSOR_PATH is deprecated; use SKILLSYNC_CURSOR_SKILLS_PATHS instead")
-		c.Platforms.Cursor.SkillsPath = v //nolint:staticcheck
-	}
-	if v := os.Getenv("SKILLSYNC_CODEX_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_CODEX_PATH is deprecated; use SKILLSYNC_CODEX_SKILLS_PATHS instead")
-		c.Platforms.Codex.SkillsPath = v //nolint:staticcheck
-	}
-	if v := os.Getenv("SKILLSYNC_PI_AGENT_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_PI_AGENT_PATH is deprecated; use SKILLSYNC_PI_AGENT_SKILLS_PATHS instead")
-		c.Platforms.PiAgent.SkillsPath = v //nolint:staticcheck
-	}
-	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH are deprecated; use SKILLSYNC_PI_DEV_SKILLS_PATHS instead")
-		c.Platforms.PiDev.SkillsPath = v //nolint:staticcheck
-	}
-	if v := os.Getenv("SKILLSYNC_COPILOT_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_COPILOT_PATH is deprecated; use SKILLSYNC_COPILOT_SKILLS_PATHS instead")
-		c.Platforms.Copilot.SkillsPath = v //nolint:staticcheck
-	}
-	if v := os.Getenv("SKILLSYNC_GEMINI_PATH"); v != "" {
-		logging.Warn("SKILLSYNC_GEMINI_PATH is deprecated; use SKILLSYNC_GEMINI_SKILLS_PATHS instead")
-		c.Platforms.Gemini.SkillsPath = v //nolint:staticcheck
 	}
 
 	// Similarity settings
@@ -392,20 +329,12 @@ func (c *Config) GetStrategy() sync.Strategy {
 }
 
 // GetSkillsPaths returns all skills paths for this platform, expanded and in order.
-// If SkillsPaths is empty but deprecated SkillsPath is set, falls back to that.
 // The baseDir is used for resolving relative paths.
 func (pc *PlatformConfig) GetSkillsPaths(baseDir string) []string {
 	var paths []string
 
-	// Use new SkillsPaths if available
 	if len(pc.SkillsPaths) > 0 {
 		paths = util.ExpandPaths(pc.SkillsPaths, baseDir)
-	} else if pc.SkillsPath != "" {
-		// Fall back to deprecated SkillsPath for backward compatibility
-		expanded := util.ExpandPath(pc.SkillsPath, baseDir)
-		if expanded != "" {
-			paths = []string{expanded}
-		}
 	}
 
 	return paths

@@ -1959,9 +1959,6 @@ func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]stri
 	if len(pc.SkillsPaths) > 0 {
 		return pc.SkillsPaths, nil
 	}
-	if pc.SkillsPath != "" { //nolint:staticcheck // backward compatibility
-		return []string{pc.SkillsPath}, nil //nolint:staticcheck // backward compatibility
-	}
 	return nil, nil
 }
 
