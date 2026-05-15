@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	gosync "sync"
 	"strings"
+	gosync "sync"
 
 	"gopkg.in/yaml.v3"
 

@@ -16,8 +16,8 @@ import (
 
 func detectCommand() *cli.Command {
 	return &cli.Command{
-		Name:    "detect",
-		Usage:   "Detect installed platforms",
+		Name:  "detect",
+		Usage: "Detect installed platforms",
 		UsageText: `skillsync detect [options]
    skillsync detect --format json`,
 		Description: `Inspect the default platform locations and report which platforms appear to be installed.
