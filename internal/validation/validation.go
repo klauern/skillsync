@@ -499,6 +499,8 @@ var platformPathRules = map[model.Platform]platformPathRule{
 	model.PiDev:      {envVars: []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"}, defaultFn: util.PiDevSkillsPath},
 }
 
+// GetPlatformPath returns the resolved skills path for the given platform, checking
+// platform-specific env vars before falling back to the default path function.
 func GetPlatformPath(platform model.Platform) (string, error) {
 	rule, ok := platformPathRules[platform]
 	if !ok {
