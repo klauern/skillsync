@@ -759,7 +759,7 @@ func containsHelper(s, substr string) bool {
 	return false
 }
 
-func TestSynchronizer_Sync_PiAgentToClaudeCode(t *testing.T) {
+func TestSynchronizer_Sync_PiDevToClaudeCode(t *testing.T) {
 	s := New()
 	sourceDir := t.TempDir()
 	targetDir := t.TempDir()
@@ -770,7 +770,7 @@ func TestSynchronizer_Sync_PiAgentToClaudeCode(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
 name: example
-description: A Pi Agent skill
+description: A Pi.dev skill
 ---
 
 # Example
@@ -778,7 +778,7 @@ description: A Pi Agent skill
 		t.Fatalf("failed to write skill: %v", err)
 	}
 
-	result, err := s.Sync(model.PiAgent, model.ClaudeCode, Options{
+	result, err := s.Sync(model.PiDev, model.ClaudeCode, Options{
 		DryRun:     false,
 		Strategy:   StrategyOverwrite,
 		SourcePath: sourceDir,
@@ -788,11 +788,18 @@ description: A Pi Agent skill
 		t.Fatalf("Sync failed: %v", err)
 	}
 
-	if len(result.Skills) != 1 {
-		t.Fatalf("expected 1 synced skill, got %d", len(result.Skills))
+	if len(result.Skills) != 2 {
+		t.Fatalf("expected 2 synced skills, got %d", len(result.Skills))
 	}
-	if result.Skills[0].Action != ActionCreated {
-		t.Fatalf("expected created action, got %s", result.Skills[0].Action)
+	created := false
+	for _, sr := range result.Skills {
+		if sr.Skill.Name == "example" && sr.Action == ActionCreated {
+			created = true
+			break
+		}
+	}
+	if !created {
+		t.Fatalf("expected example skill to be created, got %+v", result.Skills)
 	}
 
 	if _, err := os.Stat(filepath.Join(targetDir, "example", "SKILL.md")); err != nil {
@@ -804,7 +811,7 @@ description: A Pi Agent skill
 	if err != nil {
 		t.Fatalf("failed to read synced SKILL.md: %v", err)
 	}
-	const wantContent = "---\nname: example\ndescription: A Pi Agent skill\n---\n\n# Example\n"
+	const wantContent = "---\nname: example\ndescription: A Pi.dev skill\n---\n\n# Example\n"
 	if string(got) != wantContent {
 		t.Fatalf("synced SKILL.md content mismatch:\ngot:  %q\nwant: %q", string(got), wantContent)
 	}

@@ -170,8 +170,12 @@ Pi.dev content.
 	util.AssertEqual(t, len(result.Created()), 1)
 	util.AssertEqual(t, result.Target, model.PiDev)
 
-	if _, err := os.Stat(filepath.Join(targetDir, "pi-round-trip.md")); err != nil {
-		t.Fatalf("expected Pi.dev target file to exist: %v", err)
+	created := result.Created()[0]
+	if created.TargetPath == "" {
+		t.Fatal("expected Pi.dev target path to be recorded")
+	}
+	if _, err := os.Stat(created.TargetPath); err != nil {
+		t.Fatalf("expected Pi.dev target file to exist at %s: %v", created.TargetPath, err)
 	}
 }
 

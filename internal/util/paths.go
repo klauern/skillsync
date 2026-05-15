@@ -146,11 +146,6 @@ func PiDevProjectSkillsPath(projectDir string) string {
 	return filepath.Join(projectDir, ".pi", "skills")
 }
 
-// PiAgentSkillsPath returns the default Pi Agent skills directory (user-level).
-func PiAgentSkillsPath() string {
-	return filepath.Join(HomeDir(), ".agents", "skills")
-}
-
 // SkillsyncConfigPath returns the skillsync configuration directory
 // Supports SKILLSYNC_HOME environment variable override
 func SkillsyncConfigPath() string {
@@ -376,7 +371,6 @@ func platformDirName(p model.Platform) string {
 // platformSkillsPathFns maps platforms with non-standard user-level skills paths
 // to their resolver functions.
 var platformSkillsPathFns = map[model.Platform]func() string{
-	model.PiAgent: PiAgentSkillsPath,
 	model.Copilot: CopilotSkillsPath,
 	model.Gemini:  GeminiPath,
 	model.Codex:   CodexSkillsPath,
@@ -394,7 +388,6 @@ func PlatformSkillsPath(p model.Platform) string {
 // repoSkillsPathFns maps platforms with non-standard repo-level skills paths
 // to their resolver functions.
 var repoSkillsPathFns = map[model.Platform]func(string) string{
-	model.PiAgent: func(root string) string { return filepath.Join(root, ".agents", "skills") },
 	model.Copilot: func(root string) string { return filepath.Join(root, ".github") },
 	model.Gemini:  GeminiRepoPath,
 	model.PiDev:   PiDevRepoSkillsPath,

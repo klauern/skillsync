@@ -26,7 +26,6 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/claude"
-	"github.com/klauern/skillsync/internal/parser/piagent"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
@@ -931,7 +930,6 @@ var platformColorFns = map[model.Platform]func(...any) string{
 	model.PiDev:      ui.Magenta,
 	model.Copilot:    ui.Blue,
 	model.Gemini:     ui.Bold,
-	model.PiAgent:    ui.Dim,
 }
 
 // colorPlatform returns a colored platform name for visual distinction.
@@ -1944,7 +1942,6 @@ var platformConfigGetters = map[model.Platform]func(*config.Config) *config.Plat
 	model.ClaudeCode: func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.ClaudeCode },
 	model.Cursor:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Cursor },
 	model.Codex:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Codex },
-	model.PiAgent:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiAgent },
 	model.Copilot:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Copilot },
 	model.Gemini:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Gemini },
 	model.PiDev:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiDev },
@@ -1975,12 +1972,8 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 		return nil, repoRoot, err
 	}
 
-	if platform == model.PiAgent {
-		discoveredPaths, err := piagent.DiscoverSearchPaths(cwd)
-		if err != nil {
-			return nil, repoRoot, err
-		}
-
+	if platform == model.PiDev {
+		discoveredPaths := util.GetAllSearchPaths(util.TieredPathConfig{WorkingDir: cwd, RepoRoot: repoRoot, Platform: model.PiDev})
 		paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))
 		seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
 		for _, sp := range discoveredPaths {
@@ -1992,10 +1985,7 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 
 		for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
 			if !seen[p] {
-				paths = append(paths, util.ScopedPath{
-					Path:  p,
-					Scope: inferScopeForPath(p, repoRoot),
-				})
+				paths = append(paths, util.ScopedPath{Path: p, Scope: inferScopeForPath(p, repoRoot)})
 				seen[p] = true
 			}
 		}

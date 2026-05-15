@@ -1594,7 +1594,7 @@ This is a user skill.
 	}
 }
 
-func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
+func TestPlatformSkillsPaths_PiDevIncludesDefaultSearchRoots(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -1607,32 +1607,17 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 		t.Fatalf("failed to create repo root: %v", err)
 	}
 
-	projectRelative := filepath.Join(repoRoot, ".pi", "project-relative")
-	projectAbsolute := filepath.Join(t.TempDir(), "project-absolute")
-	userRelative := filepath.Join(home, ".config", "pi", "user-relative")
-	userAbsolute := filepath.Join(home, "user-absolute")
-	for _, dir := range []string{projectRelative, projectAbsolute, userRelative, userAbsolute} {
+	for _, dir := range []string{
+		filepath.Join(workingDir, ".pi", "skills"),
+		filepath.Join(repoRoot, ".pi", "skills"),
+		filepath.Join(workingDir, ".agents", "skills"),
+		filepath.Join(repoRoot, ".agents", "skills"),
+		filepath.Join(home, ".pi", "agent", "skills"),
+		filepath.Join(home, ".agents", "skills"),
+	} {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
 			t.Fatalf("failed to create %s: %v", dir, err)
 		}
-	}
-
-	projectSettings := filepath.Join(repoRoot, ".pi", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(projectSettings), 0o750); err != nil {
-		t.Fatalf("failed to create project settings dir: %v", err)
-	}
-	projectJSON := `{"skillsDirectories":["project-relative","` + filepath.ToSlash(projectAbsolute) + `"]}`
-	if err := os.WriteFile(projectSettings, []byte(projectJSON), 0o600); err != nil {
-		t.Fatalf("failed to write project settings: %v", err)
-	}
-
-	userSettings := filepath.Join(home, ".config", "pi", "settings.json")
-	if err := os.MkdirAll(filepath.Dir(userSettings), 0o750); err != nil {
-		t.Fatalf("failed to create user settings dir: %v", err)
-	}
-	userJSON := `{"skillsDirectories":["user-relative","` + filepath.ToSlash(userAbsolute) + `"]}`
-	if err := os.WriteFile(userSettings, []byte(userJSON), 0o600); err != nil {
-		t.Fatalf("failed to write user settings: %v", err)
 	}
 
 	origWd, err := os.Getwd()
@@ -1647,7 +1632,7 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 	})
 
 	cfg := config.Default()
-	paths, gotRepoRoot, err := platformSkillsPaths(cfg, model.PiAgent)
+	paths, gotRepoRoot, err := platformSkillsPaths(cfg, model.PiDev)
 	if err != nil {
 		t.Fatalf("platformSkillsPaths() error = %v", err)
 	}
@@ -1665,28 +1650,30 @@ func TestPlatformSkillsPaths_PiAgentIncludesSettingsDirectories(t *testing.T) {
 		t.Fatalf("repoRoot = %q, want %q", gotRepoRoot, wantRepoRoot)
 	}
 
-	wantPaths := []util.ScopedPath{
-		{Path: filepath.Join(workingDir, ".agents", "skills"), Scope: model.ScopeRepo},
-		{Path: filepath.Join(repoRoot, ".agents", "skills"), Scope: model.ScopeRepo},
-		{Path: projectRelative, Scope: model.ScopeRepo},
-		{Path: projectAbsolute, Scope: model.ScopeRepo},
-		{Path: filepath.Join(home, ".agents", "skills"), Scope: model.ScopeUser},
-		{Path: userRelative, Scope: model.ScopeUser},
-		{Path: userAbsolute, Scope: model.ScopeUser},
+	wantPaths := map[string]model.SkillScope{
+		filepath.Clean(filepath.Join(workingDir, ".pi", "skills")):        model.ScopeRepo,
+		filepath.Clean(filepath.Join(repoRoot, ".pi", "skills")):          model.ScopeRepo,
+		filepath.Clean(filepath.Join(workingDir, ".agents", "skills")):    model.ScopeRepo,
+		filepath.Clean(filepath.Join(repoRoot, ".agents", "skills")):      model.ScopeRepo,
+		filepath.Clean(filepath.Join(home, ".pi", "agent", "skills")):    model.ScopeUser,
+		filepath.Clean(filepath.Join(home, ".agents", "skills")):          model.ScopeUser,
 	}
 	if len(paths) != len(wantPaths) {
 		t.Fatalf("platformSkillsPaths() returned %d paths, want %d: %v", len(paths), len(wantPaths), paths)
 	}
-	for i, want := range wantPaths {
-		gotPath := strings.TrimPrefix(filepath.Clean(paths[i].Path), "/private")
-		wantPath := strings.TrimPrefix(filepath.Clean(want.Path), "/private")
-
-		if gotPath != wantPath {
-			t.Fatalf("path %d = %q, want %q", i, gotPath, wantPath)
+	for _, sp := range paths {
+		gotPath := strings.TrimPrefix(filepath.Clean(sp.Path), "/private")
+		wantScope, ok := wantPaths[gotPath]
+		if !ok {
+			t.Fatalf("unexpected path %q (scope %q)", gotPath, sp.Scope)
 		}
-		if paths[i].Scope != want.Scope {
-			t.Fatalf("scope %d = %q, want %q", i, paths[i].Scope, want.Scope)
+		if sp.Scope != wantScope {
+			t.Fatalf("path %q scope = %q, want %q", gotPath, sp.Scope, wantScope)
 		}
+		delete(wantPaths, gotPath)
+	}
+	if len(wantPaths) != 0 {
+		t.Fatalf("missing expected paths: %v", wantPaths)
 	}
 }
 

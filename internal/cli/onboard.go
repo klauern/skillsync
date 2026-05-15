@@ -27,6 +27,7 @@ func onboardGuide() string {
 
 ## Purpose
 - Sync AI coding skills across Claude Code, Cursor, Codex, and Pi.dev.
+- Detect installed platforms before onboarding or syncing.
 - Keep skills consistent, deduplicate, and back up before changes.
 
 ## Key concepts

@@ -148,23 +148,6 @@ func (h *Harness) CodexFixture() *Fixture {
 	return NewFixture(h.t, skillsDir)
 }
 
-// PiAgentFixture creates a fixture helper for Pi Agent skills directory.
-// It sets up the expected directory structure for Pi Agent.
-// The path matches the SKILLSYNC_PI_AGENT_PATH environment variable set by NewHarness.
-func (h *Harness) PiAgentFixture() *Fixture {
-	h.t.Helper()
-
-	skillsDir := h.env["SKILLSYNC_PI_AGENT_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".agents", "skills")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Pi Agent skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
-}
-
 // PiDevFixture creates a fixture helper for Pi.dev skills directory.
 // It sets up the expected ~/.pi/agent/skills structure in the isolated home.
 func (h *Harness) PiDevFixture() *Fixture {

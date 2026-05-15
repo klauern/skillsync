@@ -102,7 +102,7 @@ func TestTransformer_TransformPath(t *testing.T) {
 			name:       "skill directory to pi agent",
 			sourcePath: "/source/my-skill/SKILL.md",
 			skillName:  "my-skill",
-			target:     model.PiAgent,
+			target:     model.PiDev,
 			expected:   "my-skill/SKILL.md",
 		},
 		{
@@ -225,7 +225,7 @@ func TestTransformer_TransformContent_PiAgentSkillFile(t *testing.T) {
 		Content:     "Main content",
 	}
 
-	content, err := tr.transformContent(skill, model.PiAgent, "test-skill/SKILL.md")
+	content, err := tr.transformContent(skill, model.PiDev, "test-skill/SKILL.md")
 	if err != nil {
 		t.Fatalf("transformContent failed: %v", err)
 	}

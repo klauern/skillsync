@@ -47,12 +47,12 @@ func TestPlatformInfoFor(t *testing.T) {
 		},
 		{
 			name: "pi agent",
-			p:    PiAgent,
+			p:    PiDev,
 			want: PlatformInfo{
-				Short:           "pia",
-				ConfigDir:       "agents",
-				DotDir:          ".pi",
-				DisplayName:     "Pi Agent",
+				Short:           "pi",
+				ConfigDir:       "pi/agent",
+				DotDir:          ".pi/agent",
+				DisplayName:     "Pi.dev",
 				ValidExtensions: []string{".md"},
 			},
 		},

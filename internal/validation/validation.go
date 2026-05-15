@@ -497,7 +497,6 @@ var platformPathRules = map[model.Platform]platformPathRule{
 	model.Copilot:    {envVars: []string{"SKILLSYNC_COPILOT_PATH"}, defaultFn: util.CopilotSkillsPath},
 	model.Gemini:     {envVars: []string{"SKILLSYNC_GEMINI_PATH"}, defaultFn: util.GeminiPath},
 	model.PiDev:      {envVars: []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"}, defaultFn: util.PiDevSkillsPath},
-	model.PiAgent:    {envVars: []string{"SKILLSYNC_PI_AGENT_PATH"}, defaultFn: util.PiAgentSkillsPath},
 }
 
 func GetPlatformPath(platform model.Platform) (string, error) {

@@ -73,15 +73,6 @@ func TestCodexSkillsPath(t *testing.T) {
 	}
 }
 
-func TestPiAgentSkillsPath(t *testing.T) {
-	home := HomeDir()
-	expected := filepath.Join(home, ".agents", "skills")
-	got := PiAgentSkillsPath()
-	if got != expected {
-		t.Errorf("PiAgentSkillsPath() = %q, want %q", got, expected)
-	}
-}
-
 func TestGeminiPath(t *testing.T) {
 	home := HomeDir()
 	expected := filepath.Join(home, ".gemini")
@@ -295,10 +286,9 @@ func TestPlatformDirName(t *testing.T) {
 		{model.ClaudeCode, ".claude"},
 		{model.Cursor, ".cursor"},
 		{model.Codex, ".codex"},
-		{model.PiAgent, ".pi"},
+		{model.PiDev, ".pi/agent"},
 		{model.Copilot, ".github"},
 		{model.Gemini, ".gemini"},
-		{model.PiDev, ".pi/agent"},
 	}
 
 	for _, tt := range tests {
@@ -328,10 +318,9 @@ func TestPlatformSkillsPath(t *testing.T) {
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
 		{model.Codex, filepath.Join(home, ".agents", "skills")},
-		{model.PiAgent, filepath.Join(home, ".agents", "skills")},
+		{model.PiDev, filepath.Join(home, ".agents", "skills")},
 		{model.Copilot, filepath.Join(home, ".github")},
 		{model.Gemini, filepath.Join(home, ".gemini")},
-		{model.PiDev, filepath.Join(home, ".agents", "skills")},
 	}
 
 	for _, tt := range tests {
@@ -353,10 +342,9 @@ func TestRepoSkillsPath(t *testing.T) {
 		{model.ClaudeCode, "/test/repo", "/test/repo/.claude/skills"},
 		{model.Cursor, "/test/repo", "/test/repo/.cursor/skills"},
 		{model.Codex, "/test/repo", "/test/repo/.codex/skills"},
-		{model.PiAgent, "/test/repo", "/test/repo/.agents/skills"},
+		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
 		{model.Copilot, "/test/repo", "/test/repo/.github"},
 		{model.Gemini, "/test/repo", "/test/repo/.gemini"},
-		{model.PiDev, "/test/repo", "/test/repo/.pi/skills"},
 	}
 
 	for _, tt := range tests {
