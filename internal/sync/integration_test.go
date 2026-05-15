@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -317,24 +318,59 @@ Content B
 	util.AssertEqual(t, len(result.Skipped()), 0)
 }
 
-func TestIntegration_AllStrategies(t *testing.T) {
-	strategies := []Strategy{
-		StrategyOverwrite,
-		StrategySkip,
-		StrategyNewer,
-		StrategyMerge,
-		StrategyThreeWay,
+func TestIntegration_StrategyBehavior(t *testing.T) {
+	tests := []struct {
+		name          string
+		strategy      Strategy
+		makeSourceOld bool
+		wantAction    Action
+		wantMessage   string
+		contains      []string
+		notContains   []string
+	}{
+		{
+			name:        "overwrite replaces existing target content",
+			strategy:    StrategyOverwrite,
+			wantAction:  ActionUpdated,
+			wantMessage: "overwriting existing skill",
+			contains:    []string{"description: Source version", "name: test", "type: skill", "Source content."},
+			notContains: []string{"Target version", "Target content."},
+		},
+		{
+			name:        "skip preserves existing target content",
+			strategy:    StrategySkip,
+			wantAction:  ActionSkipped,
+			wantMessage: "skill already exists",
+			contains:    []string{"description: Target version", "Target content."},
+			notContains: []string{"Source version", "Source content."},
+		},
+		{
+			name:          "newer skips when target is newer",
+			strategy:      StrategyNewer,
+			makeSourceOld: true,
+			wantAction:    ActionSkipped,
+			wantMessage:   "target is newer or same age",
+			contains:      []string{"description: Target version", "Target content."},
+			notContains:   []string{"Source version", "Source content."},
+		},
+		{
+			name:        "merge appends source content to target content",
+			strategy:    StrategyMerge,
+			wantAction:  ActionMerged,
+			wantMessage: "merging with existing content",
+			contains:    []string{"Target content.", "## Merged from: test", "description: Source version", "name: test", "type: skill", "Source content."},
+		},
 	}
 
-	for _, strategy := range strategies {
-		t.Run(string(strategy), func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			s := New()
 
 			sourceDir := t.TempDir()
 			targetDir := t.TempDir()
 
-			// Create source skill
-			util.WriteFile(t, filepath.Join(sourceDir, "test.md"), `---
+			sourcePath := filepath.Join(sourceDir, "test.md")
+			util.WriteFile(t, sourcePath, `---
 name: test
 description: Source version
 ---
@@ -342,7 +378,6 @@ description: Source version
 Source content.
 `)
 
-			// Create existing target skill
 			targetPath := filepath.Join(targetDir, "test.md")
 			util.WriteFile(t, targetPath, `---
 name: test
@@ -352,27 +387,145 @@ description: Target version
 Target content.
 `)
 
-			// Make source newer for "newer" strategy
-			if strategy == StrategyNewer {
+			if tt.makeSourceOld {
 				oldTime := time.Now().Add(-24 * time.Hour)
-				if err := os.Chtimes(targetPath, oldTime, oldTime); err != nil {
-					t.Fatalf("Failed to set file time: %v", err)
+				if err := os.Chtimes(sourcePath, oldTime, oldTime); err != nil {
+					t.Fatalf("Failed to set source file time: %v", err)
 				}
 			}
 
-			opts := Options{
+			result, err := s.Sync(model.ClaudeCode, model.Cursor, Options{
 				DryRun:     false,
-				Strategy:   strategy,
+				Strategy:   tt.strategy,
 				SourcePath: sourceDir,
 				TargetPath: targetDir,
+			})
+			util.AssertNoError(t, err)
+			util.AssertEqual(t, result.TotalProcessed(), 1)
+
+			if len(result.Skills) != 1 {
+				t.Fatalf("expected 1 skill result, got %d", len(result.Skills))
 			}
 
-			result, err := s.Sync(model.ClaudeCode, model.Cursor, opts)
-			util.AssertNoError(t, err)
+			skillResult := result.Skills[0]
+			util.AssertEqual(t, skillResult.Action, tt.wantAction)
+			if skillResult.Message == "" || !strings.Contains(skillResult.Message, tt.wantMessage) {
+				t.Fatalf("expected message to contain %q, got %q", tt.wantMessage, skillResult.Message)
+			}
 
-			// Just verify sync completed without error
-			util.AssertEqual(t, result.TotalProcessed(), 1)
+			content, err := os.ReadFile(targetPath)
+			util.AssertNoError(t, err)
+			got := string(content)
+			for _, want := range tt.contains {
+				if !strings.Contains(got, want) {
+					t.Fatalf("expected content for %s to contain %q:\n%s", tt.strategy, want, got)
+				}
+			}
+			for _, unwanted := range tt.notContains {
+				if strings.Contains(got, unwanted) {
+					t.Fatalf("expected content for %s not to contain %q:\n%s", tt.strategy, unwanted, got)
+				}
+			}
 		})
+	}
+}
+
+func TestIntegration_ThreeWayConflictDetection(t *testing.T) {
+	s := New()
+
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	util.WriteFile(t, filepath.Join(sourceDir, "test.md"), `---
+name: test
+description: Source version
+---
+
+Source content.
+`)
+
+	targetPath := filepath.Join(targetDir, "test.md")
+	originalTarget := `---
+name: test
+description: Target version
+---
+
+Target content.
+`
+	util.WriteFile(t, targetPath, originalTarget)
+
+	result, err := s.Sync(model.ClaudeCode, model.Cursor, Options{
+		DryRun:     false,
+		Strategy:   StrategyThreeWay,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	})
+	util.AssertNoError(t, err)
+	util.AssertEqual(t, result.TotalProcessed(), 1)
+
+	if len(result.Conflicts()) != 1 {
+		t.Fatalf("expected 1 conflict, got %d", len(result.Conflicts()))
+	}
+
+	skillResult := result.Skills[0]
+	util.AssertEqual(t, skillResult.Action, ActionConflict)
+	if skillResult.Conflict == nil {
+		t.Fatal("expected conflict details to be recorded")
+	}
+	util.AssertEqual(t, skillResult.Conflict.Type, ConflictTypeBoth)
+
+	content, err := os.ReadFile(targetPath)
+	util.AssertNoError(t, err)
+	if string(content) != originalTarget {
+		t.Fatal("target content should remain unchanged when conflict is detected")
+	}
+}
+
+func TestIntegration_EmptySourceAndMissingTarget(t *testing.T) {
+	s := New()
+
+	sourceDir := t.TempDir()
+	targetRoot := filepath.Join(t.TempDir(), "missing", "target")
+
+	result, err := s.Sync(model.ClaudeCode, model.Cursor, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetRoot,
+	})
+	util.AssertNoError(t, err)
+	util.AssertEqual(t, result.TotalProcessed(), 0)
+
+	if _, err := os.Stat(targetRoot); !os.IsNotExist(err) {
+		t.Fatalf("expected empty source sync to leave missing target absent, err=%v", err)
+	}
+}
+
+func TestIntegration_CreatesMissingTargetDirectory(t *testing.T) {
+	s := New()
+
+	sourceDir := t.TempDir()
+	targetRoot := filepath.Join(t.TempDir(), "missing", "target")
+
+	util.WriteFile(t, filepath.Join(sourceDir, "new-skill.md"), `---
+name: new-skill
+---
+
+New content.
+`)
+
+	result, err := s.Sync(model.ClaudeCode, model.Cursor, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetRoot,
+	})
+	util.AssertNoError(t, err)
+	util.AssertEqual(t, len(result.Created()), 1)
+
+	targetFile := filepath.Join(targetRoot, "new-skill.md")
+	if _, err := os.Stat(targetFile); err != nil {
+		t.Fatalf("expected sync to create missing target path %s: %v", targetFile, err)
 	}
 }
 
