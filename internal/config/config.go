@@ -231,7 +231,6 @@ func (c *Config) SaveToPath(path string) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-
 // applyEnvironment applies environment variable overrides.
 // Environment variables follow the pattern SKILLSYNC_<SECTION>_<KEY>.
 func (c *Config) applyEnvironment() {

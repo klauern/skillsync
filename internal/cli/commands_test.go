@@ -1651,12 +1651,12 @@ func TestPlatformSkillsPaths_PiDevIncludesDefaultSearchRoots(t *testing.T) {
 	}
 
 	wantPaths := map[string]model.SkillScope{
-		filepath.Clean(filepath.Join(workingDir, ".pi", "skills")):        model.ScopeRepo,
-		filepath.Clean(filepath.Join(repoRoot, ".pi", "skills")):          model.ScopeRepo,
-		filepath.Clean(filepath.Join(workingDir, ".agents", "skills")):    model.ScopeRepo,
-		filepath.Clean(filepath.Join(repoRoot, ".agents", "skills")):      model.ScopeRepo,
-		filepath.Clean(filepath.Join(home, ".pi", "agent", "skills")):    model.ScopeUser,
-		filepath.Clean(filepath.Join(home, ".agents", "skills")):          model.ScopeUser,
+		filepath.Clean(filepath.Join(workingDir, ".pi", "skills")):     model.ScopeRepo,
+		filepath.Clean(filepath.Join(repoRoot, ".pi", "skills")):       model.ScopeRepo,
+		filepath.Clean(filepath.Join(workingDir, ".agents", "skills")): model.ScopeRepo,
+		filepath.Clean(filepath.Join(repoRoot, ".agents", "skills")):   model.ScopeRepo,
+		filepath.Clean(filepath.Join(home, ".pi", "agent", "skills")):  model.ScopeUser,
+		filepath.Clean(filepath.Join(home, ".agents", "skills")):       model.ScopeUser,
 	}
 	if len(paths) != len(wantPaths) {
 		t.Fatalf("platformSkillsPaths() returned %d paths, want %d: %v", len(paths), len(wantPaths), paths)
