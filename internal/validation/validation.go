@@ -477,14 +477,7 @@ func ValidatePath(path string, _ model.Platform) error {
 	return nil
 }
 
-// GetPlatformPath returns the default path for a platform.
-// It respects environment variable overrides:
-//   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
-//   - SKILLSYNC_CURSOR_PATH for Cursor
-//   - SKILLSYNC_CODEX_PATH for Codex
-//   - SKILLSYNC_GEMINI_PATH for Gemini CLI
-//   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
-//   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
+// platformPathRule holds the env var names and default path function for a platform.
 type platformPathRule struct {
 	envVars   []string
 	defaultFn func() string
@@ -499,8 +492,15 @@ var platformPathRules = map[model.Platform]platformPathRule{
 	model.PiDev:      {envVars: []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"}, defaultFn: util.PiDevSkillsPath},
 }
 
-// GetPlatformPath returns the resolved skills path for the given platform, checking
-// platform-specific env vars before falling back to the default path function.
+// GetPlatformPath returns the resolved skills path for the given platform.
+// It checks platform-specific environment variable overrides first, then falls
+// back to the default path function:
+//   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
+//   - SKILLSYNC_CURSOR_PATH for Cursor
+//   - SKILLSYNC_CODEX_PATH for Codex
+//   - SKILLSYNC_GEMINI_PATH for Gemini CLI
+//   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
+//   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
 func GetPlatformPath(platform model.Platform) (string, error) {
 	rule, ok := platformPathRules[platform]
 	if !ok {
