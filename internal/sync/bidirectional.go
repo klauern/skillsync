@@ -44,7 +44,8 @@ type BidirectionalResult struct {
 // SyncBidirectional performs two-way synchronization between platforms.
 // It syncs changes in both directions and reconciles conflicts based on the strategy.
 func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, opts Options) (*BidirectionalResult, error) {
-	logging.Debug("starting bidirectional sync",
+	logging.Debug(
+		"starting bidirectional sync",
 		slog.String("platform_a", string(platformA)),
 		slog.String("platform_b", string(platformB)),
 		slog.String(logging.KeyStrategy, string(opts.Strategy)),
@@ -60,7 +61,8 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 
 	skillsA, err := s.parseSkills(platformA, opts.SourcePath)
 	if err != nil {
-		logging.Error("failed to parse platform A skills",
+		logging.Error(
+			"failed to parse platform A skills",
 			logging.Platform(string(platformA)),
 			logging.Err(err),
 		)
@@ -69,14 +71,16 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 
 	skillsB, err := s.parseSkills(platformB, opts.TargetPath)
 	if err != nil {
-		logging.Error("failed to parse platform B skills",
+		logging.Error(
+			"failed to parse platform B skills",
 			logging.Platform(string(platformB)),
 			logging.Err(err),
 		)
 		return biResult, fmt.Errorf("failed to parse platform B skills: %w", err)
 	}
 
-	logging.Debug("parsed skills from both platforms",
+	logging.Debug(
+		"parsed skills from both platforms",
 		slog.String("platform_a", string(platformA)),
 		logging.Count(len(skillsA)),
 		slog.String("platform_b", string(platformB)),
@@ -130,7 +134,8 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 		}
 	}
 
-	logging.Debug("determined sync operations",
+	logging.Debug(
+		"determined sync operations",
 		slog.Int("sync_a_to_b", len(syncAtoB)),
 		slog.Int("sync_b_to_a", len(syncBtoA)),
 		logging.Count(len(conflicts)),
@@ -170,7 +175,8 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 
 	biResult.Conflicts = conflicts
 
-	logging.Debug("bidirectional sync completed",
+	logging.Debug(
+		"bidirectional sync completed",
 		slog.String("platform_a", string(platformA)),
 		slog.String("platform_b", string(platformB)),
 		slog.Int("synced_a_to_b", len(syncAtoB)),
@@ -182,7 +188,7 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 		Type:            ProgressEventComplete,
 		TotalSkills:     len(syncAtoB) + len(syncBtoA),
 		ProcessedSkills: len(syncAtoB) + len(syncBtoA),
-		PercentComplete:  100,
+		PercentComplete: 100,
 		Message:         fmt.Sprintf("Bidirectional sync completed: %d operations", len(syncAtoB)+len(syncBtoA)),
 	})
 
