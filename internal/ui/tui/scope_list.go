@@ -3,7 +3,6 @@ package tui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -32,457 +31,192 @@ type ScopeListResult struct {
 	SelectedSkill model.Skill
 }
 
-// scopeListKeyMap defines the key bindings for the scope list.
-type scopeListKeyMap struct {
-	Up        key.Binding
-	Down      key.Binding
-	View      key.Binding
-	Filter    key.Binding
-	ClearFlt  key.Binding
-	NextScope key.Binding
-	PrevScope key.Binding
-	Help      key.Binding
-	Quit      key.Binding
-}
-
-type scopeListColumnWidths struct {
-	name     int
-	platform int
-	scope    int
-	desc     int
-}
-
-func defaultScopeListColumnWidths() scopeListColumnWidths {
-	return scopeListColumnWidths{
-		name:     25,
-		platform: 12,
-		scope:    40,
-		desc:     50,
-	}
-}
-
-func defaultScopeListKeyMap() scopeListKeyMap {
-	return scopeListKeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
-		),
-		View: key.NewBinding(
-			key.WithKeys("enter", "v"),
-			key.WithHelp("enter/v", "view details"),
-		),
-		Filter: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "filter"),
-		),
-		ClearFlt: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "clear filter"),
-		),
-		NextScope: key.NewBinding(
-			key.WithKeys("tab", "l"),
-			key.WithHelp("tab/l", "next scope"),
-		),
-		PrevScope: key.NewBinding(
-			key.WithKeys("shift+tab", "h"),
-			key.WithHelp("S-tab/h", "prev scope"),
-		),
-		Help: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "help"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
-	}
+// scopeListStyles includes the scope-tab-specific styles on top of the shared listStyles.
+var scopeListStyles = struct {
+	ScopeTab    lipgloss.Style
+	ScopeActive lipgloss.Style
+	Description lipgloss.Style
+}{
+	ScopeTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	ScopeActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 // ScopeListModel is the BubbleTea model for interactive scope management.
 type ScopeListModel struct {
-	table        table.Model
-	skills       []model.Skill
-	filtered     []model.Skill
-	keys         scopeListKeyMap
-	result       ScopeListResult
-	filter       string
-	filtering    bool
-	scopeOptions []model.SkillScope
-	scopeIndex   int // Index into scopeOptions (-1 = all)
-	showHelp     bool
-	width        int
-	height       int
-	quitting     bool
-	columnWidths scopeListColumnWidths
+	ListModel[model.Skill]
 }
 
-// Styles for the scope list TUI.
-var scopeListStyles = struct {
-	Title       lipgloss.Style
-	Help        lipgloss.Style
-	Filter      lipgloss.Style
-	FilterInput lipgloss.Style
-	Status      lipgloss.Style
-	ScopeTab    lipgloss.Style
-	ScopeActive lipgloss.Style
-	Info        lipgloss.Style
-	Description lipgloss.Style
-}{
-	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
-	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	ScopeTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	ScopeActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
-	Info:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
+// Update wraps the base Update and preserves the ScopeListModel type.
+func (m ScopeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	inner, cmd := m.ListModel.Update(msg)
+	m.ListModel = inner.(ListModel[model.Skill])
+	return m, cmd
+}
+
+// Result returns the result of the user interaction.
+func (m ScopeListModel) Result() ScopeListResult {
+	if r, ok := m.result.(ScopeListResult); ok {
+		return r
+	}
+	return ScopeListResult{}
 }
 
 // NewScopeListModel creates a new scope list model.
 func NewScopeListModel(skills []model.Skill) ScopeListModel {
-	columnWidths := defaultScopeListColumnWidths()
-	columns := []table.Column{
-		{Title: "Name", Width: columnWidths.name},
-		{Title: "Platform", Width: columnWidths.platform},
-		{Title: "Scope", Width: columnWidths.scope},
-		{Title: "Description", Width: columnWidths.desc},
-	}
-
-	// Collect unique scopes from skills
+	// Collect unique scopes in precedence order.
 	scopeSet := make(map[model.SkillScope]bool)
 	for _, s := range skills {
 		scopeSet[s.Scope] = true
 	}
-
-	// Build scope options in precedence order
-	scopeOptions := []model.SkillScope{}
+	var scopeOptions []model.SkillScope
 	for _, scope := range model.AllScopes() {
 		if scopeSet[scope] {
 			scopeOptions = append(scopeOptions, scope)
 		}
 	}
 
-	// Sort skills alphabetically by name (case-insensitive)
-	sort.Slice(skills, func(i, j int) bool {
-		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
-	})
+	// scopeIndex lives outside the model so closures share a single mutable reference.
+	scopeIndex := -1 // -1 = all
 
-	m := ScopeListModel{
-		skills:       skills,
-		filtered:     skills,
-		keys:         defaultScopeListKeyMap(),
-		scopeOptions: scopeOptions,
-		scopeIndex:   -1, // -1 means "all"
-		columnWidths: columnWidths,
-	}
+	// Responsive column widths, also shared via closures.
+	columnWidths := struct{ name, platform, scope, desc int }{25, 12, 40, 50}
 
-	rows := m.skillsToRows(skills)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
-	return m
-}
-
-func (m ScopeListModel) skillsToRows(skills []model.Skill) []table.Row {
-	widths := m.columnWidths
-	if widths.desc == 0 {
-		widths = defaultScopeListColumnWidths()
-	}
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		rows[i] = table.Row{
-			truncateTableValue(s.Name, 25),
-			truncateTableValue(string(s.Platform), 12),
-			truncateTableValue(s.DisplayScope(), 40),
-			truncateTableValue(s.Description, 35),
-		}
-	}
-	return rows
-}
-
-// Init implements tea.Model.
-func (m ScopeListModel) Init() tea.Cmd {
-	return nil
-}
-
-// Update implements tea.Model.
-func (m ScopeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		// Adjust table height based on window
-		newHeight := max(msg.Height-12, 5) // Reserve space for title, scope tabs, help, status
-		m.table.SetHeight(newHeight)
-		m.applyColumnWidths(msg.Width)
-
-	case tea.KeyMsg:
-		// Handle filtering mode
-		if m.filtering {
-			switch msg.String() {
-			case "enter":
-				m.filtering = false
-				return m, nil
-			case "esc":
-				m.filter = ""
-				m.filtering = false
-				m.applyFilter()
-				return m, nil
-			case "backspace":
-				if len(m.filter) > 0 {
-					m.filter = m.filter[:len(m.filter)-1]
-					m.applyFilter()
-				}
-				return m, nil
-			default:
-				if len(msg.String()) == 1 {
-					m.filter += msg.String()
-					m.applyFilter()
-				}
-				return m, nil
+	toRows := func(s []model.Skill) []table.Row {
+		rows := make([]table.Row, len(s))
+		for i, sk := range s {
+			rows[i] = table.Row{
+				truncateTableValue(sk.Name, columnWidths.name),
+				truncateTableValue(string(sk.Platform), columnWidths.platform),
+				truncateTableValue(sk.DisplayScope(), columnWidths.scope),
+				truncateTableValue(sk.Description, columnWidths.desc),
 			}
 		}
-
-		// Normal mode key handling
-		switch {
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Filter):
-			m.filtering = true
-			return m, nil
-
-		case key.Matches(msg, m.keys.ClearFlt):
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
-
-		case key.Matches(msg, m.keys.NextScope):
-			if len(m.scopeOptions) > 0 {
-				m.scopeIndex++
-				if m.scopeIndex >= len(m.scopeOptions) {
-					m.scopeIndex = -1 // Wrap to "all"
-				}
-				m.applyFilter()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.PrevScope):
-			if len(m.scopeOptions) > 0 {
-				m.scopeIndex--
-				if m.scopeIndex < -1 {
-					m.scopeIndex = len(m.scopeOptions) - 1 // Wrap to last scope
-				}
-				m.applyFilter()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.View):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.result = ScopeListResult{
-					Action:        ScopeActionView,
-					SelectedSkill: skill,
-				}
-				m.quitting = true
-				return m, tea.Quit
-			}
-			return m, nil
-		}
+		return rows
 	}
 
-	m.table, cmd = m.table.Update(msg)
-	return m, cmd
-}
+	nextScopeKey := key.NewBinding(key.WithKeys("tab", "l"), key.WithHelp("tab/l", "next scope"))
+	prevScopeKey := key.NewBinding(key.WithKeys("shift+tab", "h"), key.WithHelp("S-tab/h", "prev scope"))
+	viewKey := key.NewBinding(key.WithKeys("enter", "v"), key.WithHelp("enter/v", "view details"))
 
-func (m *ScopeListModel) applyFilter() {
-	// Start with all skills
-	filtered := m.skills
-
-	// Apply scope filter if not "all"
-	if m.scopeIndex >= 0 && m.scopeIndex < len(m.scopeOptions) {
-		selectedScope := m.scopeOptions[m.scopeIndex]
-		var scopeFiltered []model.Skill
-		for _, s := range filtered {
-			if s.Scope == selectedScope {
-				scopeFiltered = append(scopeFiltered, s)
-			}
-		}
-		filtered = scopeFiltered
-	}
-
-	// Apply text filter
-	if m.filter != "" {
-		var textFiltered []model.Skill
-		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range filtered {
-			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				textFiltered = append(textFiltered, s)
-			}
-		}
-		filtered = textFiltered
-	}
-
-	m.filtered = filtered
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
-
-func (m ScopeListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
-// View implements tea.Model.
-func (m ScopeListModel) View() string {
-	if m.quitting {
-		return ""
-	}
-
-	var b strings.Builder
-
-	// Title
-	title := scopeListStyles.Title.Render("📂 Scope Management - Browse Skills by Scope")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	// Scope tabs
-	b.WriteString(m.renderScopeTabs())
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := scopeListStyles.Filter.Render("Filter: ")
-		filterVal := scopeListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Status bar
-	status := m.renderStatus()
-	b.WriteString(scopeListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	selected := m.getSelectedSkill()
-	if selected.Name != "" && selected.Description != "" {
-		descWidth := max(m.width-2, 40)
-		formatted := formatDescription(selected.Description, descWidth)
-		b.WriteString(scopeListStyles.Description.Render(formatted))
-		b.WriteString("\n")
-	}
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
-}
-
-func (m ScopeListModel) renderScopeTabs() string {
-	var tabs []string
-
-	// "All" tab
-	if m.scopeIndex == -1 {
-		tabs = append(tabs, scopeListStyles.ScopeActive.Render("[All]"))
-	} else {
-		tabs = append(tabs, scopeListStyles.ScopeTab.Render(" All "))
-	}
-
-	// Individual scope tabs
 	titleCaser := cases.Title(language.English)
-	for i, scope := range m.scopeOptions {
-		scopeName := titleCaser.String(string(scope))
-		if i == m.scopeIndex {
-			tabs = append(tabs, scopeListStyles.ScopeActive.Render(fmt.Sprintf("[%s]", scopeName)))
-		} else {
-			tabs = append(tabs, scopeListStyles.ScopeTab.Render(fmt.Sprintf(" %s ", scopeName)))
-		}
-	}
 
-	return strings.Join(tabs, "")
-}
-
-func (m ScopeListModel) renderStatus() string {
-	// Count skills by scope
-	scopeCounts := make(map[model.SkillScope]int)
-	for _, s := range m.skills {
-		scopeCounts[s.Scope]++
-	}
-
-	// Build counts string
-	var counts []string
-	for _, scope := range m.scopeOptions {
-		counts = append(counts, fmt.Sprintf("%s: %d", scope, scopeCounts[scope]))
-	}
-
-	status := fmt.Sprintf("Showing %d of %d skills", len(m.filtered), len(m.skills))
-	if len(counts) > 0 {
-		status += " | " + strings.Join(counts, ", ")
-	}
-	return status
-}
-
-func (m ScopeListModel) renderShortHelp() string {
-	keys := []string{
-		"↑/↓ navigate",
-		"tab/S-tab scope",
-		"enter view",
-		"/ filter",
-		"? help",
-		"q quit",
-	}
-	return scopeListStyles.Help.Render(strings.Join(keys, " • "))
-}
-
-func (m ScopeListModel) renderFullHelp() string {
-	help := `Navigation:
+	cfg := ListConfig[model.Skill]{
+		Title: "📂 Scope Management - Browse Skills by Scope",
+		Columns: []table.Column{
+			{Title: "Name", Width: columnWidths.name},
+			{Title: "Platform", Width: columnWidths.platform},
+			{Title: "Scope", Width: columnWidths.scope},
+			{Title: "Description", Width: columnWidths.desc},
+		},
+		ToRows: toRows,
+		Matches: func(s model.Skill, lf string) bool {
+			if scopeIndex >= 0 && s.Scope != scopeOptions[scopeIndex] {
+				return false
+			}
+			if lf == "" {
+				return true
+			}
+			return strings.Contains(strings.ToLower(s.Name), lf) ||
+				strings.Contains(strings.ToLower(string(s.Platform)), lf) ||
+				strings.Contains(strings.ToLower(s.DisplayScope()), lf) ||
+				strings.Contains(strings.ToLower(s.Description), lf)
+		},
+		ReservedLines: 12,
+		Actions: []ActionBinding[model.Skill]{
+			{
+				Binding: viewKey,
+				Apply: func(s model.Skill) any {
+					return ScopeListResult{Action: ScopeActionView, SelectedSkill: s}
+				},
+			},
+		},
+		StatusText: func(filtered, total int, _ string) string {
+			scopeCounts := make(map[model.SkillScope]int)
+			for _, s := range skills {
+				scopeCounts[s.Scope]++
+			}
+			var counts []string
+			for _, scope := range scopeOptions {
+				counts = append(counts, fmt.Sprintf("%s: %d", scope, scopeCounts[scope]))
+			}
+			status := fmt.Sprintf("Showing %d of %d skills", filtered, total)
+			if len(counts) > 0 {
+				status += " | " + strings.Join(counts, ", ")
+			}
+			return status
+		},
+		Header: func() string {
+			var tabs []string
+			if scopeIndex == -1 {
+				tabs = append(tabs, scopeListStyles.ScopeActive.Render("[All]"))
+			} else {
+				tabs = append(tabs, scopeListStyles.ScopeTab.Render(" All "))
+			}
+			for i, scope := range scopeOptions {
+				name := titleCaser.String(string(scope))
+				if i == scopeIndex {
+					tabs = append(tabs, scopeListStyles.ScopeActive.Render(fmt.Sprintf("[%s]", name)))
+				} else {
+					tabs = append(tabs, scopeListStyles.ScopeTab.Render(fmt.Sprintf(" %s ", name)))
+				}
+			}
+			return strings.Join(tabs, "")
+		},
+		ExtraBody: func(m *ListModel[model.Skill]) string {
+			cursor := m.table.Cursor()
+			if cursor < 0 || cursor >= len(m.filtered) {
+				return ""
+			}
+			selected := m.filtered[cursor]
+			if selected.Name == "" || selected.Description == "" {
+				return ""
+			}
+			descWidth := max(m.width-2, 40)
+			return scopeListStyles.Description.Render(formatDescription(selected.Description, descWidth))
+		},
+		ExtraKeys: func(m *ListModel[model.Skill], msg tea.KeyMsg) bool {
+			switch {
+			case key.Matches(msg, nextScopeKey):
+				if len(scopeOptions) > 0 {
+					scopeIndex++
+					if scopeIndex >= len(scopeOptions) {
+						scopeIndex = -1
+					}
+					m.applyFilter()
+				}
+				return true
+			case key.Matches(msg, prevScopeKey):
+				if len(scopeOptions) > 0 {
+					scopeIndex--
+					if scopeIndex < -1 {
+						scopeIndex = len(scopeOptions) - 1
+					}
+					m.applyFilter()
+				}
+				return true
+			}
+			return false
+		},
+		OnWindowSize: func(m *ListModel[model.Skill], width, _ int) {
+			const separatorWidth = 6
+			newDesc := max(width-(columnWidths.name+columnWidths.platform+columnWidths.scope+separatorWidth), 40)
+			columnWidths.desc = newDesc
+			m.table.SetColumns([]table.Column{
+				{Title: "Name", Width: columnWidths.name},
+				{Title: "Platform", Width: columnWidths.platform},
+				{Title: "Scope", Width: columnWidths.scope},
+				{Title: "Description", Width: columnWidths.desc},
+			})
+			m.table.SetRows(m.cfg.ToRows(m.filtered))
+		},
+		ShortHelp: func() string {
+			return strings.Join([]string{
+				"↑/↓ navigate", "tab/S-tab scope", "enter view", "/ filter", "? help", "q quit",
+			}, " • ")
+		},
+		FullHelp: func() string {
+			return `Navigation:
   ↑/k      Move up
   ↓/j      Move down
   g/Home   Go to top
@@ -503,33 +237,10 @@ Text Filter:
 General:
   ?        Toggle full help
   q        Quit`
-	return scopeListStyles.Help.Render(help)
-}
-
-func (m *ScopeListModel) applyColumnWidths(totalWidth int) {
-	widths := defaultScopeListColumnWidths()
-	if totalWidth > 0 {
-		const separatorWidth = 6
-		descWidth := totalWidth - (widths.name + widths.platform + widths.scope + separatorWidth)
-		if descWidth < 40 {
-			descWidth = 40
-		}
-		widths.desc = descWidth
+		},
 	}
 
-	m.columnWidths = widths
-	m.table.SetColumns([]table.Column{
-		{Title: "Name", Width: widths.name},
-		{Title: "Platform", Width: widths.platform},
-		{Title: "Scope", Width: widths.scope},
-		{Title: "Description", Width: widths.desc},
-	})
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
-
-// Result returns the result of the user interaction.
-func (m ScopeListModel) Result() ScopeListResult {
-	return m.result
+	return ScopeListModel{ListModel: NewListModel(skills, cfg)}
 }
 
 // RunScopeList runs the interactive scope list and returns the result.

@@ -29,8 +29,8 @@ func TestNewBackupListModel(t *testing.T) {
 
 	model := NewBackupListModel(backups)
 
-	if len(model.backups) != 2 {
-		t.Errorf("expected 2 backups, got %d", len(model.backups))
+	if len(model.allItems) != 2 {
+		t.Errorf("expected 2 backups, got %d", len(model.allItems))
 	}
 
 	if len(model.filtered) != 2 {
@@ -107,8 +107,8 @@ func TestBackupListModel_ClearFilter(t *testing.T) {
 func TestBackupListModel_EmptyBackups(t *testing.T) {
 	model := NewBackupListModel([]backup.Metadata{})
 
-	if len(model.backups) != 0 {
-		t.Errorf("expected 0 backups, got %d", len(model.backups))
+	if len(model.allItems) != 0 {
+		t.Errorf("expected 0 backups, got %d", len(model.allItems))
 	}
 
 	// View should still work without panicking
