@@ -44,6 +44,14 @@ type Options struct {
 	// Verbose enables detailed output.
 	Verbose bool
 
+	// Progress is called during sync operations to report incremental progress.
+	// If nil, progress events are suppressed.
+	Progress ProgressCallback
+
+	// Bidirectional enables two-way sync (both platforms can be source and target).
+	// Call SyncBidirectional to use it explicitly.
+	Bidirectional bool
+
 	// DeleteMode enables deletion sync: deletes skills from target that match source.
 	// Instead of copying skills TO target, removes skills FROM target that exist in source.
 	DeleteMode bool
@@ -124,11 +132,27 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		logging.Count(len(sourceSkills)),
 	)
 
-	if len(sourceSkills) == 0 {
+	totalSkills := len(sourceSkills)
+	if err := s.emitProgress(opts, ProgressEvent{
+		Type:        ProgressEventStart,
+		TotalSkills: totalSkills,
+		Message:     progressStartMessage(totalSkills, "skills"),
+	}); err != nil {
+		return result, fmt.Errorf("progress callback failed: %w", err)
+	}
+
+	if totalSkills == 0 {
 		logging.Debug(
 			"no skills to sync",
 			logging.Platform(string(source)),
 		)
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     0,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "No skills to sync",
+		})
 		return result, nil // Nothing to sync
 	}
 
@@ -143,6 +167,13 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 
 	if len(sourceSkills) == 0 {
 		logging.Debug("all source skills were skipped as nested duplicates")
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "All source skills were skipped as nested duplicates",
+		})
 		return result, nil
 	}
 
@@ -196,9 +227,35 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 	}
 
 	// Process each source skill
-	for _, sourceSkill := range sourceSkills {
+	for i, sourceSkill := range sourceSkills {
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillStart,
+			Skill:           &sourceSkill,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: i,
+			PercentComplete: progressPercent(i, totalSkills),
+			Message:         fmt.Sprintf("Processing %s", sourceSkill.Name),
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
+
 		skillResult := s.processSkill(sourceSkill, target, targetPath, targetSkillMap, opts)
 		result.Skills = append(result.Skills, skillResult)
+
+		processedCount := i + 1
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillComplete,
+			Skill:           &sourceSkill,
+			Action:          skillResult.Action,
+			TotalSkills:     totalSkills,
+			ProcessedSkills: processedCount,
+			PercentComplete: progressPercent(processedCount, totalSkills),
+			Message:         skillResult.Message,
+			Error:           skillResult.Error,
+			Conflict:        skillResult.Conflict,
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
 	}
 
 	logging.Debug(
@@ -207,6 +264,14 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		slog.String("target", string(target)),
 		logging.Count(len(result.Skills)),
 	)
+
+	_ = s.emitProgress(opts, ProgressEvent{
+		Type:            ProgressEventComplete,
+		TotalSkills:     totalSkills,
+		ProcessedSkills: len(sourceSkills),
+		PercentComplete: 100,
+		Message:         fmt.Sprintf("Sync completed: %d skills processed", len(sourceSkills)),
+	})
 
 	return result, nil
 }
@@ -799,6 +864,13 @@ func (s *Synchronizer) SyncWithSkills(
 
 	if len(skills) == 0 {
 		logging.Debug("no skills provided to sync")
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     0,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "No skills provided to sync",
+		})
 		return &Result{
 			Target:   target,
 			Strategy: opts.Strategy,
@@ -833,7 +905,22 @@ func (s *Synchronizer) SyncWithSkills(
 
 	if len(skills) == 0 {
 		logging.Debug("all pre-parsed skills were skipped as nested duplicates")
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     result.TotalAvailable,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "All pre-parsed skills were skipped as nested duplicates",
+		})
 		return result, nil
+	}
+
+	if err := s.emitProgress(opts, ProgressEvent{
+		Type:        ProgressEventStart,
+		TotalSkills: len(skills),
+		Message:     progressStartMessage(len(skills), "skills"),
+	}); err != nil {
+		return result, fmt.Errorf("progress callback failed: %w", err)
 	}
 
 	// Get target path based on scope
@@ -896,9 +983,35 @@ func (s *Synchronizer) SyncWithSkills(
 	}
 
 	// Process each skill
-	for _, skill := range skills {
+	for i, skill := range skills {
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillStart,
+			Skill:           &skill,
+			TotalSkills:     len(skills),
+			ProcessedSkills: i,
+			PercentComplete: progressPercent(i, len(skills)),
+			Message:         fmt.Sprintf("Processing %s", skill.Name),
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
+
 		skillResult := s.processSkill(skill, target, targetPath, targetSkillMap, opts)
 		result.Skills = append(result.Skills, skillResult)
+
+		processedCount := i + 1
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillComplete,
+			Skill:           &skill,
+			Action:          skillResult.Action,
+			TotalSkills:     len(skills),
+			ProcessedSkills: processedCount,
+			PercentComplete: progressPercent(processedCount, len(skills)),
+			Message:         skillResult.Message,
+			Error:           skillResult.Error,
+			Conflict:        skillResult.Conflict,
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
 	}
 
 	logging.Debug(
@@ -906,6 +1019,14 @@ func (s *Synchronizer) SyncWithSkills(
 		logging.Platform(string(target)),
 		logging.Count(len(result.Skills)),
 	)
+
+	_ = s.emitProgress(opts, ProgressEvent{
+		Type:            ProgressEventComplete,
+		TotalSkills:     len(skills),
+		ProcessedSkills: len(skills),
+		PercentComplete: 100,
+		Message:         fmt.Sprintf("Sync completed: %d skills processed", len(skills)),
+	})
 
 	return result, nil
 }
@@ -929,6 +1050,13 @@ func (s *Synchronizer) DeleteWithSkills(
 
 	if len(sourceSkills) == 0 {
 		logging.Debug("no skills provided to delete")
+		_ = s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventComplete,
+			TotalSkills:     0,
+			ProcessedSkills: 0,
+			PercentComplete: 100,
+			Message:         "No skills provided to delete",
+		})
 		return &Result{
 			Target:   target,
 			Strategy: opts.Strategy,
@@ -946,6 +1074,14 @@ func (s *Synchronizer) DeleteWithSkills(
 	}
 	result.SelectedCount = len(sourceSkills)
 	result.TotalAvailable = len(sourceSkills)
+
+	if err := s.emitProgress(opts, ProgressEvent{
+		Type:        ProgressEventStart,
+		TotalSkills: len(sourceSkills),
+		Message:     progressStartMessage(len(sourceSkills), "skills"),
+	}); err != nil {
+		return result, fmt.Errorf("progress callback failed: %w", err)
+	}
 
 	// Get target path based on scope
 	targetPath := opts.TargetPath
@@ -996,7 +1132,7 @@ func (s *Synchronizer) DeleteWithSkills(
 	}
 
 	// Find target skills that match source skills and delete them
-	for _, targetSkill := range targetSkills {
+	for i, targetSkill := range targetSkills {
 		sourceSkill, exists := sourceSkillNames[targetSkill.Name]
 		if !exists {
 			// Skill not in source list, skip it
@@ -1005,6 +1141,17 @@ func (s *Synchronizer) DeleteWithSkills(
 				logging.Skill(targetSkill.Name),
 			)
 			continue
+		}
+
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillStart,
+			Skill:           &sourceSkill,
+			TotalSkills:     len(sourceSkills),
+			ProcessedSkills: i,
+			PercentComplete: progressPercent(i, len(sourceSkills)),
+			Message:         fmt.Sprintf("Deleting %s", sourceSkill.Name),
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
 		}
 
 		skillResult := SkillResult{
@@ -1044,6 +1191,19 @@ func (s *Synchronizer) DeleteWithSkills(
 		skillResult.Action = ActionDeleted
 		skillResult.Message = "deleted from target"
 		result.Skills = append(result.Skills, skillResult)
+
+		if err := s.emitProgress(opts, ProgressEvent{
+			Type:            ProgressEventSkillComplete,
+			Skill:           &sourceSkill,
+			Action:          skillResult.Action,
+			TotalSkills:     len(sourceSkills),
+			ProcessedSkills: i + 1,
+			PercentComplete: progressPercent(i+1, len(sourceSkills)),
+			Message:         skillResult.Message,
+			Error:           skillResult.Error,
+		}); err != nil {
+			return result, fmt.Errorf("progress callback failed: %w", err)
+		}
 	}
 
 	logging.Debug(
@@ -1051,6 +1211,14 @@ func (s *Synchronizer) DeleteWithSkills(
 		logging.Platform(string(target)),
 		logging.Count(len(result.Skills)),
 	)
+
+	_ = s.emitProgress(opts, ProgressEvent{
+		Type:            ProgressEventComplete,
+		TotalSkills:     len(sourceSkills),
+		ProcessedSkills: len(result.Skills),
+		PercentComplete: 100,
+		Message:         fmt.Sprintf("Delete sync completed: %d skills processed", len(result.Skills)),
+	})
 
 	return result, nil
 }

@@ -816,3 +816,100 @@ description: A Pi.dev skill
 		t.Fatalf("synced SKILL.md content mismatch:\ngot:  %q\nwant: %q", string(got), wantContent)
 	}
 }
+
+func TestSynchronizer_Sync_ReportsProgress(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(sourceDir, "progress.md"), []byte(`---
+name: progress
+---
+
+Progress content.
+`), 0o600); err != nil {
+		t.Fatalf("failed to write source skill: %v", err)
+	}
+
+	var events []ProgressEvent
+	result, err := s.Sync(model.ClaudeCode, model.Cursor, Options{
+		DryRun:     true,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+		Progress: func(event ProgressEvent) error {
+			events = append(events, event)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected result")
+	}
+	if len(events) < 4 {
+		t.Fatalf("expected at least 4 progress events, got %d", len(events))
+	}
+	if events[0].Type != ProgressEventStart {
+		t.Fatalf("expected first event to be start, got %s", events[0].Type)
+	}
+	if events[len(events)-1].Type != ProgressEventComplete {
+		t.Fatalf("expected last event to be complete, got %s", events[len(events)-1].Type)
+	}
+	if events[1].Type != ProgressEventSkillStart || events[2].Type != ProgressEventSkillComplete {
+		t.Fatalf("expected skill start/complete events, got %#v", events[1:3])
+	}
+}
+
+func TestSynchronizer_SyncBidirectional_NewerStrategy(t *testing.T) {
+	s := New()
+	platformA := model.ClaudeCode
+	platformB := model.Cursor
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(dirA, "shared.md"), []byte(`---
+name: shared
+description: from A
+---
+
+A content.
+`), 0o600); err != nil {
+		t.Fatalf("failed to write A skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dirB, "shared.md"), []byte(`---
+name: shared
+description: from B
+---
+
+B content.
+`), 0o600); err != nil {
+		t.Fatalf("failed to write B skill: %v", err)
+	}
+	if err := os.Chtimes(filepath.Join(dirA, "shared.md"), time.Now().Add(-time.Hour), time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("failed to set A mtime: %v", err)
+	}
+	if err := os.Chtimes(filepath.Join(dirB, "shared.md"), time.Now(), time.Now()); err != nil {
+		t.Fatalf("failed to set B mtime: %v", err)
+	}
+
+	result, err := s.SyncBidirectional(platformA, platformB, Options{
+		DryRun:     true,
+		Strategy:   StrategyNewer,
+		SourcePath: dirA,
+		TargetPath: dirB,
+	})
+	if err != nil {
+		t.Fatalf("SyncBidirectional failed: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected result")
+	}
+	if result.ResultBtoA == nil {
+		t.Fatal("expected B->A sync result for newer B skill")
+	}
+	if result.ResultAtoB != nil {
+		t.Fatalf("did not expect A->B sync result, got %+v", result.ResultAtoB)
+	}
+}
