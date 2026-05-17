@@ -36,22 +36,7 @@ type SyncListResult struct {
 	Selections     map[string]bool // all current selections for state preservation
 }
 
-// syncListKeyMap defines the key bindings for the sync list.
-type syncListKeyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Toggle      key.Binding
-	ToggleAll   key.Binding
-	Preview     key.Binding
-	Confirm     key.Binding
-	Filter      key.Binding
-	ClearFlt    key.Binding
-	Help        key.Binding
-	Quit        key.Binding
-	ScrollLeft  key.Binding
-	ScrollRight key.Binding
-}
-
+// syncListColumnWidths tracks the responsive widths for the sync table.
 type syncListColumnWidths struct {
 	name  int
 	scope int
@@ -64,81 +49,6 @@ func defaultSyncListColumnWidths() syncListColumnWidths {
 		scope: 12,
 		desc:  60,
 	}
-}
-
-func defaultSyncListKeyMap() syncListKeyMap {
-	return syncListKeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
-		),
-		Toggle: key.NewBinding(
-			key.WithKeys(" ", "tab"),
-			key.WithHelp("space/tab", "toggle"),
-		),
-		ToggleAll: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "toggle all"),
-		),
-		Preview: key.NewBinding(
-			key.WithKeys("p", "enter"),
-			key.WithHelp("p/enter", "preview diff"),
-		),
-		Confirm: key.NewBinding(
-			key.WithKeys("y"),
-			key.WithHelp("y", "sync selected"),
-		),
-		Filter: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "filter"),
-		),
-		ClearFlt: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "clear filter"),
-		),
-		Help: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "help"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
-		ScrollLeft: key.NewBinding(
-			key.WithKeys("left"),
-			key.WithHelp("←", "scroll cols left"),
-		),
-		ScrollRight: key.NewBinding(
-			key.WithKeys("right"),
-			key.WithHelp("→", "scroll cols right"),
-		),
-	}
-}
-
-// SyncListModel is the BubbleTea model for interactive sync skill selection.
-type SyncListModel struct {
-	table          table.Model
-	hScroll        horizontalTableState
-	skills         []model.Skill
-	filtered       []model.Skill
-	selected       map[string]bool // map of skill name to selected state
-	keys           syncListKeyMap
-	result         SyncListResult
-	filter         string
-	filtering      bool
-	showHelp       bool
-	confirmMode    bool
-	width          int
-	height         int
-	quitting       bool
-	sourcePlatform model.Platform
-	targetPlatform model.Platform
-	columnWidths   syncListColumnWidths
-	hOffset        int // horizontal column scroll offset (0 = show all)
 }
 
 // Styles for the sync list TUI.
@@ -242,17 +152,16 @@ func syncListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]table
 	return columns, widths
 }
 
-// NewSyncListModel creates a new sync list model.
-func NewSyncListModel(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) SyncListModel {
-	// Sort skills alphabetically by name (case-insensitive)
-	sort.Slice(skills, func(i, j int) bool {
-		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
-	})
+type syncListState struct {
+	selected       map[string]bool
+	sourcePlatform model.Platform
+	targetPlatform model.Platform
+	columnWidths   syncListColumnWidths
+	hScroll        horizontalTableState
+}
 
-	columns, columnWidths := syncListColumns(0, skills, 0)
-
-	// Initialize selections - use initialSelections if provided, otherwise default all to true
-	selected := make(map[string]bool)
+func newSyncListState(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) *syncListState {
+	selected := make(map[string]bool, len(skills))
 	for _, s := range skills {
 		if initialSelections != nil {
 			selected[s.Name] = initialSelections[s.Name]
@@ -261,101 +170,57 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform, initi
 		}
 	}
 
-	m := SyncListModel{
-		skills:         skills,
-		filtered:       skills,
+	return &syncListState{
 		selected:       selected,
-		keys:           defaultSyncListKeyMap(),
 		sourcePlatform: source,
 		targetPlatform: target,
-		columnWidths:   columnWidths,
-		hScroll:        newHorizontalTableState(columns),
+		columnWidths:   defaultSyncListColumnWidths(),
+		hScroll:        newHorizontalTableState(nil),
 	}
-
-	rows := m.skillsToRows(skills)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
-	return m
 }
 
-func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
-	widths := m.columnWidths
-	if widths.desc == 0 {
-		widths = defaultSyncListColumnWidths()
-	}
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		checkbox := "[ ]"
-		if m.selected[s.Name] {
-			checkbox = "[✓]"
+func (s *syncListState) selectedCount() int {
+	count := 0
+	for _, selected := range s.selected {
+		if selected {
+			count++
 		}
+	}
+	return count
+}
 
-		row := table.Row{
-			checkbox,
-			truncateTableValue(s.Name, m.columnWidths.name),
+func (s *syncListState) copySelections() map[string]bool {
+	result := make(map[string]bool, len(s.selected))
+	maps.Copy(result, s.selected)
+	return result
+}
+
+func (s *syncListState) selectedSkills(skills []model.Skill) []model.Skill {
+	selected := make([]model.Skill, 0, len(skills))
+	for _, skill := range skills {
+		if s.selected[skill.Name] {
+			selected = append(selected, skill)
 		}
-		if m.hOffset == 0 {
-			row = append(row, truncateTableValue(s.DisplayScope(), m.columnWidths.scope))
-		}
-		row = append(row, truncateTableValue(s.Description, m.columnWidths.desc))
-		rows[i] = row
 	}
-	return rows
+	return selected
 }
 
-func (m *SyncListModel) shiftHOffset(delta int) {
-	newOffset := m.hOffset + delta
-	if newOffset < 0 || newOffset > syncListMaxHOffset {
-		return
+func (s *syncListState) refresh(m *ListModel[model.Skill]) {
+	columns, widths := syncListColumns(m.width, m.allItems, s.hScroll.offset)
+	s.columnWidths = widths
+	s.hScroll.SetColumns(columns)
+	s.hScroll.Apply(&m.table, m.width, m.cfg.ToRows(m.filtered))
+}
+
+func (s *syncListState) detailPanel(m *ListModel[model.Skill]) string {
+	width := m.width
+	if width <= 0 {
+		width = syncListCheckboxWidth + s.columnWidths.name + s.columnWidths.scope + s.columnWidths.desc +
+			(syncListColumnPadding * 4)
 	}
-	m.hOffset = newOffset
-	m.updateColumns(m.width)
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
 
-func (m *SyncListModel) updateColumns(totalWidth int) {
-	columns, widths := syncListColumns(totalWidth, m.skills, m.hOffset)
-	m.columnWidths = widths
-	m.hScroll.SetColumns(columns)
-	m.refreshTable()
-}
-
-func (m *SyncListModel) refreshTable() {
-	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
-}
-
-func (m SyncListModel) detailPanelWidth() int {
-	if m.width > 0 {
-		return m.width
-	}
-	return syncListCheckboxWidth + m.columnWidths.name + m.columnWidths.scope + m.columnWidths.desc +
-		(syncListColumnPadding * 4)
-}
-
-func (m SyncListModel) renderDetailPanel() string {
-	width := m.detailPanelWidth()
 	contentWidth := max(width-4, 10)
-
-	skill := m.getSelectedSkill()
+	skill := selectedSyncSkill(m)
 	description := strings.TrimSpace(skill.Description)
 	if description == "" {
 		description = "No description available."
@@ -364,292 +229,149 @@ func (m SyncListModel) renderDetailPanel() string {
 	lines := wrapText(description, contentWidth, syncListDetailLines)
 	lines = padLines(lines, syncListDetailLines)
 
-	header := syncListStyles.DetailTitle.Render("Description (selected)")
-	content := append([]string{header}, lines...)
-
+	head := syncListStyles.DetailTitle.Render("Description (selected)")
+	content := append([]string{head}, lines...)
 	return syncListStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
 }
 
-// Init implements tea.Model.
-func (m SyncListModel) Init() tea.Cmd {
-	return nil
+// SyncListModel is the BubbleTea model for interactive sync skill selection.
+type SyncListModel struct {
+	ListModel[model.Skill]
+	state *syncListState
 }
 
-// Update implements tea.Model.
-//
-//nolint:gocyclo // interactive table/event handling is intentionally centralized here
+// Update wraps the base Update and preserves the SyncListModel type.
 func (m SyncListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		// Adjust table height based on window
-		newHeight := max(msg.Height-10-syncListDetailHeight-syncListDetailGap, 5) // Reserve space for title, help, status, detail
-		m.table.SetHeight(newHeight)
-		m.updateColumns(msg.Width)
-
-	case tea.KeyMsg:
-		// Handle confirmation mode
-		if m.confirmMode {
-			switch msg.String() {
-			case "y", "Y":
-				m.result = SyncListResult{
-					Action:         SyncActionSync,
-					SelectedSkills: m.getSelectedSkills(),
-				}
-				m.quitting = true
-				return m, tea.Quit
-			case "n", "N", "esc":
-				m.confirmMode = false
-				return m, nil
-			}
-			return m, nil
-		}
-
-		// Handle filtering mode
-		if m.filtering {
-			switch msg.String() {
-			case "enter":
-				m.filtering = false
-				return m, nil
-			case "esc":
-				m.filter = ""
-				m.filtering = false
-				m.applyFilter()
-				return m, nil
-			case "backspace":
-				if len(m.filter) > 0 {
-					m.filter = m.filter[:len(m.filter)-1]
-					m.applyFilter()
-				}
-				return m, nil
-			default:
-				if len(msg.String()) == 1 {
-					m.filter += msg.String()
-					m.applyFilter()
-				}
-				return m, nil
-			}
-		}
-
-		// Normal mode key handling
-		switch {
-		case msg.String() == "left" || msg.String() == "h":
-			if m.hScroll.MoveLeft() {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case msg.String() == "right" || msg.String() == "l":
-			if m.hScroll.MoveRight(m.width) {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Filter):
-			m.filtering = true
-			return m, nil
-
-		case key.Matches(msg, m.keys.ClearFlt):
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
-
-		case key.Matches(msg, m.keys.Toggle):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.selected[skill.Name] = !m.selected[skill.Name]
-				m.refreshTable()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.ToggleAll):
-			// Count how many are currently selected
-			selectedCount := 0
-			for _, s := range m.filtered {
-				if m.selected[s.Name] {
-					selectedCount++
-				}
-			}
-			// If all or most are selected, deselect all; otherwise select all
-			selectAll := selectedCount < len(m.filtered)/2+1
-			for _, s := range m.filtered {
-				m.selected[s.Name] = selectAll
-			}
-			m.refreshTable()
-			return m, nil
-
-		case key.Matches(msg, m.keys.Preview):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.result = SyncListResult{
-					Action:       SyncActionPreview,
-					PreviewSkill: skill,
-				}
-				m.quitting = true
-				return m, tea.Quit
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Confirm):
-			selectedSkills := m.getSelectedSkills()
-			if len(selectedSkills) > 0 {
-				m.confirmMode = true
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.ScrollLeft):
-			m.shiftHOffset(-1)
-			return m, nil
-
-		case key.Matches(msg, m.keys.ScrollRight):
-			m.shiftHOffset(1)
-			return m, nil
-		}
-	}
-
-	m.table, cmd = m.table.Update(msg)
+	inner, cmd := m.ListModel.Update(msg)
+	m.ListModel = inner.(ListModel[model.Skill])
 	return m, cmd
 }
 
+// Result returns the result of the user interaction.
+func (m SyncListModel) Result() SyncListResult {
+	if r, ok := m.result.(SyncListResult); ok {
+		return r
+	}
+	return SyncListResult{}
+}
+
+// applyFilter is kept for tests and direct state manipulation.
 func (m *SyncListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.skills
-	} else {
-		var filtered []model.Skill
-		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.skills {
-			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
-			}
-		}
-		m.filtered = filtered
+	m.ListModel.applyFilter()
+	if m.state != nil {
+		m.state.refresh(&m.ListModel)
 	}
-	m.refreshTable()
 }
 
-func (m SyncListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
+// getSelectedSkills is kept for tests and direct state inspection.
 func (m SyncListModel) getSelectedSkills() []model.Skill {
-	var selected []model.Skill
-	for _, s := range m.skills {
-		if m.selected[s.Name] {
-			selected = append(selected, s)
-		}
+	if m.state == nil {
+		return nil
 	}
-	return selected
+	return m.state.selectedSkills(m.allItems)
 }
 
-// View implements tea.Model.
-func (m SyncListModel) View() string {
-	if m.quitting {
-		return ""
+// skillsToRows is kept for tests and compatibility with the pre-refactor API.
+func (m SyncListModel) skillsToRows(skills []model.Skill) []table.Row {
+	if m.state == nil {
+		return nil
 	}
-
-	var b strings.Builder
-
-	// Title
-	title := syncListStyles.Title.Render(fmt.Sprintf("🔄 Sync Skills: %s → %s", m.sourcePlatform, m.targetPlatform))
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := syncListStyles.Filter.Render("Filter: ")
-		filterVal := syncListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Confirmation dialog
-	if m.confirmMode {
-		selectedCount := len(m.getSelectedSkills())
-		b.WriteString(m.table.View())
-		b.WriteString("\n\n")
-		confirmMsg := fmt.Sprintf("Sync %d skill(s) to %s? (y/n)", selectedCount, m.targetPlatform)
-		b.WriteString(syncListStyles.Confirm.Render(confirmMsg))
-		return b.String()
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Detail panel
-	b.WriteString(m.renderDetailPanel())
-	b.WriteString("\n")
-
-	// Status bar
-	selectedCount := len(m.getSelectedSkills())
-	status := fmt.Sprintf("%d skill(s) selected of %d", selectedCount, len(m.filtered))
-	if m.filter != "" {
-		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
-	}
-	if m.hOffset > 0 || m.hOffset < syncListMaxHOffset {
-		status += "  " + hScrollIndicator(m.hOffset, syncListMaxHOffset)
-	}
-	b.WriteString(syncListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	selected := m.getSelectedSkill()
-	if selected.Name != "" && selected.Description != "" {
-		descWidth := max(m.width-2, 40)
-		formatted := formatDescription(selected.Description, descWidth)
-		b.WriteString(syncListStyles.Description.Render(formatted))
-		b.WriteString("\n")
-	}
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
+	return m.cfg.ToRows(skills)
 }
 
-func (m SyncListModel) renderShortHelp() string {
-	keys := []string{
-		"↑/↓ navigate",
-		"←/→ scroll cols",
-		"space toggle",
-		"a toggle all",
-		"p preview",
-		"y sync",
-		"/ filter",
-		"? help",
-		"q quit",
+// GetSelections returns a copy of the current selections map.
+func (m SyncListModel) GetSelections() map[string]bool {
+	if m.state == nil {
+		return nil
 	}
-	return syncListStyles.Help.Render(strings.Join(keys, " • "))
+	return m.state.copySelections()
 }
 
-func (m SyncListModel) renderFullHelp() string {
-	help := `Navigation:
+// NewSyncListModel creates a new sync list model.
+func NewSyncListModel(skills []model.Skill, source, target model.Platform, initialSelections map[string]bool) SyncListModel {
+	// Sort skills alphabetically by name (case-insensitive).
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
+
+	state := newSyncListState(skills, source, target, initialSelections)
+
+	previewKey := key.NewBinding(
+		key.WithKeys("p", "enter"),
+		key.WithHelp("p/enter", "preview diff"),
+	)
+	toggleKey := key.NewBinding(
+		key.WithKeys(" ", "tab"),
+		key.WithHelp("space/tab", "toggle"),
+	)
+	toggleAllKey := key.NewBinding(
+		key.WithKeys("a"),
+		key.WithHelp("a", "toggle all"),
+	)
+
+	cfg := ListConfig[model.Skill]{
+		Title: fmt.Sprintf("🔄 Sync Skills: %s → %s", source, target),
+		Columns: func() []table.Column {
+			columns, _ := syncListColumns(0, skills, 0)
+			return columns
+		}(),
+		ToRows: func(items []model.Skill) []table.Row {
+			widths := state.columnWidths
+			if widths.desc == 0 {
+				widths = defaultSyncListColumnWidths()
+			}
+			rows := make([]table.Row, len(items))
+			for i, skill := range items {
+				row := table.Row{
+					state.checkboxFor(skill.Name),
+					truncateTableValue(skill.Name, widths.name),
+				}
+				if state.hScroll.offset == 0 {
+					row = append(row, truncateTableValue(skill.DisplayScope(), widths.scope))
+				}
+				row = append(row, truncateTableValue(skill.Description, widths.desc))
+				rows[i] = row
+			}
+			return rows
+		},
+		Matches: func(skill model.Skill, lowerFilter string) bool {
+			if lowerFilter == "" {
+				return true
+			}
+			return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
+				strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
+				strings.Contains(strings.ToLower(skill.Description), lowerFilter)
+		},
+		ReservedLines: 15,
+		Actions: []ActionBinding[model.Skill]{
+			{
+				Binding: previewKey,
+				Apply: func(skill model.Skill) any {
+					return SyncListResult{
+						Action:         SyncActionPreview,
+						PreviewSkill:   skill,
+						SelectedSkills: state.selectedSkills(skills),
+						Selections:     state.copySelections(),
+					}
+				},
+			},
+		},
+		ShortHelp: func() string {
+			return syncListStyles.Help.Render(strings.Join([]string{
+				"↑/↓ navigate",
+				"←/→ scroll cols",
+				"space/tab toggle",
+				"a toggle all",
+				"p preview",
+				"y sync",
+				"/ filter",
+				"? help",
+				"q quit",
+			}, " • "))
+		},
+		FullHelp: func() string {
+			return syncListStyles.Help.Render(`Navigation:
   ↑/k      Move up
   ↓/j      Move down
   ←/h      Show previous columns
@@ -673,20 +395,98 @@ Filter:
 
 General:
   ?        Toggle full help
-  q        Quit without syncing`
-	return syncListStyles.Help.Render(help)
+  q        Quit without syncing`)
+		},
+		StatusText: func(filtered, total int, filter string) string {
+			selectedCount := state.selectedCount()
+			status := fmt.Sprintf("%d skill(s) selected of %d", selectedCount, filtered)
+			if filter != "" {
+				status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, filtered, total)
+			}
+			if scroll := hScrollIndicator(state.hScroll.offset, syncListMaxHOffset); scroll != "" {
+				status += "  " + scroll
+			}
+			return status
+		},
+		ExtraBody: func(m *ListModel[model.Skill]) string {
+			return state.detailPanel(m)
+		},
+		ExtraKeys: func(m *ListModel[model.Skill], msg tea.KeyMsg) bool {
+			switch {
+			case msg.String() == "left" || msg.String() == "h":
+				if state.hScroll.MoveLeft() {
+					state.refresh(m)
+				}
+				return true
+			case msg.String() == "right" || msg.String() == "l":
+				if state.hScroll.MoveRight(m.width) {
+					state.refresh(m)
+				}
+				return true
+			case key.Matches(msg, toggleKey):
+				if skill := selectedSyncSkill(m); skill.Name != "" {
+					state.selected[skill.Name] = !state.selected[skill.Name]
+					state.refresh(m)
+				}
+				return true
+			case key.Matches(msg, toggleAllKey):
+				if len(m.filtered) > 0 {
+					selectedCount := 0
+					for _, skill := range m.filtered {
+						if state.selected[skill.Name] {
+							selectedCount++
+						}
+					}
+					selectAll := selectedCount < len(m.filtered)/2+1
+					for _, skill := range m.filtered {
+						state.selected[skill.Name] = selectAll
+					}
+					state.refresh(m)
+				}
+				return true
+			case msg.String() == "y":
+				selectedSkills := state.selectedSkills(skills)
+				if len(selectedSkills) == 0 {
+					return true
+				}
+				m.result = SyncListResult{
+					Action:         SyncActionSync,
+					SelectedSkills: selectedSkills,
+					Selections:     state.copySelections(),
+				}
+				m.confirmMode = true
+				m.confirmMsg = fmt.Sprintf("Sync %d skill(s) to %s? (y/n)", len(selectedSkills), state.targetPlatform)
+				return true
+			default:
+				return false
+			}
+		},
+		OnWindowSize: func(m *ListModel[model.Skill], width, _ int) {
+			state.refresh(m)
+		},
+	}
+
+	mdl := SyncListModel{
+		ListModel: NewListModel(skills, cfg),
+		state:     state,
+	}
+	state.refresh(&mdl.ListModel)
+	return mdl
 }
 
-// Result returns the result of the user interaction.
-func (m SyncListModel) Result() SyncListResult {
-	return m.result
+func (s *syncListState) checkboxFor(name string) string {
+	if s.selected[name] {
+		return "[✓]"
+	}
+	return "[ ]"
 }
 
-// GetSelections returns a copy of the current selections map.
-func (m SyncListModel) GetSelections() map[string]bool {
-	result := make(map[string]bool, len(m.selected))
-	maps.Copy(result, m.selected)
-	return result
+func selectedSyncSkill(m *ListModel[model.Skill]) model.Skill {
+	cursor := m.table.Cursor()
+	if cursor >= 0 && cursor < len(m.filtered) {
+		return m.filtered[cursor]
+	}
+	return model.Skill{}
 }
 
 // RunSyncList runs the interactive sync list and returns the result.
@@ -703,7 +503,9 @@ func RunSyncList(skills []model.Skill, source, target model.Platform, initialSel
 
 	if m, ok := finalModel.(SyncListModel); ok {
 		result := m.Result()
-		result.Selections = m.GetSelections()
+		if result.Action != SyncActionNone {
+			result.Selections = m.GetSelections()
+		}
 		return result, nil
 	}
 

@@ -32,8 +32,8 @@ func TestNewSyncListModel(t *testing.T) {
 
 	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
-	if len(m.skills) != 2 {
-		t.Errorf("expected 2 skills, got %d", len(m.skills))
+	if len(m.allItems) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(m.allItems))
 	}
 
 	if len(m.filtered) != 2 {
@@ -41,12 +41,12 @@ func TestNewSyncListModel(t *testing.T) {
 	}
 
 	// All skills should be selected by default
-	if len(m.selected) != 2 {
-		t.Errorf("expected 2 selected skills, got %d", len(m.selected))
+	if len(m.state.selected) != 2 {
+		t.Errorf("expected 2 selected skills, got %d", len(m.state.selected))
 	}
 
 	for _, skill := range skills {
-		if !m.selected[skill.Name] {
+		if !m.state.selected[skill.Name] {
 			t.Errorf("expected skill %s to be selected", skill.Name)
 		}
 	}
@@ -117,7 +117,7 @@ func TestSyncListModel_Toggle(t *testing.T) {
 	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Skill should be selected initially
-	if !m.selected["test-skill"] {
+	if !m.state.selected["test-skill"] {
 		t.Error("expected skill to be selected initially")
 	}
 
@@ -125,7 +125,7 @@ func TestSyncListModel_Toggle(t *testing.T) {
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	sm := newModel.(SyncListModel)
 
-	if sm.selected["test-skill"] {
+	if sm.state.selected["test-skill"] {
 		t.Error("expected skill to be deselected after toggle")
 	}
 
@@ -133,7 +133,7 @@ func TestSyncListModel_Toggle(t *testing.T) {
 	newModel, _ = sm.Update(tea.KeyMsg{Type: tea.KeySpace})
 	sm = newModel.(SyncListModel)
 
-	if !sm.selected["test-skill"] {
+	if !sm.state.selected["test-skill"] {
 		t.Error("expected skill to be selected after second toggle")
 	}
 }
@@ -158,8 +158,8 @@ func TestSyncListModel_ToggleAll(t *testing.T) {
 
 	// All should be selected initially
 	selectedCount := 0
-	for _, s := range m.skills {
-		if m.selected[s.Name] {
+	for _, s := range m.allItems {
+		if m.state.selected[s.Name] {
 			selectedCount++
 		}
 	}
@@ -172,8 +172,8 @@ func TestSyncListModel_ToggleAll(t *testing.T) {
 	sm := newModel.(SyncListModel)
 
 	selectedCount = 0
-	for _, s := range sm.skills {
-		if sm.selected[s.Name] {
+	for _, s := range sm.allItems {
+		if sm.state.selected[s.Name] {
 			selectedCount++
 		}
 	}
@@ -186,8 +186,8 @@ func TestSyncListModel_ToggleAll(t *testing.T) {
 	sm = newModel.(SyncListModel)
 
 	selectedCount = 0
-	for _, s := range sm.skills {
-		if sm.selected[s.Name] {
+	for _, s := range sm.allItems {
+		if sm.state.selected[s.Name] {
 			selectedCount++
 		}
 	}
@@ -211,7 +211,7 @@ func TestSyncListModel_GetSelectedSkills(t *testing.T) {
 	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
 
 	// Deselect one skill
-	m.selected["skill-one"] = false
+	m.state.selected["skill-one"] = false
 
 	selected := m.getSelectedSkills()
 	if len(selected) != 1 {
@@ -412,8 +412,8 @@ func TestSyncListResult_DefaultAction(t *testing.T) {
 func TestSyncListModel_EmptySkills(t *testing.T) {
 	m := NewSyncListModel([]model.Skill{}, model.ClaudeCode, model.Cursor, nil)
 
-	if len(m.skills) != 0 {
-		t.Errorf("expected 0 skills, got %d", len(m.skills))
+	if len(m.allItems) != 0 {
+		t.Errorf("expected 0 skills, got %d", len(m.allItems))
 	}
 
 	// View should still work without panicking
@@ -555,8 +555,8 @@ func TestSyncListModel_HorizontalScrollChangesVisibleColumns(t *testing.T) {
 	sm := newModel.(SyncListModel)
 
 	initialColumns := sm.table.Columns()
-	if len(initialColumns) >= len(sm.hScroll.columns) {
-		t.Fatalf("expected a narrowed visible column set, got %d of %d", len(initialColumns), len(sm.hScroll.columns))
+	if len(initialColumns) >= len(sm.state.hScroll.columns) {
+		t.Fatalf("expected a narrowed visible column set, got %d of %d", len(initialColumns), len(sm.state.hScroll.columns))
 	}
 	if initialColumns[0].Title != " " {
 		t.Fatalf("expected checkbox column to be visible first, got %q", initialColumns[0].Title)
@@ -569,7 +569,7 @@ func TestSyncListModel_HorizontalScrollChangesVisibleColumns(t *testing.T) {
 	if scrolledColumns[0].Title == initialColumns[0].Title {
 		t.Fatalf("expected horizontal scroll to change the leading visible column, still got %q", scrolledColumns[0].Title)
 	}
-	if !strings.Contains(sm.View(), "col 1/2") {
+	if !strings.Contains(sm.View(), "col 2/2") {
 		t.Fatalf("expected status to report horizontal column window, got %q", sm.View())
 	}
 }
@@ -621,7 +621,7 @@ func TestSyncListModel_SkillsToRows_Unchecked(t *testing.T) {
 	}
 
 	m := NewSyncListModel(skills, model.ClaudeCode, model.Cursor, nil)
-	m.selected["test-skill"] = false
+	m.state.selected["test-skill"] = false
 
 	rows := m.skillsToRows(skills)
 	row := rows[0]
