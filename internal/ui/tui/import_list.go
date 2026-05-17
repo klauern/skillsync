@@ -47,6 +47,8 @@ const (
 	phaseConfirm
 )
 
+var importPhaseNames = []string{"Select Source", "Select Skills", "Choose Destination", "Confirm"}
+
 // importListKeyMap defines the key bindings for the import list.
 type importListKeyMap struct {
 	Up        key.Binding
@@ -68,6 +70,70 @@ type importListColumnWidths struct {
 	name  int
 	desc  int
 	scope int
+}
+
+type importListState struct {
+	phase          importPhase
+	result         ImportListResult
+	sourcePath     string
+	targetPlatform model.Platform
+	targetScope    model.SkillScope
+	platforms      []model.Platform
+	scopes         []model.SkillScope
+	platformCursor int
+	scopeCursor    int
+	showHelp       bool
+	err            error
+	width          int
+	height         int
+	selected       map[string]bool
+	columnWidths   importListColumnWidths
+}
+
+// ImportListModel is the BubbleTea model for interactive skill import.
+type ImportListModel struct {
+	ListModel[model.Skill]
+	filepicker filepicker.Model
+	keys       importListKeyMap
+	state      *importListState
+}
+
+// Styles for the import list TUI.
+var importListStyles = struct {
+	Title       lipgloss.Style
+	Help        lipgloss.Style
+	Filter      lipgloss.Style
+	FilterInput lipgloss.Style
+	Confirm     lipgloss.Style
+	Status      lipgloss.Style
+	Selected    lipgloss.Style
+	Checkbox    lipgloss.Style
+	Option      lipgloss.Style
+	OptionVal   lipgloss.Style
+	Error       lipgloss.Style
+	Phase       lipgloss.Style
+	Path        lipgloss.Style
+	Description lipgloss.Style
+}{
+	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
+	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
+	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	Option:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	OptionVal:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+	Error:       lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
+	Phase:       lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true),
+	Path:        lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Italic(true),
+	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
+}
+
+// importSkillKey creates a unique key for a skill.
+func importSkillKey(s model.Skill) string {
+	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
 }
 
 func defaultImportListColumnWidths() importListColumnWidths {
@@ -135,81 +201,249 @@ func defaultImportListKeyMap() importListKeyMap {
 	}
 }
 
-// ImportListModel is the BubbleTea model for interactive skill import.
-type ImportListModel struct {
-	// File picker for source selection
-	filepicker filepicker.Model
+func quitImportCmd() tea.Cmd { return func() tea.Msg { return tea.QuitMsg{} } }
 
-	// Skill selection table
-	table    table.Model
-	skills   []model.Skill
-	filtered []model.Skill
-	selected map[string]bool
+func newImportListState() *importListState {
+	platforms := model.AllPlatforms()
+	targetPlatform := model.ClaudeCode
+	platformCursor := 0
+	for i, platform := range platforms {
+		if platform == targetPlatform {
+			platformCursor = i
+			break
+		}
+	}
 
-	// Destination options
-	targetPlatform model.Platform
-	targetScope    model.SkillScope
-	platforms      []model.Platform
-	scopes         []model.SkillScope
-	platformCursor int
-	scopeCursor    int
+	scopes := []model.SkillScope{model.ScopeRepo, model.ScopeUser}
+	targetScope := model.ScopeRepo
+	scopeCursor := 0
+	for i, scope := range scopes {
+		if scope == targetScope {
+			scopeCursor = i
+			break
+		}
+	}
 
-	// UI state
-	keys         importListKeyMap
-	result       ImportListResult
-	phase        importPhase
-	sourcePath   string
-	filter       string
-	filtering    bool
-	showHelp     bool
-	width        int
-	height       int
-	quitting     bool
-	err          error
-	columnWidths importListColumnWidths
+	return &importListState{
+		phase:          phaseFilePicker,
+		targetPlatform: targetPlatform,
+		targetScope:    targetScope,
+		platforms:      platforms,
+		scopes:         scopes,
+		platformCursor: platformCursor,
+		scopeCursor:    scopeCursor,
+		selected:       make(map[string]bool),
+		columnWidths:   defaultImportListColumnWidths(),
+	}
 }
 
-// Styles for the import list TUI.
-var importListStyles = struct {
-	Title       lipgloss.Style
-	Help        lipgloss.Style
-	Filter      lipgloss.Style
-	FilterInput lipgloss.Style
-	Confirm     lipgloss.Style
-	Status      lipgloss.Style
-	Selected    lipgloss.Style
-	Checkbox    lipgloss.Style
-	Option      lipgloss.Style
-	OptionVal   lipgloss.Style
-	Error       lipgloss.Style
-	Phase       lipgloss.Style
-	Path        lipgloss.Style
-	Description lipgloss.Style
-}{
-	Title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
-	Help:        lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:      lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput: lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Confirm:     lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true).Padding(1, 2),
-	Status:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Checkbox:    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	Option:      lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	OptionVal:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
-	Error:       lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
-	Phase:       lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true),
-	Path:        lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Italic(true),
-	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
+func selectedImportSkills(state *importListState, skills []model.Skill) []model.Skill {
+	var selected []model.Skill
+	for _, skill := range skills {
+		if state != nil && state.selected[importSkillKey(skill)] {
+			selected = append(selected, skill)
+		}
+	}
+	return selected
 }
 
-// importSkillKey creates a unique key for a skill.
-func importSkillKey(s model.Skill) string {
-	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
+func selectedImportSkillCount(state *importListState, skills []model.Skill) int {
+	count := 0
+	for _, skill := range skills {
+		if state != nil && state.selected[importSkillKey(skill)] {
+			count++
+		}
+	}
+	return count
 }
 
-// NewImportListModel creates a new import list model.
-func NewImportListModel() ImportListModel {
-	// Initialize file picker
+func selectedImportSkillAtCursor(state *importListState, m *ListModel[model.Skill]) model.Skill {
+	if m == nil {
+		return model.Skill{}
+	}
+	cursor := m.table.Cursor()
+	if cursor >= 0 && cursor < len(m.filtered) {
+		return m.filtered[cursor]
+	}
+	return model.Skill{}
+}
+
+func buildImportSkillListModel(state *importListState, skills []model.Skill) ListModel[model.Skill] {
+	widths := state.columnWidths
+	if widths.desc == 0 {
+		widths = defaultImportListColumnWidths()
+		state.columnWidths = widths
+	}
+
+	toRows := func(items []model.Skill) []table.Row {
+		rows := make([]table.Row, len(items))
+		for i, skill := range items {
+			checkbox := "[ ]"
+			if state.selected[importSkillKey(skill)] {
+				checkbox = "[✓]"
+			}
+			rows[i] = table.Row{
+				checkbox,
+				truncateTableValue(skill.Name, widths.name),
+				truncateTableValue(string(skill.Platform), 12),
+				truncateTableValue(skill.Description, widths.desc),
+				truncateTableValue(skill.DisplayScope(), widths.scope),
+			}
+		}
+		return rows
+	}
+
+	toggleKey := key.NewBinding(key.WithKeys(" ", "tab"), key.WithHelp("space/tab", "toggle"))
+	toggleAllKey := key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "toggle all"))
+	selectKey := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "destination"))
+
+	matches := func(skill model.Skill, lowerFilter string) bool {
+		if lowerFilter == "" {
+			return true
+		}
+		return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
+			strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
+			strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
+			strings.Contains(strings.ToLower(skill.Description), lowerFilter)
+	}
+
+	statusText := func(filtered, _ int, _ string) string {
+		selectedCount := selectedImportSkillCount(state, skills)
+		return fmt.Sprintf("%d skill(s) selected of %d visible", selectedCount, filtered)
+	}
+
+	header := func() string {
+		phase := importListStyles.Phase.Render(fmt.Sprintf("Step %d/%d: %s", phaseSkillSelection+1, len(importPhaseNames), importPhaseNames[phaseSkillSelection]))
+		path := importListStyles.Option.Render("Source: ") + importListStyles.Path.Render(state.sourcePath)
+		return strings.Join([]string{phase, path}, "\n")
+	}
+
+	extraBody := func(m *ListModel[model.Skill]) string {
+		selected := selectedImportSkillAtCursor(state, m)
+		if selected.Name == "" || selected.Description == "" {
+			return ""
+		}
+		descWidth := max(m.width-2, 40)
+		return importListStyles.Description.Render(formatDescription(selected.Description, descWidth))
+	}
+
+	extraKeys := func(m *ListModel[model.Skill], msg tea.KeyMsg) bool {
+		switch {
+		case key.Matches(msg, toggleKey):
+			if len(m.filtered) > 0 {
+				skill := selectedImportSkillAtCursor(state, m)
+				if skill.Name != "" {
+					state.selected[importSkillKey(skill)] = !state.selected[importSkillKey(skill)]
+					m.table.SetRows(m.cfg.ToRows(m.filtered))
+				}
+			}
+			return true
+		case key.Matches(msg, toggleAllKey):
+			selectedCount := 0
+			for _, skill := range m.filtered {
+				if state.selected[importSkillKey(skill)] {
+					selectedCount++
+				}
+			}
+			selectAll := selectedCount < len(m.filtered)/2+1
+			for _, skill := range m.filtered {
+				state.selected[importSkillKey(skill)] = selectAll
+			}
+			m.table.SetRows(m.cfg.ToRows(m.filtered))
+			return true
+		case key.Matches(msg, selectKey):
+			if selectedImportSkillCount(state, skills) > 0 {
+				state.phase = phaseDestination
+			}
+			return true
+		}
+		return false
+	}
+
+	onWindowSize := func(m *ListModel[model.Skill], width, height int) {
+		state.width = width
+		state.height = height
+		const checkboxWidth = 3
+		const separatorWidth = 6
+		newDesc := width - (checkboxWidth + widths.name + widths.scope + separatorWidth)
+		if newDesc < 40 {
+			newDesc = 40
+		}
+		widths.desc = newDesc
+		state.columnWidths = widths
+		m.table.SetColumns([]table.Column{
+			{Title: " ", Width: checkboxWidth},
+			{Title: "Name", Width: widths.name},
+			{Title: "Platform", Width: 12},
+			{Title: "Description", Width: widths.desc},
+			{Title: "Scope", Width: widths.scope},
+		})
+		m.table.SetRows(m.cfg.ToRows(m.filtered))
+	}
+
+	shortHelp := func() string {
+		return strings.Join([]string{
+			"↑/↓ navigate",
+			"space/tab toggle",
+			"a toggle all",
+			"enter next",
+			"esc back",
+			"/ filter",
+			"ctrl+u clear",
+			"? help",
+			"q quit",
+		}, " • ")
+	}
+
+	fullHelp := func() string {
+		return `Navigation:
+  ↑/k      Move up
+  ↓/j      Move down
+  g/Home   Go to top
+  G/End    Go to bottom
+
+Selection:
+  Space/Tab  Toggle current skill
+  a          Toggle all skills
+  Enter      Proceed to destination
+  Esc        Go back to source picker
+
+Filter:
+  /          Start filtering
+  Ctrl+u     Clear filter
+
+General:
+  ?          Toggle full help
+  q          Quit without importing`
+	}
+
+	cfg := ListConfig[model.Skill]{
+		Title: "📥 Import Skills",
+		Columns: []table.Column{
+			{Title: " ", Width: 3},
+			{Title: "Name", Width: widths.name},
+			{Title: "Platform", Width: 12},
+			{Title: "Description", Width: widths.desc},
+			{Title: "Scope", Width: widths.scope},
+		},
+		ToRows:        toRows,
+		Matches:       matches,
+		StatusText:    statusText,
+		ReservedLines: 12,
+		Header:        header,
+		ExtraBody:     extraBody,
+		ExtraKeys:     extraKeys,
+		OnWindowSize:  onWindowSize,
+		ShortHelp:     shortHelp,
+		FullHelp:      fullHelp,
+	}
+
+	m := NewListModel(skills, cfg)
+	m.showHelp = state.showHelp
+	return m
+}
+
+func newImportListModelWithState() ImportListModel {
 	fp := filepicker.New()
 	fp.AllowedTypes = []string{".md"}
 	fp.DirAllowed = true
@@ -218,31 +452,22 @@ func NewImportListModel() ImportListModel {
 	fp.ShowSize = true
 	fp.ShowHidden = false
 
-	// Start in current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "."
 	}
 	fp.CurrentDirectory = cwd
 
-	// Initialize available platforms and scopes
-	platforms := model.AllPlatforms()
-	scopes := []model.SkillScope{
-		model.ScopeRepo,
-		model.ScopeUser,
-	}
-
 	return ImportListModel{
-		filepicker:     fp,
-		keys:           defaultImportListKeyMap(),
-		phase:          phaseFilePicker,
-		platforms:      platforms,
-		scopes:         scopes,
-		targetPlatform: model.ClaudeCode, // Default to Claude Code
-		targetScope:    model.ScopeRepo,  // Default to repo scope
-		selected:       make(map[string]bool),
-		columnWidths:   defaultImportListColumnWidths(),
+		filepicker: fp,
+		keys:       defaultImportListKeyMap(),
+		state:      newImportListState(),
 	}
+}
+
+// NewImportListModel creates a new import list model.
+func NewImportListModel() ImportListModel {
+	return newImportListModelWithState()
 }
 
 // Init implements tea.Model.
@@ -250,249 +475,149 @@ func (m ImportListModel) Init() tea.Cmd {
 	return m.filepicker.Init()
 }
 
-// Update implements tea.Model.
-func (m ImportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m ImportListModel) updateFilePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch {
+		case key.Matches(keyMsg, m.keys.Help):
+			m.state.showHelp = !m.state.showHelp
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Quit):
+			return m, quitImportCmd()
+		}
+	}
+
 	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.filepicker.SetHeight(max(msg.Height-8, 10))
-		if m.table.Columns() != nil {
-			newHeight := max(msg.Height-12, 5)
-			m.table.SetHeight(newHeight)
-			m.applyColumnWidths(msg.Width)
-		}
-
-	case tea.KeyMsg:
-		// Global quit handling
-		if key.Matches(msg, m.keys.Quit) {
-			m.quitting = true
-			return m, tea.Quit
-		}
-
-		// Phase-specific key handling
-		switch m.phase {
-		case phaseFilePicker:
-			return m.updateFilePicker(msg)
-		case phaseSkillSelection:
-			return m.updateSkillSelection(msg)
-		case phaseDestination:
-			return m.updateDestination(msg)
-		case phaseConfirm:
-			return m.updateConfirm(msg)
-		}
-	}
-
-	// Update file picker in file picker phase
-	if m.phase == phaseFilePicker {
-		m.filepicker, cmd = m.filepicker.Update(msg)
-		cmds = append(cmds, cmd)
-
-		// Check if a file/directory was selected
-		if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
-			m.sourcePath = path
-			if err := m.loadSkillsFromPath(path); err != nil {
-				m.err = err
-			} else {
-				m.phase = phaseSkillSelection
-				m.initSkillTable()
-			}
-		}
-		if didSelect, path := m.filepicker.DidSelectDisabledFile(msg); didSelect {
-			// User tried to select a non-.md file, treat as directory
-			m.sourcePath = path
-			if err := m.loadSkillsFromPath(path); err != nil {
-				m.err = err
-			} else {
-				m.phase = phaseSkillSelection
-				m.initSkillTable()
-			}
-		}
-	}
-
-	return m, tea.Batch(cmds...)
-}
-
-func (m *ImportListModel) updateFilePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch {
-	case key.Matches(msg, m.keys.Help):
-		m.showHelp = !m.showHelp
-		return *m, nil
-	}
-
 	m.filepicker, cmd = m.filepicker.Update(msg)
-	return *m, cmd
-}
-
-func (m *ImportListModel) updateSkillSelection(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	// Handle filtering mode
-	if m.filtering {
-		switch msg.String() {
-		case "enter":
-			m.filtering = false
-			return *m, nil
-		case "esc":
-			m.filter = ""
-			m.filtering = false
-			m.applyFilter()
-			return *m, nil
-		case "backspace":
-			if len(m.filter) > 0 {
-				m.filter = m.filter[:len(m.filter)-1]
-				m.applyFilter()
+	if didSelect, path := m.filepicker.DidSelectFile(msg); didSelect {
+		m.state.sourcePath = path
+		skills, err := m.loadSkillsFromPath(path)
+		if err != nil {
+			m.state.err = err
+		} else {
+			m.state.err = nil
+			m.state.phase = phaseSkillSelection
+			m.state.selected = make(map[string]bool)
+			for _, skill := range skills {
+				m.state.selected[importSkillKey(skill)] = true
 			}
-			return *m, nil
-		default:
-			if len(msg.String()) == 1 {
-				m.filter += msg.String()
-				m.applyFilter()
+			m.ListModel = buildImportSkillListModel(m.state, skills)
+			m.ListModel.showHelp = m.state.showHelp
+		}
+	}
+	if didSelect, path := m.filepicker.DidSelectDisabledFile(msg); didSelect {
+		m.state.sourcePath = path
+		skills, err := m.loadSkillsFromPath(path)
+		if err != nil {
+			m.state.err = err
+		} else {
+			m.state.err = nil
+			m.state.phase = phaseSkillSelection
+			m.state.selected = make(map[string]bool)
+			for _, skill := range skills {
+				m.state.selected[importSkillKey(skill)] = true
 			}
-			return *m, nil
+			m.ListModel = buildImportSkillListModel(m.state, skills)
+			m.ListModel.showHelp = m.state.showHelp
 		}
 	}
 
-	switch {
-	case key.Matches(msg, m.keys.Back):
-		// Go back to file picker
-		m.phase = phaseFilePicker
-		m.skills = nil
-		m.filtered = nil
-		m.selected = make(map[string]bool)
-		m.err = nil
-		return *m, nil
+	return m, cmd
+}
 
-	case key.Matches(msg, m.keys.Help):
-		m.showHelp = !m.showHelp
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Filter):
-		m.filtering = true
-		return *m, nil
-
-	case key.Matches(msg, m.keys.ClearFlt):
-		m.filter = ""
-		m.applyFilter()
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Toggle):
-		if len(m.filtered) > 0 {
-			skill := m.getSelectedSkill()
-			k := importSkillKey(skill)
-			m.selected[k] = !m.selected[k]
-			m.table.SetRows(m.skillsToRows(m.filtered))
+func (m ImportListModel) updateSkillSelection(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if key.Matches(keyMsg, m.keys.ClearFlt) {
+			m.ListModel.filter = ""
+			m.ListModel.filtering = false
+			m.ListModel.applyFilter()
+			return m, nil
 		}
-		return *m, nil
+		if key.Matches(keyMsg, m.keys.Back) && !m.ListModel.filtering {
+			m.state.phase = phaseFilePicker
+			m.state.err = nil
+			return m, nil
+		}
+	}
 
-	case key.Matches(msg, m.keys.ToggleAll):
-		selectedCount := 0
-		for _, s := range m.filtered {
-			if m.selected[importSkillKey(s)] {
-				selectedCount++
+	inner, cmd := m.ListModel.Update(msg)
+	if lm, ok := inner.(ListModel[model.Skill]); ok {
+		m.ListModel = lm
+		m.state.showHelp = m.ListModel.showHelp
+	}
+	return m, cmd
+}
+
+func (m ImportListModel) updateDestination(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch {
+		case key.Matches(keyMsg, m.keys.Back):
+			m.state.phase = phaseSkillSelection
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Help):
+			m.state.showHelp = !m.state.showHelp
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Quit):
+			return m, quitImportCmd()
+		case key.Matches(keyMsg, m.keys.Left):
+			if m.state.platformCursor > 0 {
+				m.state.platformCursor--
+				m.state.targetPlatform = m.state.platforms[m.state.platformCursor]
 			}
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Right):
+			if m.state.platformCursor < len(m.state.platforms)-1 {
+				m.state.platformCursor++
+				m.state.targetPlatform = m.state.platforms[m.state.platformCursor]
+			}
+			return m, nil
+		case keyMsg.Type == tea.KeySpace || keyMsg.Type == tea.KeyTab:
+			if len(m.state.scopes) > 0 {
+				m.state.scopeCursor = (m.state.scopeCursor + 1) % len(m.state.scopes)
+				m.state.targetScope = m.state.scopes[m.state.scopeCursor]
+			}
+			return m, nil
+		case keyMsg.Type == tea.KeyEnter:
+			m.state.phase = phaseConfirm
+			return m, nil
 		}
-		selectAll := selectedCount < len(m.filtered)/2+1
-		for _, s := range m.filtered {
-			m.selected[importSkillKey(s)] = selectAll
-		}
-		m.table.SetRows(m.skillsToRows(m.filtered))
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Select):
-		if len(m.getSelectedSkills()) > 0 {
-			m.phase = phaseDestination
-		}
-		return *m, nil
 	}
 
-	m.table, cmd = m.table.Update(msg)
-	return *m, cmd
+	return m, nil
 }
 
-func (m *ImportListModel) updateDestination(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Back):
-		m.phase = phaseSkillSelection
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Help):
-		m.showHelp = !m.showHelp
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Up):
-		// Toggle between platform and scope selection
-		// Currently on scope, move to platform
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		// Toggle between platform and scope selection
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Left):
-		// Cycle platform left
-		if m.platformCursor > 0 {
-			m.platformCursor--
-			m.targetPlatform = m.platforms[m.platformCursor]
+func (m ImportListModel) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch {
+		case key.Matches(keyMsg, m.keys.Back):
+			m.state.phase = phaseDestination
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Help):
+			m.state.showHelp = !m.state.showHelp
+			return m, nil
+		case key.Matches(keyMsg, m.keys.Quit):
+			return m, quitImportCmd()
+		case keyMsg.String() == "y" || keyMsg.String() == "Y":
+			m.state.result = ImportListResult{
+				Action:         ImportActionImport,
+				SelectedSkills: selectedImportSkills(m.state, m.ListModel.allItems),
+				SourcePath:     m.state.sourcePath,
+				TargetPlatform: m.state.targetPlatform,
+				TargetScope:    m.state.targetScope,
+			}
+			return m, quitImportCmd()
+		case keyMsg.String() == "n" || keyMsg.String() == "N":
+			m.state.phase = phaseDestination
+			return m, nil
 		}
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Right):
-		// Cycle platform right
-		if m.platformCursor < len(m.platforms)-1 {
-			m.platformCursor++
-			m.targetPlatform = m.platforms[m.platformCursor]
-		}
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Toggle):
-		// Toggle scope
-		m.scopeCursor = (m.scopeCursor + 1) % len(m.scopes)
-		m.targetScope = m.scopes[m.scopeCursor]
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Select):
-		m.phase = phaseConfirm
-		return *m, nil
 	}
 
-	return *m, nil
+	return m, nil
 }
 
-func (m *ImportListModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Back):
-		m.phase = phaseDestination
-		return *m, nil
-
-	case key.Matches(msg, m.keys.Confirm), msg.String() == "Y":
-		m.result = ImportListResult{
-			Action:         ImportActionImport,
-			SelectedSkills: m.getSelectedSkills(),
-			SourcePath:     m.sourcePath,
-			TargetPlatform: m.targetPlatform,
-			TargetScope:    m.targetScope,
-		}
-		m.quitting = true
-		return *m, tea.Quit
-
-	case msg.String() == "n", msg.String() == "N":
-		m.phase = phaseDestination
-		return *m, nil
-	}
-
-	return *m, nil
-}
-
-func (m *ImportListModel) loadSkillsFromPath(path string) error {
+func (m ImportListModel) loadSkillsFromPath(path string) ([]model.Skill, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return fmt.Errorf("cannot access path: %w", err)
+		return nil, fmt.Errorf("cannot access path: %w", err)
 	}
 
 	var baseDir string
@@ -502,194 +627,28 @@ func (m *ImportListModel) loadSkillsFromPath(path string) error {
 		baseDir = filepath.Dir(path)
 	}
 
-	// Use the skills parser to discover and parse skills
 	skillsParser := skills.New(baseDir, model.ClaudeCode)
 	parsedSkills, err := skillsParser.Parse()
 	if err != nil {
-		return fmt.Errorf("failed to parse skills: %w", err)
+		return nil, fmt.Errorf("failed to parse skills: %w", err)
 	}
 
 	if len(parsedSkills) == 0 {
-		return fmt.Errorf("no SKILL.md files found in %s", baseDir)
+		return nil, fmt.Errorf("no SKILL.md files found in %s", baseDir)
 	}
 
-	m.skills = parsedSkills
-
-	// Sort skills alphabetically by name (case-insensitive)
-	sort.Slice(m.skills, func(i, j int) bool {
-		return strings.ToLower(m.skills[i].Name) < strings.ToLower(m.skills[j].Name)
+	sort.Slice(parsedSkills, func(i, j int) bool {
+		return strings.ToLower(parsedSkills[i].Name) < strings.ToLower(parsedSkills[j].Name)
 	})
 
-	m.filtered = m.skills
-
-	// Select all skills by default
-	for _, s := range m.skills {
-		m.selected[importSkillKey(s)] = true
-	}
-
-	return nil
+	return parsedSkills, nil
 }
 
-func (m *ImportListModel) initSkillTable() {
-	widths := m.columnWidths
-	if widths.desc == 0 {
-		widths = defaultImportListColumnWidths()
-		m.columnWidths = widths
-	}
-	columns := []table.Column{
-		{Title: " ", Width: 3},
-		{Title: "Name", Width: 20},
-		{Title: "Platform", Width: 12},
-		{Title: "Description", Width: 30},
-		{Title: "Scope", Width: 10},
-	}
-
-	rows := m.skillsToRows(m.filtered)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
-}
-
-func (m ImportListModel) skillsToRows(skills []model.Skill) []table.Row {
-	widths := m.columnWidths
-	if widths.desc == 0 {
-		widths = defaultImportListColumnWidths()
-	}
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		checkbox := "[ ]"
-		if m.selected[importSkillKey(s)] {
-			checkbox = "[✓]"
-		}
-
-		rows[i] = table.Row{checkbox, truncateTableValue(s.Name, 20), truncateTableValue(string(s.Platform), 12), truncateTableValue(s.Description, 30), truncateTableValue(s.DisplayScope(), 10)}
-	}
-	return rows
-}
-
-func (m *ImportListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.skills
-	} else {
-		var filtered []model.Skill
-		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.skills {
-			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
-			}
-		}
-		m.filtered = filtered
-	}
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
-
-func (m *ImportListModel) applyColumnWidths(totalWidth int) {
-	widths := defaultImportListColumnWidths()
-	if totalWidth > 0 {
-		const checkboxWidth = 3
-		const separatorWidth = 6
-
-		descWidth := totalWidth - (checkboxWidth + widths.name + widths.scope + separatorWidth)
-		if descWidth < 40 {
-			descWidth = 40
-		}
-		widths.desc = descWidth
-	}
-
-	m.columnWidths = widths
-	m.table.SetColumns([]table.Column{
-		{Title: " ", Width: 3},
-		{Title: "Name", Width: widths.name},
-		{Title: "Description", Width: widths.desc},
-		{Title: "Scope", Width: widths.scope},
-	})
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
-
-func (m ImportListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
-func (m ImportListModel) getSelectedSkills() []model.Skill {
-	var selected []model.Skill
-	for _, s := range m.skills {
-		if m.selected[importSkillKey(s)] {
-			selected = append(selected, s)
-		}
-	}
-	return selected
-}
-
-// View implements tea.Model.
-func (m ImportListModel) View() string {
-	if m.quitting {
-		return ""
-	}
-
+func (m ImportListModel) flowHeader() string {
 	var b strings.Builder
-
-	// Title
-	title := importListStyles.Title.Render("📥 Import Skills")
-	b.WriteString(title)
+	b.WriteString(importListStyles.Title.Render("📥 Import Skills"))
 	b.WriteString("\n\n")
-
-	// Phase indicator
-	phaseNames := []string{"Select Source", "Select Skills", "Choose Destination", "Confirm"}
-	phaseIndicator := importListStyles.Phase.Render(fmt.Sprintf("Step %d/%d: %s", m.phase+1, len(phaseNames), phaseNames[m.phase]))
-	b.WriteString(phaseIndicator)
-	b.WriteString("\n\n")
-
-	// Error display
-	if m.err != nil {
-		b.WriteString(importListStyles.Error.Render(fmt.Sprintf("Error: %s", m.err.Error())))
-		b.WriteString("\n\n")
-	}
-
-	// Phase-specific view
-	switch m.phase {
-	case phaseFilePicker:
-		b.WriteString(m.viewFilePicker())
-	case phaseSkillSelection:
-		b.WriteString(m.viewSkillSelection())
-	case phaseDestination:
-		b.WriteString(m.viewDestination())
-	case phaseConfirm:
-		b.WriteString(m.viewConfirm())
-	}
-
-	// Help
-	b.WriteString("\n")
-	if m.showHelp {
-		b.WriteString(m.renderFullHelp())
-	} else {
-		b.WriteString(m.renderShortHelp())
-	}
-
+	b.WriteString(importListStyles.Phase.Render(fmt.Sprintf("Step %d/%d: %s", m.state.phase+1, len(importPhaseNames), importPhaseNames[m.state.phase])))
 	return b.String()
 }
 
@@ -700,114 +659,64 @@ func (m ImportListModel) viewFilePicker() string {
 	return b.String()
 }
 
-func (m ImportListModel) viewSkillSelection() string {
-	var b strings.Builder
-
-	// Source path
-	pathLabel := importListStyles.Option.Render("Source: ")
-	pathVal := importListStyles.Path.Render(m.sourcePath)
-	b.WriteString(pathLabel + pathVal + "\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := importListStyles.Filter.Render("Filter: ")
-		filterVal := importListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Status bar
-	selectedCount := len(m.getSelectedSkills())
-	status := fmt.Sprintf("%d skill(s) selected of %d total", selectedCount, len(m.filtered))
-	b.WriteString(importListStyles.Status.Render(status))
-
-	selected := m.getSelectedSkill()
-	if selected.Name != "" && selected.Description != "" {
-		descWidth := max(m.width-2, 40)
-		formatted := formatDescription(selected.Description, descWidth)
-		b.WriteString("\n")
-		b.WriteString(importListStyles.Description.Render(formatted))
-	}
-
-	return b.String()
-}
-
 func (m ImportListModel) viewDestination() string {
 	var b strings.Builder
-
 	b.WriteString("Choose where to import the selected skills:\n\n")
 
-	// Platform selection
 	platformLabel := importListStyles.Option.Render("Platform: ")
 	var platformOptions []string
-	for i, p := range m.platforms {
-		if i == m.platformCursor {
-			platformOptions = append(platformOptions, importListStyles.Selected.Render(fmt.Sprintf("[%s]", p)))
+	for i, platform := range m.state.platforms {
+		if i == m.state.platformCursor {
+			platformOptions = append(platformOptions, importListStyles.Selected.Render(fmt.Sprintf("[%s]", platform)))
 		} else {
-			platformOptions = append(platformOptions, fmt.Sprintf(" %s ", p))
+			platformOptions = append(platformOptions, fmt.Sprintf(" %s ", platform))
 		}
 	}
 	b.WriteString(platformLabel + strings.Join(platformOptions, " ") + "\n")
 
-	// Scope selection
 	scopeLabel := importListStyles.Option.Render("Scope:    ")
 	var scopeOptions []string
-	for i, s := range m.scopes {
-		scopeName := string(s)
-		if i == m.scopeCursor {
-			scopeOptions = append(scopeOptions, importListStyles.Selected.Render(fmt.Sprintf("[%s]", scopeName)))
+	for i, scope := range m.state.scopes {
+		name := string(scope)
+		if i == m.state.scopeCursor {
+			scopeOptions = append(scopeOptions, importListStyles.Selected.Render(fmt.Sprintf("[%s]", name)))
 		} else {
-			scopeOptions = append(scopeOptions, fmt.Sprintf(" %s ", scopeName))
+			scopeOptions = append(scopeOptions, fmt.Sprintf(" %s ", name))
 		}
 	}
 	b.WriteString(scopeLabel + strings.Join(scopeOptions, " ") + "\n\n")
 
-	// Summary
-	selectedCount := len(m.getSelectedSkills())
-	summary := fmt.Sprintf("Will import %d skill(s) to %s (%s scope)", selectedCount, m.targetPlatform, m.targetScope)
+	summary := fmt.Sprintf("Will import %d skill(s) to %s (%s scope)", len(selectedImportSkills(m.state, m.ListModel.allItems)), m.state.targetPlatform, m.state.targetScope)
 	b.WriteString(importListStyles.Status.Render(summary))
-
 	return b.String()
 }
 
 func (m ImportListModel) viewConfirm() string {
 	var b strings.Builder
-
-	selectedSkills := m.getSelectedSkills()
+	selectedSkills := selectedImportSkills(m.state, m.ListModel.allItems)
 	b.WriteString(importListStyles.Confirm.Render(fmt.Sprintf(
 		"Import %d skill(s) to %s (%s)? (y/n)",
 		len(selectedSkills),
-		m.targetPlatform,
-		m.targetScope,
+		m.state.targetPlatform,
+		m.state.targetScope,
 	)))
 	b.WriteString("\n\n")
-
-	// Show skill names
 	b.WriteString("Skills to import:\n")
-	for i, s := range selectedSkills {
+	for i, skill := range selectedSkills {
 		if i >= 10 {
 			fmt.Fprintf(&b, "  ... and %d more\n", len(selectedSkills)-10)
 			break
 		}
-		fmt.Fprintf(&b, "  • %s\n", s.Name)
+		fmt.Fprintf(&b, "  • %s\n", skill.Name)
 	}
-
 	return b.String()
 }
 
 func (m ImportListModel) renderShortHelp() string {
 	var keys []string
-	switch m.phase {
+	switch m.state.phase {
 	case phaseFilePicker:
 		keys = []string{"↑/↓ navigate", "enter select", "? help", "q quit"}
-	case phaseSkillSelection:
-		keys = []string{"↑/↓ navigate", "space toggle", "a toggle all", "enter next", "esc back", "/ filter", "? help", "q quit"}
 	case phaseDestination:
 		keys = []string{"←/→ platform", "space scope", "enter next", "esc back", "? help", "q quit"}
 	case phaseConfirm:
@@ -817,33 +726,106 @@ func (m ImportListModel) renderShortHelp() string {
 }
 
 func (m ImportListModel) renderFullHelp() string {
-	help := `Navigation:
-  ↑/k      Move up
-  ↓/j      Move down
-  ←/h      Previous option
-  →/l      Next option
+	switch m.state.phase {
+	case phaseFilePicker:
+		return importListStyles.Help.Render(`Browse to a directory containing SKILL.md files, or select a specific file.
 
-Selection (skill list):
-  Space/Tab  Toggle current skill
-  a          Toggle all skills
-  /          Start filtering
-  Ctrl+u     Clear filter
-
-Flow:
-  Enter    Proceed to next step
-  Esc      Go back to previous step
-  y        Confirm import (final step)
-  n        Cancel (at confirm step)
+Navigation:
+  ↑/↓      Move through entries
+  Enter    Open directory or select file
 
 General:
   ?        Toggle full help
-  q        Quit without importing`
-	return importListStyles.Help.Render(help)
+  q        Quit without importing`)
+	case phaseDestination:
+		return importListStyles.Help.Render(`Destination:
+  ←/h      Previous platform
+  →/l      Next platform
+  Space    Cycle scope
+  Enter    Continue to confirmation
+  Esc      Go back to skill selection
+
+General:
+  ?        Toggle full help
+  q        Quit without importing`)
+	case phaseConfirm:
+		return importListStyles.Help.Render(`Confirmation:
+  y        Confirm import
+  n/esc    Go back to destination selection
+  q        Quit without importing`)
+	default:
+		return ""
+	}
+}
+
+// Update implements tea.Model.
+func (m ImportListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.state == nil {
+		m.state = newImportListState()
+	}
+
+	switch m.state.phase {
+	case phaseFilePicker:
+		return m.updateFilePicker(msg)
+	case phaseSkillSelection:
+		return m.updateSkillSelection(msg)
+	case phaseDestination:
+		return m.updateDestination(msg)
+	case phaseConfirm:
+		return m.updateConfirm(msg)
+	default:
+		return m, nil
+	}
+}
+
+// View implements tea.Model.
+func (m ImportListModel) View() string {
+	if m.state == nil {
+		return ""
+	}
+	if m.state.phase == phaseSkillSelection {
+		m.ListModel.showHelp = m.state.showHelp
+		var b strings.Builder
+		if m.state.err != nil {
+			b.WriteString(importListStyles.Error.Render(fmt.Sprintf("Error: %s", m.state.err.Error())))
+			b.WriteString("\n\n")
+		}
+		b.WriteString(m.ListModel.View())
+		return b.String()
+	}
+
+	var b strings.Builder
+	if m.state.err != nil {
+		b.WriteString(importListStyles.Error.Render(fmt.Sprintf("Error: %s", m.state.err.Error())))
+		b.WriteString("\n\n")
+	}
+	b.WriteString(m.flowHeader())
+	b.WriteString("\n\n")
+
+	switch m.state.phase {
+	case phaseFilePicker:
+		b.WriteString(m.viewFilePicker())
+	case phaseDestination:
+		b.WriteString(m.viewDestination())
+	case phaseConfirm:
+		b.WriteString(m.viewConfirm())
+	}
+
+	b.WriteString("\n")
+	if m.state.showHelp {
+		b.WriteString(m.renderFullHelp())
+	} else {
+		b.WriteString(m.renderShortHelp())
+	}
+	return b.String()
 }
 
 // Result returns the result of the user interaction.
 func (m ImportListModel) Result() ImportListResult {
-	return m.result
+	if m.state == nil {
+		return ImportListResult{}
+	}
+	return m.state.result
 }
 
 // RunImportList runs the interactive import list and returns the result.
