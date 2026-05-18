@@ -73,6 +73,15 @@ func defaultDedupeListColumnWidths() dedupeListColumnWidths {
 	}
 }
 
+type dedupeListState struct {
+	duplicates   []*similarity.ComparisonResult
+	flatSkills   []model.Skill
+	selected     map[string]bool
+	columnWidths dedupeListColumnWidths
+	width        int
+	height       int
+}
+
 func defaultDedupeListKeyMap() dedupeListKeyMap {
 	return dedupeListKeyMap{
 		Up: key.NewBinding(
@@ -116,6 +125,8 @@ func defaultDedupeListKeyMap() dedupeListKeyMap {
 
 // DedupeListModel is the BubbleTea model for interactive duplicate skill management.
 type DedupeListModel struct {
+	ListModel[model.Skill]
+	state        *dedupeListState
 	table        table.Model
 	duplicates   []*similarity.ComparisonResult
 	flatSkills   []model.Skill // flattened list of skills from duplicate pairs
@@ -166,7 +177,7 @@ func dedupeSkillKey(s model.Skill) string {
 }
 
 // NewDedupeListModel creates a new dedupe list model from comparison results.
-// Only writable skills (repo and user scope) can be selected for deletion.
+// Only writable skills (repo and user scopes) can be selected for deletion.
 func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListModel {
 	// Flatten duplicates into a list of skills, avoiding duplicates
 	seenSkills := make(map[string]bool)
@@ -224,8 +235,13 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 		{Title: "Description", Width: columnWidths.desc},
 	}
 
-	// Initialize with no skills selected
 	selected := make(map[string]bool)
+	state := &dedupeListState{
+		duplicates:   duplicates,
+		flatSkills:   deletableSkills,
+		selected:     selected,
+		columnWidths: columnWidths,
+	}
 
 	m := DedupeListModel{
 		duplicates:   duplicates,
@@ -234,6 +250,7 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 		selected:     selected,
 		keys:         defaultDedupeListKeyMap(),
 		columnWidths: columnWidths,
+		state:        state,
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -258,7 +275,328 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 	t.SetStyles(s)
 
 	m.table = t
+	m.ListModel = NewListModel(deletableSkills, ListConfig[model.Skill]{
+		Title:        "🔍 Dedupe Skills - Find and Remove Duplicates",
+		Columns:      columns,
+		ToRows:       state.skillsToRows,
+		Matches:      state.matches,
+		ShortHelp:    state.shortHelp,
+		FullHelp:     state.fullHelp,
+		StatusText:   state.statusText,
+		Header:       state.header,
+		ExtraBody:    state.extraBody,
+		ExtraKeys:    state.extraKeys,
+		OnWindowSize: state.onWindowSize,
+		ReservedLines: 12,
+	})
+	m.ListModel.table = t
+	m.ListModel.allItems = deletableSkills
+	m.ListModel.filtered = deletableSkills
+	m.ListModel.filter = m.filter
+	m.ListModel.filtering = m.filtering
+	m.ListModel.showHelp = m.showHelp
+	m.ListModel.confirmMode = m.confirmMode
+	m.ListModel.confirmMsg = ""
+	m.ListModel.quitting = m.quitting
+	m.ListModel.width = m.width
+	m.ListModel.height = m.height
+	m.ListModel.result = m.result
+	m.syncStateFromCompat()
 	return m
+}
+
+func (m *DedupeListModel) syncStateFromCompat() {
+	if m == nil || m.state == nil {
+		return
+	}
+	m.state.duplicates = m.duplicates
+	m.state.flatSkills = m.flatSkills
+	m.state.selected = m.selected
+	m.state.columnWidths = m.columnWidths
+	m.state.width = m.width
+	m.state.height = m.height
+}
+
+func (m *DedupeListModel) syncCompatFromBase() {
+	if m == nil {
+		return
+	}
+	m.table = m.ListModel.table
+	m.filtered = m.ListModel.filtered
+	m.filter = m.ListModel.filter
+	m.filtering = m.ListModel.filtering
+	m.showHelp = m.ListModel.showHelp
+	m.confirmMode = m.ListModel.confirmMode
+	m.quitting = m.ListModel.quitting
+	m.width = m.ListModel.width
+	m.height = m.ListModel.height
+	if result, ok := m.ListModel.result.(DedupeListResult); ok {
+		m.result = result
+	}
+	if m.state != nil {
+		m.state.duplicates = m.duplicates
+		m.state.flatSkills = m.flatSkills
+		m.state.selected = m.selected
+		m.state.columnWidths = m.columnWidths
+		m.state.width = m.width
+		m.state.height = m.height
+	}
+}
+
+func (s *dedupeListState) selectedSkills() []model.Skill {
+	if s == nil {
+		return nil
+	}
+	selected := make([]model.Skill, 0, len(s.flatSkills))
+	for _, skill := range s.flatSkills {
+		if s.selected[dedupeSkillKey(skill)] {
+			selected = append(selected, skill)
+		}
+	}
+	return selected
+}
+
+func (s *dedupeListState) selectedSkill(m *ListModel[model.Skill]) model.Skill {
+	if s == nil || m == nil {
+		return model.Skill{}
+	}
+	cursor := m.table.Cursor()
+	if cursor < 0 || cursor >= len(m.filtered) {
+		return model.Skill{}
+	}
+	return m.filtered[cursor]
+}
+
+func (s *dedupeListState) matches(skill model.Skill, lowerFilter string) bool {
+	if s == nil {
+		return true
+	}
+	if lowerFilter == "" {
+		return true
+	}
+	lowerName := strings.ToLower(skill.Name)
+	lowerDesc := strings.ToLower(skill.Description)
+	lowerScope := strings.ToLower(skill.DisplayScope())
+	lowerPlatform := strings.ToLower(string(skill.Platform))
+	return strings.Contains(lowerName, lowerFilter) ||
+		strings.Contains(lowerDesc, lowerFilter) ||
+		strings.Contains(lowerScope, lowerFilter) ||
+		strings.Contains(lowerPlatform, lowerFilter)
+}
+
+func (s *dedupeListState) shortHelp() string {
+	keys := []string{
+		"↑/↓ navigate",
+		"space/tab toggle",
+		"a toggle all",
+		"d delete",
+		"/ filter",
+		"esc clear/back",
+		"? help",
+		"q quit",
+	}
+	return strings.Join(keys, " • ")
+}
+
+func (s *dedupeListState) fullHelp() string {
+	help := `Navigation:
+  ↑/k      Move up
+  ↓/j      Move down
+  g/Home   Go to top
+  G/End    Go to bottom
+
+Selection:
+  Space/Tab  Toggle current skill for deletion
+  a          Toggle all skills
+
+Actions:
+  d        Confirm and delete selected duplicate skills
+
+Filter:
+  /        Start filtering (by name, platform, scope, or description)
+  Esc      Clear filter
+  Enter    Finish filtering
+
+General:
+  ?        Toggle full help
+  q        Quit without changes
+
+Tip: Keep the version you want, delete the duplicates!`
+	return dedupeListStyles.Help.Render(help)
+}
+
+func (s *dedupeListState) header() string {
+	if s == nil {
+		return ""
+	}
+	parts := []string{
+		dedupeListStyles.Warning.Render("Select duplicate skills to delete. Only repo/user scope skills shown."),
+		fmt.Sprintf("Found %d duplicate pairs across %d skills", len(s.duplicates), len(s.flatSkills)),
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (s *dedupeListState) statusText(filtered, total int, filter string) string {
+	selectedCount := len(s.selectedSkills())
+	status := fmt.Sprintf("%d skill(s) selected for deletion of %d", selectedCount, filtered)
+	if filter != "" {
+		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, filtered, total)
+	}
+	return status
+}
+
+func (s *dedupeListState) detailPanel(m *ListModel[model.Skill]) string {
+	if s == nil || m == nil {
+		return ""
+	}
+	skill := s.selectedSkill(m)
+	if skill.Name == "" || skill.Description == "" {
+		return ""
+	}
+	descWidth := max(m.width-2, 40)
+	return dedupeListStyles.Description.Render(formatDescription(skill.Description, descWidth))
+}
+
+func (s *dedupeListState) extraBody(m *ListModel[model.Skill]) string {
+	return s.detailPanel(m)
+}
+
+func (s *dedupeListState) findSimilarSkill(skill model.Skill) (model.Skill, float64, float64) {
+	if s == nil {
+		return model.Skill{}, 0, 0
+	}
+	skillKey := dedupeSkillKey(skill)
+	var bestMatch model.Skill
+	var bestNameScore, bestContentScore float64
+
+	for _, dup := range s.duplicates {
+		key1 := dedupeSkillKey(dup.Skill1)
+		key2 := dedupeSkillKey(dup.Skill2)
+
+		if key1 == skillKey {
+			score := dup.NameScore + dup.ContentScore
+			if score > bestNameScore+bestContentScore {
+				bestMatch = dup.Skill2
+				bestNameScore = dup.NameScore
+				bestContentScore = dup.ContentScore
+			}
+		} else if key2 == skillKey {
+			score := dup.NameScore + dup.ContentScore
+			if score > bestNameScore+bestContentScore {
+				bestMatch = dup.Skill1
+				bestNameScore = dup.NameScore
+				bestContentScore = dup.ContentScore
+			}
+		}
+	}
+
+	return bestMatch, bestNameScore, bestContentScore
+}
+
+func (s *dedupeListState) skillsToRows(skills []model.Skill) []table.Row {
+	if s == nil {
+		return nil
+	}
+	widths := s.columnWidths
+	if widths.desc == 0 {
+		widths = defaultDedupeListColumnWidths()
+	}
+	rows := make([]table.Row, len(skills))
+	for i, skill := range skills {
+		checkbox := "[ ]"
+		if s.selected[dedupeSkillKey(skill)] {
+			checkbox = "[✓]"
+		}
+		similarSkill, nameScore, contentScore := s.findSimilarSkill(skill)
+		rows[i] = table.Row{
+			checkbox,
+			truncateTableValue(skill.Name, widths.name),
+			truncateTableValue(string(skill.Platform), widths.platform),
+			truncateTableValue(skill.DisplayScope(), widths.scope),
+			truncateTableValue(similarSkill.Name, widths.similar),
+			fmt.Sprintf("%.0f%%", nameScore*100),
+			fmt.Sprintf("%.0f%%", contentScore*100),
+			truncateTableValue(skill.Description, widths.desc),
+		}
+	}
+	return rows
+}
+
+func (s *dedupeListState) onWindowSize(m *ListModel[model.Skill], width, height int) {
+	if s == nil || m == nil {
+		return
+	}
+	s.width = width
+	s.height = height
+	newHeight := max(height-12, 5)
+	m.table.SetHeight(newHeight)
+	s.applyColumnWidths(m, width)
+}
+
+func (s *dedupeListState) applyColumnWidths(m *ListModel[model.Skill], totalWidth int) {
+	if s == nil || m == nil {
+		return
+	}
+	widths := defaultDedupeListColumnWidths()
+	if totalWidth > 0 {
+		const checkboxWidth = 3
+		const separatorWidth = 14
+		descWidth := totalWidth - (checkboxWidth + widths.name + widths.platform + widths.scope + widths.similar + widths.nameScore + widths.contentScore + separatorWidth)
+		if descWidth < 40 {
+			descWidth = 40
+		}
+		widths.desc = descWidth
+	}
+	s.columnWidths = widths
+	m.table.SetColumns([]table.Column{
+		{Title: " ", Width: 3},
+		{Title: "Name", Width: widths.name},
+		{Title: "Platform", Width: widths.platform},
+		{Title: "Scope", Width: widths.scope},
+		{Title: "Similar To", Width: widths.similar},
+		{Title: "Name%", Width: widths.nameScore},
+		{Title: "Content%", Width: widths.contentScore},
+		{Title: "Description", Width: widths.desc},
+	})
+	m.table.SetRows(s.skillsToRows(m.filtered))
+}
+
+func (s *dedupeListState) extraKeys(m *ListModel[model.Skill], msg tea.KeyMsg) bool {
+	if s == nil || m == nil {
+		return false
+	}
+	switch msg.String() {
+	case " ", "tab":
+		skill := s.selectedSkill(m)
+		if skill.Name != "" {
+			s.selected[dedupeSkillKey(skill)] = !s.selected[dedupeSkillKey(skill)]
+			m.table.SetRows(s.skillsToRows(m.filtered))
+		}
+		return true
+	case "a":
+		selectedCount := 0
+		for _, skill := range m.filtered {
+			if s.selected[dedupeSkillKey(skill)] {
+				selectedCount++
+			}
+		}
+		selectAll := selectedCount < len(m.filtered)/2+1
+		for _, skill := range m.filtered {
+			s.selected[dedupeSkillKey(skill)] = selectAll
+		}
+		m.table.SetRows(s.skillsToRows(m.filtered))
+		return true
+	case "d":
+		selectedSkills := s.selectedSkills()
+		if len(selectedSkills) == 0 {
+			return true
+		}
+		m.result = DedupeListResult{Action: DedupeActionDelete, SelectedSkills: selectedSkills}
+		m.confirmMode = true
+		m.confirmMsg = fmt.Sprintf("⚠️  DELETE %d duplicate skill(s)? This cannot be undone! (y/n)", len(selectedSkills))
+		return true
+	}
+	return false
 }
 
 // findSimilarSkill finds the best matching similar skill for a given skill.
@@ -294,6 +632,9 @@ func (m DedupeListModel) findSimilarSkill(skill model.Skill) (model.Skill, float
 }
 
 func (m DedupeListModel) skillsToRows(skills []model.Skill) []table.Row {
+	if m.state != nil {
+		return m.state.skillsToRows(skills)
+	}
 	widths := m.columnWidths
 	if widths.desc == 0 {
 		widths = defaultDedupeListColumnWidths()
@@ -329,137 +670,56 @@ func (m DedupeListModel) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m DedupeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		// Adjust table height based on window
-		newHeight := max(msg.Height-12, 5) // Reserve space for title, warning, help, status
-		m.table.SetHeight(newHeight)
-		m.applyColumnWidths(msg.Width)
-
-	case tea.KeyMsg:
-		// Handle confirmation mode
-		if m.confirmMode {
-			switch msg.String() {
-			case "y", "Y":
-				m.result = DedupeListResult{
-					Action:         DedupeActionDelete,
-					SelectedSkills: m.getSelectedSkills(),
-				}
-				m.quitting = true
-				return m, tea.Quit
-			case "n", "N", "esc":
-				m.confirmMode = false
-				return m, nil
-			}
-			return m, nil
-		}
-
-		// Handle filtering mode
-		if m.filtering {
-			switch msg.String() {
-			case "enter":
-				m.filtering = false
-				return m, nil
-			case "esc":
-				m.filter = ""
-				m.filtering = false
-				m.applyFilter()
-				return m, nil
-			case "backspace":
-				if len(m.filter) > 0 {
-					m.filter = m.filter[:len(m.filter)-1]
-					m.applyFilter()
-				}
-				return m, nil
-			default:
-				if len(msg.String()) == 1 {
-					m.filter += msg.String()
-					m.applyFilter()
-				}
-				return m, nil
-			}
-		}
-
-		// Normal mode key handling
-		switch {
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Filter):
-			m.filtering = true
-			return m, nil
-
-		case key.Matches(msg, m.keys.ClearFlt):
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
-
-		case key.Matches(msg, m.keys.Toggle):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.selected[dedupeSkillKey(skill)] = !m.selected[dedupeSkillKey(skill)]
-				m.table.SetRows(m.skillsToRows(m.filtered))
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.ToggleAll):
-			// Count how many are currently selected
-			selectedCount := 0
-			for _, s := range m.filtered {
-				if m.selected[dedupeSkillKey(s)] {
-					selectedCount++
-				}
-			}
-			// If all or most are selected, deselect all; otherwise select all
-			selectAll := selectedCount < len(m.filtered)/2+1
-			for _, s := range m.filtered {
-				m.selected[dedupeSkillKey(s)] = selectAll
-			}
-			m.table.SetRows(m.skillsToRows(m.filtered))
-			return m, nil
-
-		case key.Matches(msg, m.keys.Confirm):
-			selectedSkills := m.getSelectedSkills()
-			if len(selectedSkills) > 0 {
-				m.confirmMode = true
-			}
+	m.syncStateFromCompat()
+	m.ListModel.filter = m.filter
+	m.ListModel.filtering = m.filtering
+	m.ListModel.showHelp = m.showHelp
+	m.ListModel.confirmMode = m.confirmMode
+	m.ListModel.quitting = m.quitting
+	m.ListModel.width = m.width
+	m.ListModel.height = m.height
+	m.ListModel.filtered = m.filtered
+	m.ListModel.allItems = m.flatSkills
+	m.ListModel.table = m.table
+	if m.state != nil {
+		m.state.duplicates = m.duplicates
+		m.state.flatSkills = m.flatSkills
+		m.state.selected = m.selected
+		m.state.columnWidths = m.columnWidths
+		m.state.width = m.width
+		m.state.height = m.height
+	}
+	if msg, ok := msg.(tea.KeyMsg); ok {
+		if m.state != nil && !m.filtering && !m.confirmMode && m.state.extraKeys(&m.ListModel, msg) {
+			m.syncCompatFromBase()
 			return m, nil
 		}
 	}
 
-	m.table, cmd = m.table.Update(msg)
+	updated, cmd := m.ListModel.Update(msg)
+	if next, ok := updated.(ListModel[model.Skill]); ok {
+		m.ListModel = next
+	}
+	m.syncCompatFromBase()
 	return m, cmd
 }
 
 func (m *DedupeListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.flatSkills
-	} else {
-		var filtered []model.Skill
-		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range m.flatSkills {
-			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				filtered = append(filtered, s)
-			}
-		}
-		m.filtered = filtered
+	if m == nil {
+		return
 	}
-	m.table.SetRows(m.skillsToRows(m.filtered))
+	m.syncStateFromCompat()
+	m.ListModel.filter = m.filter
+	m.ListModel.allItems = m.flatSkills
+	m.ListModel.table = m.table
+	m.ListModel.applyFilter()
+	m.syncCompatFromBase()
 }
 
 func (m DedupeListModel) getSelectedSkill() model.Skill {
+	if m.state != nil {
+		return m.state.selectedSkill(&m.ListModel)
+	}
 	cursor := m.table.Cursor()
 	if cursor >= 0 && cursor < len(m.filtered) {
 		return m.filtered[cursor]
@@ -468,6 +728,9 @@ func (m DedupeListModel) getSelectedSkill() model.Skill {
 }
 
 func (m DedupeListModel) getSelectedSkills() []model.Skill {
+	if m.state != nil {
+		return m.state.selectedSkills()
+	}
 	var selected []model.Skill
 	for _, s := range m.flatSkills {
 		if m.selected[dedupeSkillKey(s)] {
@@ -479,79 +742,29 @@ func (m DedupeListModel) getSelectedSkills() []model.Skill {
 
 // View implements tea.Model.
 func (m DedupeListModel) View() string {
-	if m.quitting {
-		return ""
+	m.syncStateFromCompat()
+	m.ListModel.filter = m.filter
+	m.ListModel.filtering = m.filtering
+	m.ListModel.showHelp = m.showHelp
+	m.ListModel.confirmMode = m.confirmMode
+	m.ListModel.quitting = m.quitting
+	m.ListModel.width = m.width
+	m.ListModel.height = m.height
+	m.ListModel.filtered = m.filtered
+	m.ListModel.allItems = m.flatSkills
+	m.ListModel.table = m.table
+	m.ListModel.result = m.result
+	if m.state != nil {
+		m.state.duplicates = m.duplicates
+		m.state.flatSkills = m.flatSkills
+		m.state.selected = m.selected
+		m.state.columnWidths = m.columnWidths
+		m.state.width = m.width
+		m.state.height = m.height
 	}
-
-	var b strings.Builder
-
-	// Title
-	title := dedupeListStyles.Title.Render("🔍 Dedupe Skills - Find and Remove Duplicates")
-	b.WriteString(title)
-	b.WriteString("\n")
-
-	// Info message
-	info := dedupeListStyles.Warning.Render("Select duplicate skills to delete. Only repo/user scope skills shown.")
-	b.WriteString(info)
-	b.WriteString("\n")
-
-	// Duplicate count info
-	dupInfo := fmt.Sprintf("Found %d duplicate pairs across %d skills", len(m.duplicates), len(m.flatSkills))
-	b.WriteString(dedupeListStyles.Status.Render(dupInfo))
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := dedupeListStyles.Filter.Render("Filter: ")
-		filterVal := dedupeListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Confirmation dialog
-	if m.confirmMode {
-		selectedCount := len(m.getSelectedSkills())
-		b.WriteString(m.table.View())
-		b.WriteString("\n\n")
-		confirmMsg := fmt.Sprintf("⚠️  DELETE %d duplicate skill(s)? This cannot be undone! (y/n)", selectedCount)
-		b.WriteString(dedupeListStyles.Confirm.Render(confirmMsg))
-		return b.String()
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Status bar
-	selectedCount := len(m.getSelectedSkills())
-	status := fmt.Sprintf("%d skill(s) selected for deletion of %d", selectedCount, len(m.filtered))
-	if m.filter != "" {
-		status = fmt.Sprintf("%d selected, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.flatSkills))
-	}
-	b.WriteString(dedupeListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	selected := m.getSelectedSkill()
-	if selected.Name != "" && selected.Description != "" {
-		descWidth := max(m.width-2, 40)
-		formatted := formatDescription(selected.Description, descWidth)
-		b.WriteString(dedupeListStyles.Description.Render(formatted))
-		b.WriteString("\n")
-	}
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
+	view := m.ListModel.View()
+	m.syncCompatFromBase()
+	return view
 }
 
 func (m DedupeListModel) renderShortHelp() string {

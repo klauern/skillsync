@@ -40,84 +40,13 @@ type configItem struct {
 	Options     []string // For enum-type fields, the valid options
 }
 
-// configListKeyMap defines the key bindings for the config list.
-type configListKeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	Toggle   key.Binding
-	Edit     key.Binding
-	Save     key.Binding
-	Reset    key.Binding
-	Filter   key.Binding
-	ClearFlt key.Binding
-	Help     key.Binding
-	Quit     key.Binding
-}
-
-func defaultConfigListKeyMap() configListKeyMap {
-	return configListKeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
-		),
-		Toggle: key.NewBinding(
-			key.WithKeys(" ", "enter"),
-			key.WithHelp("space/enter", "toggle/cycle"),
-		),
-		Edit: key.NewBinding(
-			key.WithKeys("e"),
-			key.WithHelp("e", "edit value"),
-		),
-		Save: key.NewBinding(
-			key.WithKeys("s"),
-			key.WithHelp("s", "save changes"),
-		),
-		Reset: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "reset to default"),
-		),
-		Filter: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "filter"),
-		),
-		ClearFlt: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "clear/cancel"),
-		),
-		Help: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "help"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
-	}
-}
-
-// ConfigListModel is the BubbleTea model for interactive config editing.
-type ConfigListModel struct {
-	table       table.Model
-	items       []configItem
-	filtered    []configItem
-	keys        configListKeyMap
-	result      ConfigListResult
-	cfg         *config.Config
-	defaultCfg  *config.Config
-	filter      string
-	filtering   bool
-	editing     bool
-	editValue   string
-	showHelp    bool
-	confirmMode bool
-	modified    bool
-	width       int
-	height      int
-	quitting    bool
+// configListState holds config-specific mutable state captured by ListModel callbacks.
+type configListState struct {
+	cfg        *config.Config
+	defaultCfg *config.Config
+	modified   bool
+	editing    bool
+	editValue  string
 }
 
 // Styles for the config list TUI.
@@ -149,66 +78,212 @@ var configListStyles = struct {
 	EditPrompt:  lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
 }
 
-// NewConfigListModel creates a new config list model.
-func NewConfigListModel(cfg *config.Config) ConfigListModel {
-	if cfg == nil {
-		cfg = config.Default()
+func (s *configListState) selectedItem(m *ListModel[configItem]) *configItem {
+	if s == nil || m == nil {
+		return nil
 	}
-
-	columns := []table.Column{
-		{Title: "Section", Width: 12},
-		{Title: "Setting", Width: 20},
-		{Title: "Value", Width: 25},
-		{Title: "Description", Width: 35},
+	cursor := m.table.Cursor()
+	if cursor < 0 || cursor >= len(m.filtered) {
+		return nil
 	}
-
-	m := ConfigListModel{
-		cfg:        cfg,
-		defaultCfg: config.Default(),
-		keys:       defaultConfigListKeyMap(),
-	}
-
-	m.items = m.buildConfigItems()
-
-	// Sort items alphabetically by section, then by key within section (case-insensitive)
-	sort.Slice(m.items, func(i, j int) bool {
-		if !strings.EqualFold(m.items[i].Section, m.items[j].Section) {
-			return strings.ToLower(m.items[i].Section) < strings.ToLower(m.items[j].Section)
-		}
-		return strings.ToLower(m.items[i].Key) < strings.ToLower(m.items[j].Key)
-	})
-
-	m.filtered = m.items
-	rows := m.itemsToRows(m.items)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(20),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
-	return m
+	return &m.filtered[cursor]
 }
 
-// buildConfigItems creates the list of editable config items from the config.
-func (m *ConfigListModel) buildConfigItems() []configItem {
-	cfg := m.cfg
+func (s *configListState) matches(item configItem, lowerFilter string) bool {
+	if lowerFilter == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(item.Section), lowerFilter) ||
+		strings.Contains(strings.ToLower(item.Key), lowerFilter) ||
+		strings.Contains(strings.ToLower(item.Description), lowerFilter) ||
+		strings.Contains(strings.ToLower(item.Value), lowerFilter)
+}
+
+func (s *configListState) statusText(filtered, total int, filter string) string {
+	if filtered == 0 {
+		return "No settings match the current filter"
+	}
+	if filter != "" {
+		return fmt.Sprintf("%d of %d settings shown", filtered, total)
+	}
+	return "Press space/enter to toggle"
+}
+
+func (s *configListState) header() string {
+	if s == nil || !s.modified {
+		return ""
+	}
+	return configListStyles.Modified.Render("[modified]")
+}
+
+func (s *configListState) extraBody(m *ListModel[configItem]) string {
+	if s == nil || m == nil || !s.editing {
+		return ""
+	}
+	item := s.selectedItem(m)
+	if item == nil {
+		return ""
+	}
+	prompt := fmt.Sprintf("Edit %s.%s: ", item.Section, item.Key)
+	return configListStyles.EditPrompt.Render(prompt) + configListStyles.FilterInput.Render(s.editValue+"█")
+}
+
+// extraKeys handles config-specific keys (toggle, edit, reset). It also propagates
+// item changes back to the ListModel so filtering and table rows stay current.
+func (s *configListState) extraKeys(m *ListModel[configItem], msg tea.KeyMsg) bool {
+	if s == nil || m == nil {
+		return false
+	}
+	switch msg.String() {
+	case " ", "enter":
+		item := s.selectedItem(m)
+		if item == nil {
+			return true
+		}
+		if item.ValueType == "bool" || len(item.Options) > 0 {
+			current := *item
+			cursor := m.table.Cursor()
+			s.toggleOrCycleCurrentValue(&current)
+			s.syncItemsToBase(m)
+			if cursor < len(m.filtered) {
+				m.table.SetCursor(cursor)
+			}
+		}
+		return true
+	case "e":
+		item := s.selectedItem(m)
+		if item != nil && item.ValueType != "bool" && len(item.Options) == 0 {
+			s.editing = true
+			s.editValue = item.Value
+		}
+		return true
+	case "r":
+		item := s.selectedItem(m)
+		if item != nil {
+			current := *item
+			cursor := m.table.Cursor()
+			s.resetCurrentToDefault(&current)
+			s.syncItemsToBase(m)
+			if cursor < len(m.filtered) {
+				m.table.SetCursor(cursor)
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// syncItemsToBase rebuilds items from the current config and pushes them into the ListModel.
+func (s *configListState) syncItemsToBase(m *ListModel[configItem]) {
+	newItems := s.buildConfigItems()
+	m.allItems = newItems
+	m.filtered = s.applyFilterTo(newItems, m.filter)
+	m.table.SetRows(m.cfg.ToRows(m.filtered))
+}
+
+func (s *configListState) applyFilterTo(items []configItem, filter string) []configItem {
+	if filter == "" {
+		return items
+	}
+	lf := strings.ToLower(filter)
+	var filtered []configItem
+	for _, item := range items {
+		if s.matches(item, lf) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func (s *configListState) toggleOrCycleCurrentValue(item *configItem) {
+	if s == nil || item == nil {
+		return
+	}
+	var newValue string
+	if item.ValueType == "bool" {
+		if item.Value == "true" {
+			newValue = "false"
+		} else {
+			newValue = "true"
+		}
+	} else if len(item.Options) > 0 {
+		currentIdx := -1
+		for i, opt := range item.Options {
+			if opt == item.Value {
+				currentIdx = i
+				break
+			}
+		}
+		newValue = item.Options[(currentIdx+1)%len(item.Options)]
+	} else {
+		return
+	}
+	s.updateConfigValue(item.Section, item.Key, newValue)
+}
+
+func (s *configListState) resetCurrentToDefault(item *configItem) {
+	if s == nil || item == nil || s.defaultCfg == nil {
+		return
+	}
+	orig := s.cfg
+	s.cfg = s.defaultCfg
+	defaultItems := s.buildConfigItems()
+	s.cfg = orig
+	for _, di := range defaultItems {
+		if di.Section == item.Section && di.Key == item.Key {
+			s.updateConfigValue(item.Section, item.Key, di.Value)
+			return
+		}
+	}
+}
+
+func (s *configListState) applyEditValue(item *configItem) {
+	if s == nil || item == nil {
+		return
+	}
+	s.updateConfigValue(item.Section, item.Key, s.editValue)
+	s.editing = false
+	s.editValue = ""
+}
+
+func (s *configListState) updateConfigValue(section, key, value string) {
+	if s == nil || s.cfg == nil {
+		return
+	}
+	switch section {
+	case "Sync":
+		switch key {
+		case "DefaultStrategy":
+			s.cfg.Sync.DefaultStrategy = value
+		}
+	case "Output":
+		switch key {
+		case "Color":
+			s.cfg.Output.Color = value
+		}
+	case "Similarity":
+		switch key {
+		case "NameThreshold":
+			if v, err := parseFloat(value); err == nil && v >= 0 && v <= 1 {
+				s.cfg.Similarity.NameThreshold = v
+			}
+		case "ContentThreshold":
+			if v, err := parseFloat(value); err == nil && v >= 0 && v <= 1 {
+				s.cfg.Similarity.ContentThreshold = v
+			}
+		case "Algorithm":
+			s.cfg.Similarity.Algorithm = value
+		}
+	}
+	s.modified = true
+}
+
+func (s *configListState) buildConfigItems() []configItem {
+	if s == nil || s.cfg == nil {
+		return nil
+	}
+	cfg := s.cfg
 	items := []configItem{
-		// Sync settings
 		{
 			Section:     "Sync",
 			Key:         "DefaultStrategy",
@@ -217,8 +292,6 @@ func (m *ConfigListModel) buildConfigItems() []configItem {
 			ValueType:   "string",
 			Options:     []string{"overwrite", "skip", "newer", "merge", "three-way", "interactive"},
 		},
-
-		// Output settings
 		{
 			Section:     "Output",
 			Key:         "Color",
@@ -227,8 +300,6 @@ func (m *ConfigListModel) buildConfigItems() []configItem {
 			ValueType:   "string",
 			Options:     []string{"auto", "always", "never"},
 		},
-
-		// Similarity settings
 		{
 			Section:     "Similarity",
 			Key:         "NameThreshold",
@@ -252,12 +323,33 @@ func (m *ConfigListModel) buildConfigItems() []configItem {
 			Options:     []string{"levenshtein", "jaro-winkler", "combined"},
 		},
 	}
-
+	sort.Slice(items, func(i, j int) bool {
+		if !strings.EqualFold(items[i].Section, items[j].Section) {
+			return strings.ToLower(items[i].Section) < strings.ToLower(items[j].Section)
+		}
+		return strings.ToLower(items[i].Key) < strings.ToLower(items[j].Key)
+	})
 	return items
 }
 
+// ConfigListModel is the BubbleTea model for interactive config editing.
+// It embeds ListModel[configItem] for common list behavior (filtering, help, navigation)
+// and adds config-specific state (modified flag, inline editing, save-on-quit confirm).
+type ConfigListModel struct {
+	ListModel[configItem] // promotes: table, filter, filtering, showHelp, confirmMode, quitting, filtered, allItems, width, height
+
+	state      *configListState
+	cfg        *config.Config
+	defaultCfg *config.Config
+	modified   bool
+	editing    bool
+	editValue  string
+	result     ConfigListResult // shadows ListModel.result (any) with typed result
+	items      []configItem     // proxy for allItems; kept in sync for test compatibility
+}
+
 // itemsToRows converts config items to table rows.
-func (m *ConfigListModel) itemsToRows(items []configItem) []table.Row {
+func itemsToRows(items []configItem) []table.Row {
 	rows := make([]table.Row, len(items))
 	for i, item := range items {
 		rows[i] = table.Row{
@@ -270,380 +362,171 @@ func (m *ConfigListModel) itemsToRows(items []configItem) []table.Row {
 	return rows
 }
 
-// Init implements tea.Model.
-func (m ConfigListModel) Init() tea.Cmd {
-	return nil
-}
-
-// Update implements tea.Model.
-func (m ConfigListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		newHeight := max(msg.Height-12, 5)
-		m.table.SetHeight(newHeight)
-
-	case tea.KeyMsg:
-		return m.handleKeyMsg(msg)
+// NewConfigListModel creates a new config list model.
+func NewConfigListModel(cfg *config.Config) ConfigListModel {
+	if cfg == nil {
+		cfg = config.Default()
 	}
 
-	// Update table
-	var cmd tea.Cmd
-	m.table, cmd = m.table.Update(msg)
+	state := &configListState{
+		cfg:        cfg,
+		defaultCfg: config.Default(),
+	}
+	items := state.buildConfigItems()
+
+	saveKey := key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save changes"))
+
+	m := ConfigListModel{
+		cfg:        cfg,
+		defaultCfg: state.defaultCfg,
+		state:      state,
+		items:      items,
+	}
+
+	m.ListModel = NewListModel(items, ListConfig[configItem]{
+		Title: "⚙️  Configuration",
+		Columns: []table.Column{
+			{Title: "Section", Width: 12},
+			{Title: "Setting", Width: 20},
+			{Title: "Value", Width: 25},
+			{Title: "Description", Width: 35},
+		},
+		ToRows:     itemsToRows,
+		Matches:    state.matches,
+		ShortHelp:  m.renderShortHelp,
+		FullHelp:   m.renderFullHelp,
+		StatusText: state.statusText,
+		Actions: []ActionBinding[configItem]{
+			{
+				Binding: saveKey,
+				Apply: func(configItem) any {
+					return ConfigListResult{Action: ConfigActionSave, Config: cfg}
+				},
+			},
+		},
+		ReservedLines: 12,
+		Header:        state.header,
+		ExtraBody:     state.extraBody,
+		ExtraKeys:     state.extraKeys,
+	})
+	return m
+}
+
+// Init implements tea.Model.
+func (m ConfigListModel) Init() tea.Cmd { return nil }
+
+// Update implements tea.Model. It intercepts editing mode, modified-quit guard, and
+// confirm mode before delegating common behavior (filtering, help, navigation) to the base.
+func (m ConfigListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Sync test-set mutable fields into state so callbacks see current values.
+	if m.state != nil {
+		m.state.modified = m.modified
+		m.state.editing = m.editing
+		m.state.editValue = m.editValue
+	}
+
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		// Editing mode: consume all characters before base key dispatch.
+		if m.editing {
+			return m.handleEditingMode(keyMsg)
+		}
+
+		// Config confirm mode: we must build ConfigListResult on 'y' (base only quits).
+		if m.confirmMode {
+			return m.handleConfirmMode(keyMsg)
+		}
+
+		// Modified-quit guard: intercept 'q'/'ctrl+c' before base quits unconditionally.
+		if !m.filtering && m.modified &&
+			(keyMsg.String() == "q" || keyMsg.Type == tea.KeyCtrlC) {
+			m.confirmMode = true
+			m.ListModel.confirmMsg = "⚠️  Save changes before quitting? (y/n)"
+			return m, nil
+		}
+
+		// Config-specific keys: handle before base so we can sync ListModel state.
+		if !m.filtering && !m.confirmMode && m.state != nil {
+			if handled := m.state.extraKeys(&m.ListModel, keyMsg); handled {
+				m.modified = m.state.modified
+				m.editing = m.state.editing
+				m.editValue = m.state.editValue
+				m.items = m.allItems
+				return m, nil
+			}
+		}
+	}
+
+	inner, cmd := m.ListModel.Update(msg)
+	if next, ok := inner.(ListModel[configItem]); ok {
+		m.ListModel = next
+	}
+	m.items = m.allItems
+	if r, ok := m.ListModel.result.(ConfigListResult); ok {
+		m.result = r
+	}
 	return m, cmd
 }
 
-// handleKeyMsg processes keyboard input based on current mode.
-func (m ConfigListModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.confirmMode {
-		return m.handleConfirmMode(msg)
-	}
-	if m.editing {
-		return m.handleEditingMode(msg)
-	}
-	if m.filtering {
-		return m.handleFilteringMode(msg)
-	}
-	return m.handleNormalMode(msg)
-}
-
-// handleConfirmMode handles keys during confirmation dialog.
 func (m ConfigListModel) handleConfirmMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
-		m.result = ConfigListResult{
-			Action: ConfigActionSave,
-			Config: m.cfg,
-		}
+		m.result = ConfigListResult{Action: ConfigActionSave, Config: m.cfg}
 		m.quitting = true
 		return m, tea.Quit
 	case "n", "N", "esc":
 		m.confirmMode = false
-		return m, nil
+		m.ListModel.confirmMsg = ""
 	}
 	return m, nil
 }
 
-// handleEditingMode handles keys during value editing.
 func (m ConfigListModel) handleEditingMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
-		m.applyEditValue()
+		item := m.state.selectedItem(&m.ListModel)
+		if item != nil {
+			m.state.editValue = m.editValue
+			m.state.applyEditValue(item)
+			cursor := m.table.Cursor()
+			m.state.syncItemsToBase(&m.ListModel)
+			if cursor < len(m.filtered) {
+				m.table.SetCursor(cursor)
+			}
+			m.items = m.allItems
+		}
 		m.editing = false
 		m.editValue = ""
+		m.state.editing = false
+		m.state.editValue = ""
+		m.modified = m.state.modified
 	case "esc":
 		m.editing = false
 		m.editValue = ""
+		m.state.editing = false
+		m.state.editValue = ""
 	case "backspace":
 		if len(m.editValue) > 0 {
 			m.editValue = m.editValue[:len(m.editValue)-1]
+			m.state.editValue = m.editValue
 		}
 	default:
 		if len(msg.String()) == 1 {
 			m.editValue += msg.String()
+			m.state.editValue = m.editValue
 		}
 	}
 	return m, nil
 }
 
-// handleFilteringMode handles keys during filter input.
-func (m ConfigListModel) handleFilteringMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
-		m.filtering = false
-	case "esc":
-		m.filter = ""
-		m.filtering = false
-		m.applyFilter()
-	case "backspace":
-		if len(m.filter) > 0 {
-			m.filter = m.filter[:len(m.filter)-1]
-			m.applyFilter()
-		}
-	default:
-		if len(msg.String()) == 1 {
-			m.filter += msg.String()
-			m.applyFilter()
-		}
-	}
-	return m, nil
-}
-
-// handleNormalMode handles keys in normal browsing mode.
-func (m ConfigListModel) handleNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, m.keys.Quit):
-		if m.modified {
-			m.confirmMode = true
-			return m, nil
-		}
-		m.quitting = true
-		return m, tea.Quit
-	case key.Matches(msg, m.keys.Help):
-		m.showHelp = !m.showHelp
-	case key.Matches(msg, m.keys.Filter):
-		m.filtering = true
-	case key.Matches(msg, m.keys.ClearFlt):
-		if m.filter != "" {
-			m.filter = ""
-			m.applyFilter()
-		}
-	case key.Matches(msg, m.keys.Up):
-		m.table.MoveUp(1)
-	case key.Matches(msg, m.keys.Down):
-		m.table.MoveDown(1)
-	case key.Matches(msg, m.keys.Toggle):
-		m.toggleOrCycleCurrentValue()
-	case key.Matches(msg, m.keys.Edit):
-		item := m.getCurrentItem()
-		if item != nil && item.ValueType != "bool" && len(item.Options) == 0 {
-			m.editing = true
-			m.editValue = item.Value
-		}
-	case key.Matches(msg, m.keys.Save):
-		m.result = ConfigListResult{
-			Action: ConfigActionSave,
-			Config: m.cfg,
-		}
-		m.quitting = true
-		return m, tea.Quit
-	case key.Matches(msg, m.keys.Reset):
-		m.resetCurrentToDefault()
-	}
-	return m, nil
-}
-
-// getCurrentItem returns the currently selected config item.
-func (m *ConfigListModel) getCurrentItem() *configItem {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return &m.filtered[cursor]
-	}
-	return nil
-}
-
-// toggleOrCycleCurrentValue toggles boolean values or cycles through options.
-func (m *ConfigListModel) toggleOrCycleCurrentValue() {
-	item := m.getCurrentItem()
-	if item == nil {
-		return
-	}
-
-	var newValue string
-
-	if item.ValueType == "bool" {
-		// Toggle boolean
-		if item.Value == "true" {
-			newValue = "false"
-		} else {
-			newValue = "true"
-		}
-	} else if len(item.Options) > 0 {
-		// Cycle through options
-		currentIdx := -1
-		for i, opt := range item.Options {
-			if opt == item.Value {
-				currentIdx = i
-				break
-			}
-		}
-		nextIdx := (currentIdx + 1) % len(item.Options)
-		newValue = item.Options[nextIdx]
-	} else {
-		// Not toggleable
-		return
-	}
-
-	m.updateConfigValue(item.Section, item.Key, newValue)
-	m.refreshItems()
-}
-
-// applyEditValue applies the edited value to the config.
-func (m *ConfigListModel) applyEditValue() {
-	item := m.getCurrentItem()
-	if item == nil {
-		return
-	}
-
-	m.updateConfigValue(item.Section, item.Key, m.editValue)
-	m.refreshItems()
-}
-
-// resetCurrentToDefault resets the current item to its default value.
-func (m *ConfigListModel) resetCurrentToDefault() {
-	item := m.getCurrentItem()
-	if item == nil {
-		return
-	}
-
-	// Find the default value
-	defaultItems := m.buildDefaultItems()
-	for _, di := range defaultItems {
-		if di.Section == item.Section && di.Key == item.Key {
-			m.updateConfigValue(item.Section, item.Key, di.Value)
-			m.refreshItems()
-			return
-		}
-	}
-}
-
-// buildDefaultItems builds items from the default config.
-func (m *ConfigListModel) buildDefaultItems() []configItem {
-	orig := m.cfg
-	m.cfg = m.defaultCfg
-	items := m.buildConfigItems()
-	m.cfg = orig
-	return items
-}
-
-// updateConfigValue updates a config value by section and key.
-func (m *ConfigListModel) updateConfigValue(section, key, value string) {
-	switch section {
-	case "Sync":
-		m.updateSyncConfig(key, value)
-	case "Output":
-		m.updateOutputConfig(key, value)
-	case "Similarity":
-		m.updateSimilarityConfig(key, value)
-	}
-	m.modified = true
-}
-
-func (m *ConfigListModel) updateSyncConfig(key, value string) {
-	switch key {
-	case "DefaultStrategy":
-		m.cfg.Sync.DefaultStrategy = value
-	}
-}
-
-func (m *ConfigListModel) updateOutputConfig(key, value string) {
-	switch key {
-	case "Color":
-		m.cfg.Output.Color = value
-	}
-}
-
-func (m *ConfigListModel) updateSimilarityConfig(key, value string) {
-	switch key {
-	case "NameThreshold":
-		if v, err := parseFloat(value); err == nil && v >= 0 && v <= 1 {
-			m.cfg.Similarity.NameThreshold = v
-		}
-	case "ContentThreshold":
-		if v, err := parseFloat(value); err == nil && v >= 0 && v <= 1 {
-			m.cfg.Similarity.ContentThreshold = v
-		}
-	case "Algorithm":
-		m.cfg.Similarity.Algorithm = value
-	}
-}
-
-// refreshItems rebuilds the items list from the current config.
-func (m *ConfigListModel) refreshItems() {
-	cursor := m.table.Cursor()
-	m.items = m.buildConfigItems()
-	m.applyFilter()
-	// Restore cursor position
-	if cursor < len(m.filtered) {
-		m.table.SetCursor(cursor)
-	}
-}
-
-// applyFilter filters items by the current filter text.
-func (m *ConfigListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.items
-	} else {
-		var filtered []configItem
-		lowerFilter := strings.ToLower(m.filter)
-		for _, item := range m.items {
-			if strings.Contains(strings.ToLower(item.Section), lowerFilter) ||
-				strings.Contains(strings.ToLower(item.Key), lowerFilter) ||
-				strings.Contains(strings.ToLower(item.Description), lowerFilter) ||
-				strings.Contains(strings.ToLower(item.Value), lowerFilter) {
-				filtered = append(filtered, item)
-			}
-		}
-		m.filtered = filtered
-	}
-	m.table.SetRows(m.itemsToRows(m.filtered))
-}
-
-// View implements tea.Model.
+// View delegates to the base ListModel view. Config-specific elements ([modified],
+// edit prompt) are rendered via the Header and ExtraBody callbacks.
 func (m ConfigListModel) View() string {
-	if m.quitting {
-		return ""
+	if m.state != nil {
+		m.state.modified = m.modified
+		m.state.editing = m.editing
+		m.state.editValue = m.editValue
 	}
-
-	var b strings.Builder
-
-	// Title
-	title := "⚙️  Configuration"
-	if m.modified {
-		title += configListStyles.Modified.Render(" [modified]")
-	}
-	b.WriteString(configListStyles.Title.Render(title))
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := configListStyles.Filter.Render("Filter: ")
-		filterVal := configListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Edit prompt
-	if m.editing {
-		item := m.getCurrentItem()
-		if item != nil {
-			prompt := fmt.Sprintf("Edit %s.%s: ", item.Section, item.Key)
-			b.WriteString(configListStyles.EditPrompt.Render(prompt))
-			b.WriteString(configListStyles.FilterInput.Render(m.editValue + "█"))
-			b.WriteString("\n\n")
-		}
-	}
-
-	// Confirm dialog
-	if m.confirmMode {
-		b.WriteString(m.table.View())
-		b.WriteString("\n\n")
-		confirmMsg := "⚠️  Save changes before quitting? (y/n)"
-		b.WriteString(configListStyles.Confirm.Render(confirmMsg))
-		return b.String()
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Status bar
-	item := m.getCurrentItem()
-	var statusText string
-	if item != nil {
-		if item.ValueType == "bool" {
-			statusText = "Press space/enter to toggle"
-		} else if len(item.Options) > 0 {
-			statusText = fmt.Sprintf("Options: %s", strings.Join(item.Options, ", "))
-		} else {
-			statusText = "Press 'e' to edit, 'r' to reset"
-		}
-	}
-	b.WriteString(configListStyles.Status.Render(statusText))
-	b.WriteString("\n")
-
-	// Help
-	if m.showHelp {
-		b.WriteString("\n")
-		b.WriteString(m.renderFullHelp())
-	} else {
-		b.WriteString(m.renderShortHelp())
-	}
-
-	return b.String()
+	return m.ListModel.View()
 }
 
 func (m ConfigListModel) renderShortHelp() string {
@@ -682,7 +565,30 @@ General:
 	return configListStyles.Help.Render(help)
 }
 
-// Result returns the result of the user interaction.
+// toggleOrCycleCurrentValue is kept for test compatibility.
+func (m *ConfigListModel) toggleOrCycleCurrentValue() {
+	item := m.state.selectedItem(&m.ListModel)
+	if item == nil || (item.ValueType != "bool" && len(item.Options) == 0) {
+		return
+	}
+	cursor := m.table.Cursor()
+	current := *item
+	m.state.toggleOrCycleCurrentValue(&current)
+	m.state.syncItemsToBase(&m.ListModel)
+	if cursor < len(m.filtered) {
+		m.table.SetCursor(cursor)
+	}
+	m.items = m.allItems
+	m.modified = m.state.modified
+}
+
+// updateConfigValue is kept for test compatibility.
+func (m *ConfigListModel) updateConfigValue(section, key, value string) {
+	m.state.updateConfigValue(section, key, value)
+	m.modified = m.state.modified
+}
+
+// Result returns the typed result of the user interaction.
 func (m ConfigListModel) Result() ConfigListResult {
 	return m.result
 }
@@ -694,15 +600,13 @@ func RunConfigList(cfg *config.Config) (ConfigListResult, error) {
 	if err != nil {
 		return ConfigListResult{}, err
 	}
-
 	if m, ok := finalModel.(ConfigListModel); ok {
 		return m.Result(), nil
 	}
-
 	return ConfigListResult{}, nil
 }
 
-// Helper function for parsing values.
+// parseFloat parses a float64 from a string.
 func parseFloat(s string) (float64, error) {
 	var v float64
 	_, err := fmt.Sscanf(s, "%f", &v)

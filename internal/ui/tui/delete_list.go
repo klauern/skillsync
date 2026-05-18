@@ -139,8 +139,27 @@ const (
 	deleteListPhaseDetail
 )
 
+type deleteListState struct {
+	skills          []model.Skill
+	filtered        []model.Skill
+	selected        map[string]bool
+	platformOptions []model.Platform
+	platformIndex   int
+	columnWidths    deleteListColumnWidths
+	hScroll         horizontalTableState
+	phase           deleteListPhase
+	viewport        viewport.Model
+	ready           bool
+	detailSkill     model.Skill
+	width           int
+	height          int
+	hOffset         int
+}
+
 // DeleteListModel is the BubbleTea model for interactive skill deletion.
 type DeleteListModel struct {
+	ListModel[model.Skill]
+	state           *deleteListState
 	table           table.Model
 	hScroll         horizontalTableState
 	skills          []model.Skill
@@ -154,6 +173,7 @@ type DeleteListModel struct {
 	platformIndex   int // Index into platformOptions (-1 = all)
 	showHelp        bool
 	confirmMode     bool
+	confirmMsg      string
 	width           int
 	height          int
 	quitting        bool
@@ -319,6 +339,16 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 
 	// Initialize with no skills selected (deletion is opt-in)
 	selected := make(map[string]bool)
+	state := &deleteListState{
+		skills:          deletableSkills,
+		filtered:        deletableSkills,
+		selected:        selected,
+		platformOptions: platformOptions,
+		platformIndex:   -1,
+		columnWidths:    columnWidths,
+		phase:           deleteListPhaseList,
+		hScroll:         newHorizontalTableState(columns),
+	}
 
 	m := DeleteListModel{
 		skills:          deletableSkills,
@@ -330,6 +360,7 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 		hScroll:         newHorizontalTableState(columns),
 		platformOptions: platformOptions,
 		platformIndex:   -1,
+		state:           state,
 	}
 
 	rows := m.skillsToRows(deletableSkills)
@@ -354,10 +385,405 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 	t.SetStyles(s)
 
 	m.table = t
+	m.ListModel = NewListModel(deletableSkills, ListConfig[model.Skill]{
+		Title:       "🗑️  Delete Skills",
+		Columns:     columns,
+		ToRows:      state.skillsToRows,
+		Matches:     state.matches,
+		ShortHelp:   state.shortHelp,
+		FullHelp:    state.fullHelp,
+		StatusText:  state.statusText,
+		Header:      state.header,
+		ExtraBody:   state.extraBody,
+		ExtraKeys:   state.extraKeys,
+		OnWindowSize: state.onWindowSize,
+		ReservedLines: 10 + deleteListDetailHeight + deleteListDetailGap,
+		Actions: []ActionBinding[model.Skill]{
+			{
+				Binding: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+				Apply: func(model.Skill) any {
+					return DeleteListResult{Action: DeleteActionDelete, SelectedSkills: state.selectedSkills()}
+				},
+				NeedsConfirm: func(model.Skill) string {
+					count := len(state.selectedSkills())
+					if count == 0 {
+						return ""
+					}
+					return fmt.Sprintf("⚠️  DELETE %d skill(s)? This cannot be undone! (y/n)", count)
+				},
+			},
+		},
+	})
+	m.ListModel.table = t
+	m.ListModel.allItems = deletableSkills
+	m.ListModel.filtered = deletableSkills
+	m.ListModel.filter = m.filter
+	m.ListModel.filtering = m.filtering
+	m.ListModel.showHelp = m.showHelp
+	m.ListModel.confirmMode = m.confirmMode
+	m.ListModel.confirmMsg = m.confirmMsg
+	m.ListModel.quitting = m.quitting
+	m.ListModel.width = m.width
+	m.ListModel.height = m.height
+	m.ListModel.result = m.result
+	m.syncStateFromCompat()
 	return m
 }
 
+func (m *DeleteListModel) syncStateFromCompat() {
+	if m == nil || m.state == nil {
+		return
+	}
+	m.state.skills = m.skills
+	m.state.filtered = m.filtered
+	m.state.selected = m.selected
+	m.state.platformOptions = m.platformOptions
+	m.state.platformIndex = m.platformIndex
+	m.state.columnWidths = m.columnWidths
+	m.state.phase = m.phase
+	m.state.viewport = m.viewport
+	m.state.ready = m.ready
+	m.state.detailSkill = m.detailSkill
+	m.state.width = m.width
+	m.state.height = m.height
+	m.state.hOffset = m.hOffset
+}
+
+func (m *DeleteListModel) syncCompatFromBase() {
+	if m == nil {
+		return
+	}
+	m.table = m.ListModel.table
+	m.skills = m.ListModel.allItems
+	m.filtered = m.ListModel.filtered
+	m.filter = m.ListModel.filter
+	m.filtering = m.ListModel.filtering
+	m.showHelp = m.ListModel.showHelp
+	m.confirmMode = m.ListModel.confirmMode
+	m.confirmMsg = m.ListModel.confirmMsg
+	m.quitting = m.ListModel.quitting
+	m.width = m.ListModel.width
+	m.height = m.ListModel.height
+	if result, ok := m.ListModel.result.(DeleteListResult); ok {
+		m.result = result
+	}
+	if m.state != nil {
+		m.phase = m.state.phase
+		m.detailSkill = m.state.detailSkill
+		m.ready = m.state.ready
+		m.viewport = m.state.viewport
+		m.hOffset = m.state.hOffset
+		m.columnWidths = m.state.columnWidths
+		m.platformIndex = m.state.platformIndex
+		m.platformOptions = m.state.platformOptions
+		m.state.skills = m.skills
+		m.state.filtered = m.filtered
+		m.state.selected = m.selected
+		m.state.platformOptions = m.platformOptions
+		m.state.platformIndex = m.platformIndex
+		m.state.columnWidths = m.columnWidths
+		m.state.phase = m.phase
+		m.state.viewport = m.viewport
+		m.state.ready = m.ready
+		m.state.detailSkill = m.detailSkill
+		m.state.width = m.width
+		m.state.height = m.height
+		m.state.hOffset = m.hOffset
+	}
+}
+
+func (s *deleteListState) selectedSkills() []model.Skill {
+	if s == nil {
+		return nil
+	}
+	selected := make([]model.Skill, 0, len(s.filtered))
+	for _, skill := range s.filtered {
+		if s.selected[deleteSkillKey(skill)] {
+			selected = append(selected, skill)
+		}
+	}
+	return selected
+}
+
+func (s *deleteListState) selectedSkill(m *ListModel[model.Skill]) model.Skill {
+	if s == nil || m == nil {
+		return model.Skill{}
+	}
+	cursor := m.table.Cursor()
+	if cursor < 0 || cursor >= len(m.filtered) {
+		return model.Skill{}
+	}
+	return m.filtered[cursor]
+}
+
+func (s *deleteListState) matches(skill model.Skill, lowerFilter string) bool {
+	if s == nil {
+		return true
+	}
+	if s.platformIndex >= 0 && s.platformIndex < len(s.platformOptions) {
+		if skill.Platform != s.platformOptions[s.platformIndex] {
+			return false
+		}
+	}
+	if lowerFilter == "" {
+		return true
+	}
+	lowerName := strings.ToLower(skill.Name)
+	lowerDesc := strings.ToLower(skill.Description)
+	lowerScope := strings.ToLower(skill.DisplayScope())
+	lowerPlatform := strings.ToLower(string(skill.Platform))
+	return strings.Contains(lowerName, lowerFilter) ||
+		strings.Contains(lowerDesc, lowerFilter) ||
+		strings.Contains(lowerScope, lowerFilter) ||
+		strings.Contains(lowerPlatform, lowerFilter)
+}
+
+func (s *deleteListState) shortHelp() string {
+	keys := []string{
+		"↑/↓ navigate",
+		"←/→ scroll cols",
+		"h/l platform",
+		"space/tab toggle",
+		"a toggle all",
+		"enter/v details",
+		"d delete",
+		"/ filter",
+		"esc clear/back",
+		"? help",
+		"q quit",
+	}
+	return strings.Join(keys, " • ")
+}
+
+func (s *deleteListState) fullHelp() string {
+	help := `Navigation:
+  ↑/k      Move up
+  ↓/j      Move down
+  ←/→      Scroll columns
+  h/l      Cycle platform filter
+
+Selection:
+  space    Toggle selection
+  tab      Toggle selection
+  a        Toggle all visible
+  enter/v  View details
+
+Filtering:
+  /        Enter filter mode
+  esc      Clear filter or back out
+
+Deletion:
+  d        Confirm delete selected skills
+  y        Confirm deletion
+  n/esc    Cancel confirmation
+
+General:
+  ?        Toggle help
+  q        Quit`
+	return help
+}
+
+func (s *deleteListState) header() string {
+	var parts []string
+	parts = append(parts, deleteListStyles.Warning.Render("Selection marks skills for deletion. Only repo and user scope skills can be deleted."))
+	if tabs := s.platformTabs(); tabs != "" {
+		parts = append(parts, "", tabs)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (s *deleteListState) platformTabs() string {
+	if s == nil || len(s.platformOptions) == 0 {
+		return ""
+	}
+	var tabs []string
+	if s.platformIndex < 0 {
+		tabs = append(tabs, deleteListStyles.PlatformActive.Render("[All]"))
+	} else {
+		tabs = append(tabs, deleteListStyles.PlatformTab.Render("[All]"))
+	}
+	for i, platform := range s.platformOptions {
+		label := fmt.Sprintf("[%s]", platform)
+		if i == s.platformIndex {
+			tabs = append(tabs, deleteListStyles.PlatformActive.Render(label))
+		} else {
+			tabs = append(tabs, deleteListStyles.PlatformTab.Render(label))
+		}
+	}
+	return strings.Join(tabs, " ")
+}
+
+func (s *deleteListState) statusText(filtered, total int, filter string) string {
+	selectedCount := len(s.selectedSkills())
+	status := fmt.Sprintf("%d skill(s) marked for deletion of %d", selectedCount, filtered)
+	if filter != "" || s.platformIndex >= 0 {
+		status = fmt.Sprintf("%d marked for deletion, %d of %d shown (filtered)", selectedCount, filtered, total)
+	}
+	if s.hOffset > 0 || s.hOffset < deleteListMaxHOffset {
+		status += "  " + hScrollIndicator(s.hOffset, deleteListMaxHOffset)
+	}
+	return status
+}
+
+func (s *deleteListState) detailPanel(m *ListModel[model.Skill]) string {
+	if s == nil || m == nil {
+		return ""
+	}
+	skill := s.selectedSkill(m)
+	if skill.Name == "" {
+		return ""
+	}
+	width := max(m.width, 40)
+	contentWidth := max(width-4, 10)
+	description := strings.TrimSpace(skill.Description)
+	if description == "" {
+		description = "No description available."
+	}
+	lines := wrapText(description, contentWidth, deleteListDetailLines)
+	lines = padLines(lines, deleteListDetailLines)
+	content := append([]string{deleteListStyles.DetailTitle.Render("Description (selected)")}, lines...)
+	return deleteListStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
+}
+
+func (s *deleteListState) extraBody(m *ListModel[model.Skill]) string {
+	return s.detailPanel(m)
+}
+
+func (s *deleteListState) skillsToRows(skills []model.Skill) []table.Row {
+	if s == nil {
+		return nil
+	}
+	widths := s.columnWidths
+	if widths.desc == 0 {
+		widths = defaultDeleteListColumnWidths()
+	}
+	rows := make([]table.Row, len(skills))
+	for i, skill := range skills {
+		checkbox := "[ ]"
+		if s.selected[deleteSkillKey(skill)] {
+			checkbox = "[x]"
+		}
+		row := table.Row{checkbox, truncateTableValue(skill.Name, widths.name)}
+		if s.hOffset == 0 {
+			row = append(row, truncateTableValue(string(skill.Platform), widths.platform))
+		}
+		if s.hOffset <= 1 {
+			row = append(row, truncateTableValue(skill.DisplayScope(), widths.scope))
+		}
+		row = append(row, truncateTableValue(skill.Description, widths.desc))
+		rows[i] = row
+	}
+	return rows
+}
+
+func (s *deleteListState) onWindowSize(m *ListModel[model.Skill], width, height int) {
+	if s == nil || m == nil {
+		return
+	}
+	s.width = width
+	s.height = height
+	newHeight := max(height-10-deleteListDetailHeight-deleteListDetailGap, 5)
+	m.table.SetHeight(newHeight)
+	columns, widths := deleteListColumns(width, s.skills, s.hOffset)
+	s.columnWidths = widths
+	s.hScroll.SetColumns(columns)
+	m.table.SetColumns(columns)
+	m.table.SetRows(s.skillsToRows(m.filtered))
+}
+
+func (s *deleteListState) extraKeys(m *ListModel[model.Skill], msg tea.KeyMsg) bool {
+	if s == nil || m == nil {
+		return false
+	}
+	switch msg.String() {
+	case "left":
+		if s.hOffset > 0 {
+			s.hOffset--
+			columns, widths := deleteListColumns(m.width, s.skills, s.hOffset)
+			s.columnWidths = widths
+			s.hScroll.SetColumns(columns)
+			m.table.SetColumns(columns)
+			m.table.SetRows(s.skillsToRows(m.filtered))
+		}
+		return true
+	case "right":
+		if s.hOffset < deleteListMaxHOffset {
+			s.hOffset++
+			columns, widths := deleteListColumns(m.width, s.skills, s.hOffset)
+			s.columnWidths = widths
+			s.hScroll.SetColumns(columns)
+			m.table.SetColumns(columns)
+			m.table.SetRows(s.skillsToRows(m.filtered))
+		}
+		return true
+	case "h":
+		if len(s.platformOptions) > 0 {
+			s.platformIndex--
+			if s.platformIndex < -1 {
+				s.platformIndex = len(s.platformOptions) - 1
+			}
+			m.applyFilter()
+			s.filtered = m.filtered
+			s.skills = m.allItems
+			m.table.SetRows(s.skillsToRows(m.filtered))
+		}
+		return true
+	case "l":
+		if len(s.platformOptions) > 0 {
+			s.platformIndex++
+			if s.platformIndex >= len(s.platformOptions) {
+				s.platformIndex = -1
+			}
+			m.applyFilter()
+			s.filtered = m.filtered
+			s.skills = m.allItems
+			m.table.SetRows(s.skillsToRows(m.filtered))
+		}
+		return true
+	case " ", "tab":
+		skill := s.selectedSkill(m)
+		if skill.Name != "" {
+			s.selected[deleteSkillKey(skill)] = !s.selected[deleteSkillKey(skill)]
+			m.table.SetRows(s.skillsToRows(m.filtered))
+		}
+		return true
+	case "a":
+		selectedCount := 0
+		for _, skill := range m.filtered {
+			if s.selected[deleteSkillKey(skill)] {
+				selectedCount++
+			}
+		}
+		selectAll := selectedCount < len(m.filtered)/2+1
+		for _, skill := range m.filtered {
+			s.selected[deleteSkillKey(skill)] = selectAll
+		}
+		m.table.SetRows(s.skillsToRows(m.filtered))
+		return true
+	case "enter", "v":
+		skill := s.selectedSkill(m)
+		if skill.Name != "" {
+			s.phase = deleteListPhaseDetail
+			s.detailSkill = skill
+			s.ready = false
+		}
+		return true
+	case "d":
+		selectedSkills := s.selectedSkills()
+		if len(selectedSkills) == 0 {
+			return true
+		}
+		m.result = DeleteListResult{Action: DeleteActionDelete, SelectedSkills: selectedSkills}
+		m.confirmMode = true
+		m.confirmMsg = fmt.Sprintf("⚠️  DELETE %d skill(s)? This cannot be undone! (y/n)", len(selectedSkills))
+		return true
+	}
+	return false
+}
 func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
+	if m.state != nil {
+		return m.state.skillsToRows(skills)
+	}
 	widths := m.columnWidths
 	if widths.desc == 0 {
 		widths = defaultDeleteListColumnWidths()
@@ -440,12 +866,29 @@ func (m DeleteListModel) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch m.phase {
-	case deleteListPhaseDetail:
-		return m.updateDetail(msg)
-	default:
-		return m.updateList(msg)
+	m.syncStateFromCompat()
+	if m.phase == deleteListPhaseDetail {
+		updated, cmd := m.updateDetail(msg)
+		if next, ok := updated.(DeleteListModel); ok {
+			next.syncStateFromCompat()
+			return next, cmd
+		}
+		return updated, cmd
 	}
+
+	if msg, ok := msg.(tea.KeyMsg); ok {
+		if m.state != nil && !m.filtering && !m.confirmMode && m.state.extraKeys(&m.ListModel, msg) {
+			m.syncCompatFromBase()
+			return m, nil
+		}
+	}
+
+	updated, cmd := m.ListModel.Update(msg)
+	if next, ok := updated.(ListModel[model.Skill]); ok {
+		m.ListModel = next
+	}
+	m.syncCompatFromBase()
+	return m, cmd
 }
 
 //nolint:gocyclo // interactive table/event handling is intentionally centralized here
@@ -695,85 +1138,35 @@ func (m DeleteListModel) View() string {
 	if m.quitting {
 		return ""
 	}
-
 	if m.phase == deleteListPhaseDetail {
 		return m.viewDetail()
 	}
-
-	var b strings.Builder
-
-	// Title with warning color
-	title := deleteListStyles.Title.Render("🗑️  Delete Skills")
-	b.WriteString(title)
-	b.WriteString("\n")
-
-	// Warning message
-	warning := deleteListStyles.Warning.Render("Selection marks skills for deletion. Only repo and user scope skills can be deleted.")
-	b.WriteString(warning)
-	b.WriteString("\n\n")
-
-	b.WriteString(m.renderPlatformTabs())
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := deleteListStyles.Filter.Render("Filter: ")
-		filterVal := deleteListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
+	m.syncStateFromCompat()
+	m.ListModel.filter = m.filter
+	m.ListModel.filtering = m.filtering
+	m.ListModel.showHelp = m.showHelp
+	m.ListModel.confirmMode = m.confirmMode
+	m.ListModel.confirmMsg = m.confirmMsg
+	m.ListModel.quitting = m.quitting
+	m.ListModel.width = m.width
+	m.ListModel.height = m.height
+	m.ListModel.filtered = m.filtered
+	m.ListModel.allItems = m.skills
+	m.ListModel.table = m.table
+	if m.state != nil {
+		m.state.filtered = m.filtered
+		m.state.skills = m.skills
+		m.state.selected = m.selected
+		m.state.platformOptions = m.platformOptions
+		m.state.platformIndex = m.platformIndex
+		m.state.columnWidths = m.columnWidths
+		m.state.hOffset = m.hOffset
+		m.state.phase = m.phase
+		m.state.detailSkill = m.detailSkill
+		m.state.width = m.width
+		m.state.height = m.height
 	}
-
-	// Confirmation dialog
-	if m.confirmMode {
-		selectedCount := len(m.getSelectedSkills())
-		b.WriteString(m.table.View())
-		b.WriteString("\n\n")
-		confirmMsg := fmt.Sprintf("⚠️  DELETE %d skill(s)? This cannot be undone! (y/n)", selectedCount)
-		b.WriteString(deleteListStyles.Confirm.Render(confirmMsg))
-		return b.String()
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Detail panel
-	b.WriteString(m.renderDetailPanel())
-	b.WriteString("\n")
-
-	// Status bar
-	selectedCount := len(m.getSelectedSkills())
-	status := fmt.Sprintf("%d skill(s) marked for deletion of %d", selectedCount, len(m.filtered))
-	if m.filter != "" || m.platformIndex >= 0 {
-		status = fmt.Sprintf("%d marked for deletion, %d of %d shown (filtered)", selectedCount, len(m.filtered), len(m.skills))
-	}
-	if m.hOffset > 0 || m.hOffset < deleteListMaxHOffset {
-		status += "  " + hScrollIndicator(m.hOffset, deleteListMaxHOffset)
-	}
-	b.WriteString(deleteListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	selected := m.getSelectedSkill()
-	if selected.Name != "" && selected.Description != "" {
-		descWidth := max(m.width-2, 40)
-		formatted := formatDescription(selected.Description, descWidth)
-		b.WriteString(deleteListStyles.Description.Render(formatted))
-		b.WriteString("\n")
-	}
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
+	return m.ListModel.View()
 }
 
 func (m DeleteListModel) viewDetail() string {

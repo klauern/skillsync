@@ -96,22 +96,13 @@ func defaultCompareListKeyMap() compareListKeyMap {
 
 // CompareListModel is the BubbleTea model for interactive skill comparison.
 type CompareListModel struct {
-	table        table.Model
-	hScroll      horizontalTableState
-	comparisons  []*similarity.ComparisonResult
-	filtered     []*similarity.ComparisonResult
-	keys         compareListKeyMap
-	result       CompareListResult
-	filter       string
-	filtering    bool
-	showHelp     bool
-	viewingDiff  bool
-	viewport     viewport.Model
-	width        int
-	height       int
-	quitting     bool
-	ready        bool
-	columnWidths compareListColumnWidths
+	ListModel[*similarity.ComparisonResult]
+	hScroll     horizontalTableState
+	keys        compareListKeyMap
+	result      CompareListResult
+	viewingDiff bool
+	viewport    viewport.Model
+	ready       bool
 }
 
 // Styles for the compare list TUI.
@@ -152,7 +143,7 @@ var compareListStyles = struct {
 }
 
 // NewCompareListModel creates a new compare list model from comparison results.
-func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareListModel {
+func NewCompareListModel(comparisons []*similarity.ComparisonResult) *CompareListModel {
 	columnWidths := defaultCompareListColumnWidths()
 	columns := []table.Column{
 		{Title: "Skill 1", Width: columnWidths.name},
@@ -169,43 +160,57 @@ func NewCompareListModel(comparisons []*similarity.ComparisonResult) CompareList
 		return comparisons[i].ContentScore > comparisons[j].ContentScore
 	})
 
-	m := CompareListModel{
-		comparisons: comparisons,
-		filtered:    comparisons,
-		keys:        defaultCompareListKeyMap(),
-		hScroll:     newHorizontalTableState(columns),
+	m := &CompareListModel{
+		keys:    defaultCompareListKeyMap(),
+		hScroll: newHorizontalTableState(columns),
 	}
 
-	rows := m.comparisonsToRows(comparisons)
+	m.ListModel = NewListModel(comparisons, ListConfig[*similarity.ComparisonResult]{
+		Title:   "🔍 Compare Skills - Side-by-Side Comparison",
+		Columns: columns,
+		ToRows: func(items []*similarity.ComparisonResult) []table.Row {
+			return m.comparisonsToRows(items)
+		},
+		Matches: func(item *similarity.ComparisonResult, lowerFilter string) bool {
+			if lowerFilter == "" {
+				return true
+			}
+			return strings.Contains(strings.ToLower(item.Skill1.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(item.Skill2.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(item.Skill1.Platform)), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(item.Skill2.Platform)), lowerFilter)
+		},
+		ShortHelp: func() string { return m.renderShortHelp() },
+		FullHelp:  func() string { return m.renderFullHelp() },
+		StatusText: func(filtered, total int, filter string) string {
+			status := fmt.Sprintf("Showing %d similar skill pair(s)", filtered)
+			if filter != "" {
+				status = fmt.Sprintf("%d of %d pair(s) (filtered)", filtered, total)
+			}
+			if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
+				status += " • " + scrollStatus
+			}
+			return status
+		},
+		Header: func() string {
+			return compareListStyles.Status.Render("Select a pair to view detailed comparison. Press Enter or v to view.")
+		},
+		ExtraBody: func(lm *ListModel[*similarity.ComparisonResult]) string {
+			return m.listExtraBody()
+		},
+		ExtraKeys: func(lm *ListModel[*similarity.ComparisonResult], msg tea.KeyMsg) bool {
+			return m.handleExtraKeys(msg)
+		},
+		ReservedLines: 12,
+		OnWindowSize: func(lm *ListModel[*similarity.ComparisonResult], width, height int) {
+			m.onWindowSize(width, height)
+		},
+	})
 
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
 	return m
 }
 
 func (m CompareListModel) comparisonsToRows(comparisons []*similarity.ComparisonResult) []table.Row {
-	widths := m.columnWidths
-	if widths.name == 0 {
-		widths = defaultCompareListColumnWidths()
-	}
 	rows := make([]table.Row, len(comparisons))
 	for i, c := range comparisons {
 		nameScore := "-"
@@ -237,37 +242,13 @@ func (m CompareListModel) Init() tea.Cmd {
 }
 
 // Update implements tea.Model.
-func (m CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-
-		if m.viewingDiff {
-			headerHeight := 4
-			footerHeight := 3
-			viewportHeight := max(msg.Height-headerHeight-footerHeight, 5)
-
-			if !m.ready {
-				m.viewport = viewport.New(msg.Width-2, viewportHeight)
-				m.ready = true
-			} else {
-				m.viewport.Width = msg.Width - 2
-				m.viewport.Height = viewportHeight
-			}
-		} else {
-			// Adjust table height based on window
-			newHeight := max(msg.Height-12, 5)
-			m.table.SetHeight(newHeight)
-			m.refreshTable()
-		}
-
-	case tea.KeyMsg:
-		// Handle diff viewing mode
-		if m.viewingDiff {
+func (m *CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.viewingDiff {
+		switch msg := msg.(type) {
+		case tea.WindowSizeMsg:
+			m.onWindowSize(msg.Width, msg.Height)
+			return m, nil
+		case tea.KeyMsg:
 			switch msg.String() {
 			case "b", "esc":
 				m.viewingDiff = false
@@ -280,88 +261,19 @@ func (m CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showHelp = !m.showHelp
 				return m, nil
 			}
-			// Pass other keys to viewport for scrolling
+			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
-			cmds = append(cmds, cmd)
-			return m, tea.Batch(cmds...)
+			return m, cmd
 		}
-
-		// Handle filtering mode
-		if m.filtering {
-			switch msg.String() {
-			case "enter":
-				m.filtering = false
-				return m, nil
-			case "esc":
-				m.filter = ""
-				m.filtering = false
-				m.applyFilter()
-				return m, nil
-			case "backspace":
-				if len(m.filter) > 0 {
-					m.filter = m.filter[:len(m.filter)-1]
-					m.applyFilter()
-				}
-				return m, nil
-			default:
-				if len(msg.String()) == 1 {
-					m.filter += msg.String()
-					m.applyFilter()
-				}
-				return m, nil
-			}
-		}
-
-		// Normal mode key handling
-		switch {
-		case msg.String() == "left" || msg.String() == "h":
-			if m.hScroll.MoveLeft() {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case msg.String() == "right" || msg.String() == "l":
-			if m.hScroll.MoveRight(m.width) {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Filter):
-			m.filtering = true
-			return m, nil
-
-		case key.Matches(msg, m.keys.ClearFlt):
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
-
-		case key.Matches(msg, m.keys.View):
-			if len(m.filtered) > 0 {
-				selected := m.getSelectedComparison()
-				if selected != nil {
-					m.viewingDiff = true
-					m.ready = false
-					// Initialize viewport on next size message
-					m.viewport = viewport.New(m.width-2, max(m.height-12, 10))
-					m.viewport.SetContent(m.buildDiffContent(selected))
-					m.ready = true
-				}
-			}
-			return m, nil
-		}
+		return m, nil
 	}
 
-	m.table, cmd = m.table.Update(msg)
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
+	updated, cmd := m.ListModel.Update(msg)
+	if lm, ok := updated.(ListModel[*similarity.ComparisonResult]); ok {
+		m.ListModel = lm
+	}
+	m.refreshTable()
+	return m, cmd
 }
 
 func (m *CompareListModel) refreshTable() {
@@ -369,25 +281,7 @@ func (m *CompareListModel) refreshTable() {
 }
 
 func (m *CompareListModel) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.comparisons
-	} else {
-		var filtered []*similarity.ComparisonResult
-		lowerFilter := strings.ToLower(m.filter)
-		for _, c := range m.comparisons {
-			if strings.Contains(strings.ToLower(c.Skill1.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(c.Skill2.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(c.Skill1.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(c.Skill2.Platform)), lowerFilter) {
-				filtered = append(filtered, c)
-			}
-		}
-		// Maintain sort order by content similarity descending
-		sort.Slice(filtered, func(i, j int) bool {
-			return filtered[i].ContentScore > filtered[j].ContentScore
-		})
-		m.filtered = filtered
-	}
+	m.ListModel.applyFilter()
 	m.refreshTable()
 }
 
@@ -397,6 +291,76 @@ func (m CompareListModel) getSelectedComparison() *similarity.ComparisonResult {
 		return m.filtered[cursor]
 	}
 	return nil
+}
+
+func (m *CompareListModel) handleExtraKeys(msg tea.KeyMsg) bool {
+	switch {
+	case msg.String() == "left" || msg.String() == "h":
+		if m.hScroll.MoveLeft() {
+			m.refreshTable()
+		}
+		return true
+	case msg.String() == "right" || msg.String() == "l":
+		if m.hScroll.MoveRight(m.width) {
+			m.refreshTable()
+		}
+		return true
+	case key.Matches(msg, m.keys.View):
+		if len(m.filtered) > 0 {
+			selected := m.getSelectedComparison()
+			if selected != nil {
+				m.viewingDiff = true
+				m.ready = false
+				m.viewport = viewport.New(m.width-2, max(m.height-12, 10))
+				m.viewport.SetContent(m.buildDiffContent(selected))
+				m.ready = true
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func (m CompareListModel) listExtraBody() string {
+	selected := m.getSelectedComparison()
+	if selected == nil || (selected.Skill1.Description == "" && selected.Skill2.Description == "") {
+		return ""
+	}
+
+	descWidth := max(m.width-2, 40)
+	var b strings.Builder
+	if selected.Skill1.Description != "" {
+		formatted := formatDetail("Skill 1: ", selected.Skill1.Description, descWidth)
+		b.WriteString(compareListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+	if selected.Skill2.Description != "" {
+		formatted := formatDetail("Skill 2: ", selected.Skill2.Description, descWidth)
+		b.WriteString(compareListStyles.Description.Render(formatted))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func (m *CompareListModel) onWindowSize(width, height int) {
+	if m.viewingDiff {
+		headerHeight := 4
+		footerHeight := 3
+		viewportHeight := max(height-headerHeight-footerHeight, 5)
+		if !m.ready {
+			m.viewport = viewport.New(width-2, viewportHeight)
+			if selected := m.getSelectedComparison(); selected != nil {
+				m.viewport.SetContent(m.buildDiffContent(selected))
+			}
+			m.ready = true
+		} else {
+			m.viewport.Width = width - 2
+			m.viewport.Height = viewportHeight
+		}
+		return
+	}
+	m.refreshTable()
 }
 
 func (m CompareListModel) diffContentWidth() int {
@@ -496,80 +460,14 @@ func (m CompareListModel) buildDiffContent(c *similarity.ComparisonResult) strin
 }
 
 // View implements tea.Model.
-func (m CompareListModel) View() string {
+func (m *CompareListModel) View() string {
 	if m.quitting {
 		return ""
 	}
-
-	// Diff viewing mode
 	if m.viewingDiff {
 		return m.viewDiff()
 	}
-
-	// List view mode
-	var b strings.Builder
-
-	// Title
-	title := compareListStyles.Title.Render("🔍 Compare Skills - Side-by-Side Comparison")
-	b.WriteString(title)
-	b.WriteString("\n")
-
-	// Info message
-	info := compareListStyles.Status.Render("Select a pair to view detailed comparison. Press Enter or v to view.")
-	b.WriteString(info)
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := compareListStyles.Filter.Render("Filter: ")
-		filterVal := compareListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Status bar
-	status := fmt.Sprintf("Showing %d similar skill pair(s)", len(m.filtered))
-	if m.filter != "" {
-		status = fmt.Sprintf("%d of %d pair(s) (filtered)", len(m.filtered), len(m.comparisons))
-	}
-	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
-		status += " • " + scrollStatus
-	}
-	b.WriteString(compareListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	selected := m.getSelectedComparison()
-	if selected != nil && (selected.Skill1.Description != "" || selected.Skill2.Description != "") {
-		descWidth := max(m.width-2, 40)
-		if selected.Skill1.Description != "" {
-			formatted := formatDetail("Skill 1: ", selected.Skill1.Description, descWidth)
-			b.WriteString(compareListStyles.Description.Render(formatted))
-			b.WriteString("\n")
-		}
-		if selected.Skill2.Description != "" {
-			formatted := formatDetail("Skill 2: ", selected.Skill2.Description, descWidth)
-			b.WriteString(compareListStyles.Description.Render(formatted))
-			b.WriteString("\n")
-		}
-	}
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
+	return m.ListModel.View()
 }
 
 func (m CompareListModel) viewDiff() string {
@@ -688,7 +586,7 @@ func RunCompareList(comparisons []*similarity.ComparisonResult) (CompareListResu
 		return CompareListResult{}, err
 	}
 
-	if m, ok := finalModel.(CompareListModel); ok {
+	if m, ok := finalModel.(*CompareListModel); ok {
 		return m.Result(), nil
 	}
 
