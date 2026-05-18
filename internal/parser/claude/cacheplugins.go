@@ -190,9 +190,38 @@ func (p *CachePluginsParser) parsePluginDirectory(entry *PluginIndexEntry) ([]mo
 	return skills, nil
 }
 
+// extractPluginTools returns the tool names from a parsed frontmatter map.
+// Command files use "allowed-tools"; skill files use "tools". The first key with entries wins.
+func extractPluginTools(fm map[string]any) []string {
+	for _, key := range []string{"tools", "allowed-tools"} {
+		val, ok := fm[key]
+		if !ok {
+			continue
+		}
+		var tools []string
+		switch v := val.(type) {
+		case []any:
+			tools = make([]string, 0, len(v))
+			for _, tool := range v {
+				if s, ok := tool.(string); ok {
+					tools = append(tools, s)
+				}
+			}
+		case string:
+			for _, part := range strings.Split(v, ",") {
+				if t := strings.TrimSpace(part); t != "" {
+					tools = append(tools, t)
+				}
+			}
+		}
+		if len(tools) > 0 {
+			return tools
+		}
+	}
+	return nil
+}
+
 // parseSkillFile parses a single SKILL.md file with plugin metadata.
-//
-//nolint:gocyclo // handles all Claude skill/command field combinations in one pass
 func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexEntry) (model.Skill, error) {
 	// #nosec G304 - filePath is from trusted plugin index
 	content, err := os.ReadFile(filePath)
@@ -228,29 +257,7 @@ func (p *CachePluginsParser) parseSkillFile(filePath string, entry *PluginIndexE
 			}
 		}
 
-		// Extract tools array — command files use "allowed-tools", skills use "tools".
-		for _, toolsKey := range []string{"tools", "allowed-tools"} {
-			if toolsVal, ok := fm[toolsKey]; ok {
-				switch v := toolsVal.(type) {
-				case []any:
-					tools = make([]string, 0, len(v))
-					for _, tool := range v {
-						if toolStr, ok := tool.(string); ok {
-							tools = append(tools, toolStr)
-						}
-					}
-				case string:
-					for _, part := range strings.Split(v, ",") {
-						if t := strings.TrimSpace(part); t != "" {
-							tools = append(tools, t)
-						}
-					}
-				}
-				if len(tools) > 0 {
-					break
-				}
-			}
-		}
+		tools = extractPluginTools(fm)
 
 		// Store remaining fields in metadata
 		for key, val := range fm {

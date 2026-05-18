@@ -1959,7 +1959,6 @@ func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]stri
 	return nil, nil
 }
 
-//nolint:gocyclo // intentional platform dispatch — each case is a distinct platform, refactoring would obscure intent
 func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.ScopedPath, string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -1973,48 +1972,55 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	}
 
 	if platform == model.PiDev {
-		discoveredPaths := util.GetAllSearchPaths(util.TieredPathConfig{WorkingDir: cwd, RepoRoot: repoRoot, Platform: model.PiDev})
-		paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))
-		seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
-		for _, sp := range discoveredPaths {
-			if !seen[sp.Path] {
-				paths = append(paths, sp)
-				seen[sp.Path] = true
-			}
-		}
-
-		for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
-			if !seen[p] {
-				paths = append(paths, util.ScopedPath{Path: p, Scope: inferScopeForPath(p, repoRoot)})
-				seen[p] = true
-			}
-		}
-
-		return paths, repoRoot, nil
+		return platformSkillsPathsForPiDev(rawPaths, cwd, repoRoot), repoRoot, nil
 	}
 
 	paths := scopedPathsFromStrings(resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot)
-
-	// Backward compatibility: older config files may only include .claude/skills
-	// paths and omit .claude/commands paths. Always include command paths for
-	// Claude Code so prompt artifacts can be discovered when requested.
 	if platform == model.ClaudeCode {
-		commandPaths := resolveSkillsPaths([]string{".claude/commands", "~/.claude/commands"}, cwd, repoRoot)
-		seen := make(map[string]bool, len(paths))
-		for _, p := range paths {
-			seen[p.Path] = true
-		}
-		for _, p := range commandPaths {
-			if !seen[p] {
-				paths = append(paths, util.ScopedPath{
-					Path:  p,
-					Scope: inferScopeForPath(p, repoRoot),
-				})
-			}
-		}
+		paths = appendClaudeCodeCommandPaths(paths, cwd, repoRoot)
 	}
 
 	return paths, repoRoot, nil
+}
+
+func platformSkillsPathsForPiDev(rawPaths []string, cwd, repoRoot string) []util.ScopedPath {
+	discoveredPaths := util.GetAllSearchPaths(util.TieredPathConfig{WorkingDir: cwd, RepoRoot: repoRoot, Platform: model.PiDev})
+	paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))
+	seen := make(map[string]bool, len(discoveredPaths)+len(rawPaths))
+
+	appendScopedPath := func(sp util.ScopedPath) {
+		if !seen[sp.Path] {
+			paths = append(paths, sp)
+			seen[sp.Path] = true
+		}
+	}
+
+	for _, sp := range discoveredPaths {
+		appendScopedPath(sp)
+	}
+
+	for _, p := range resolveSkillsPaths(rawPaths, cwd, repoRoot) {
+		appendScopedPath(util.ScopedPath{Path: p, Scope: inferScopeForPath(p, repoRoot)})
+	}
+
+	return paths
+}
+
+func appendClaudeCodeCommandPaths(paths []util.ScopedPath, cwd, repoRoot string) []util.ScopedPath {
+	commandPaths := resolveSkillsPaths([]string{".claude/commands", "~/.claude/commands"}, cwd, repoRoot)
+	seen := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		seen[p.Path] = true
+	}
+	for _, p := range commandPaths {
+		if !seen[p] {
+			paths = append(paths, util.ScopedPath{
+				Path:  p,
+				Scope: inferScopeForPath(p, repoRoot),
+			})
+		}
+	}
+	return paths
 }
 
 func resolveSkillsPaths(rawPaths []string, cwd, repoRoot string) []string {
