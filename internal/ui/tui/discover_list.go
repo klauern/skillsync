@@ -34,128 +34,11 @@ type DiscoverListResult struct {
 	Skill  model.Skill
 }
 
-// discoverListKeyMap defines the key bindings for the discover list.
-type discoverListKeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
-	Detail   key.Binding
-	Open     key.Binding
-	Copy     key.Binding
-	Filter   key.Binding
-	ClearFlt key.Binding
-	NextPlat key.Binding
-	PrevPlat key.Binding
-	Help     key.Binding
-	Back     key.Binding
-	Quit     key.Binding
-}
-
-func defaultDiscoverListKeyMap() discoverListKeyMap {
-	return discoverListKeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
-		),
-		Detail: key.NewBinding(
-			key.WithKeys("enter", "v"),
-			key.WithHelp("enter/v", "details"),
-		),
-		Open: key.NewBinding(
-			key.WithKeys("o"),
-			key.WithHelp("o", "open"),
-		),
-		Copy: key.NewBinding(
-			key.WithKeys("c"),
-			key.WithHelp("c", "copy path"),
-		),
-		Filter: key.NewBinding(
-			key.WithKeys("/"),
-			key.WithHelp("/", "filter"),
-		),
-		ClearFlt: key.NewBinding(
-			key.WithKeys("esc"),
-			key.WithHelp("esc", "clear filter"),
-		),
-		NextPlat: key.NewBinding(
-			key.WithKeys("tab", "l"),
-			key.WithHelp("tab/l", "next platform"),
-		),
-		PrevPlat: key.NewBinding(
-			key.WithKeys("shift+tab", "h"),
-			key.WithHelp("S-tab/h", "prev platform"),
-		),
-		Help: key.NewBinding(
-			key.WithKeys("?"),
-			key.WithHelp("?", "help"),
-		),
-		Back: key.NewBinding(
-			key.WithKeys("b", "esc"),
-			key.WithHelp("b/esc", "back"),
-		),
-		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
-			key.WithHelp("q", "quit"),
-		),
-	}
-}
-
 type discoverListColumnWidths struct {
 	name     int
 	platform int
 	scope    int
 	desc     int
-}
-
-// DiscoverListModel is the BubbleTea model for interactive skill discovery.
-type DiscoverListModel struct {
-	table           table.Model
-	hScroll         horizontalTableState
-	skills          []model.Skill
-	filtered        []model.Skill
-	keys            discoverListKeyMap
-	result          DiscoverListResult
-	filter          string
-	filtering       bool
-	platformOptions []model.Platform
-	platformIndex   int // Index into platformOptions (-1 = all)
-	showHelp        bool
-	width           int
-	height          int
-	columnWidths    discoverListColumnWidths
-	phase           discoverListPhase
-	detailSkill     model.Skill
-	viewport        viewport.Model
-	ready           bool
-	quitting        bool
-}
-
-// Styles for the discover list TUI.
-var discoverListStyles = struct {
-	Title          lipgloss.Style
-	Help           lipgloss.Style
-	Filter         lipgloss.Style
-	FilterInput    lipgloss.Style
-	Status         lipgloss.Style
-	DetailBox      lipgloss.Style
-	DetailTitle    lipgloss.Style
-	PlatformTab    lipgloss.Style
-	PlatformActive lipgloss.Style
-	Description    lipgloss.Style
-}{
-	Title:          lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(0, 1),
-	Help:           lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
-	Filter:         lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	FilterInput:    lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
-	Status:         lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	DetailBox:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
-	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
-	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
-	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
-	Description:    lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
 type discoverListPhase int
@@ -173,80 +56,252 @@ const (
 	discoverListColumnPadding = 2
 	discoverListColumnCount   = 4
 	discoverListDetailLines   = 3
-	discoverListDetailGap     = 1
 	discoverListDetailHeight  = discoverListDetailLines + 1 + 2 // title + content + border
 )
 
-// NewDiscoverListModel creates a new discover list model.
-func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
-	columns, columnWidths := discoverListColumns(0, skills)
-
-	// Collect unique platforms from skills
-	platformSet := make(map[model.Platform]bool)
-	for _, s := range skills {
-		platformSet[s.Platform] = true
-	}
-
-	// Build platform options in precedence order
-	platformOptions := []model.Platform{}
-	for _, platform := range model.AllPlatforms() {
-		if platformSet[platform] {
-			platformOptions = append(platformOptions, platform)
-		}
-	}
-
-	// Sort skills alphabetically by name (case-insensitive)
-	sort.Slice(skills, func(i, j int) bool {
-		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
-	})
-
-	m := DiscoverListModel{
-		skills:          skills,
-		filtered:        skills,
-		keys:            defaultDiscoverListKeyMap(),
-		columnWidths:    columnWidths,
-		phase:           discoverListPhaseList,
-		hScroll:         newHorizontalTableState(columns),
-		platformOptions: platformOptions,
-		platformIndex:   -1, // -1 means "all"
-	}
-
-	rows := m.skillsToRows(skills)
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	m.table = t
-	return m
+// Discover-screen styles beyond the shared listStyles.
+var discoverExtraStyles = struct {
+	DetailBox      lipgloss.Style
+	DetailTitle    lipgloss.Style
+	PlatformTab    lipgloss.Style
+	PlatformActive lipgloss.Style
+	Description    lipgloss.Style
+}{
+	DetailBox:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1),
+	DetailTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")),
+	PlatformTab:    lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Padding(0, 1),
+	PlatformActive: lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true).Padding(0, 1),
+	Description:    lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
-func (m DiscoverListModel) skillsToRows(skills []model.Skill) []table.Row {
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		rows[i] = table.Row{
-			truncateTableValue(s.Name, m.columnWidths.name),
-			truncateTableValue(string(s.Platform), m.columnWidths.platform),
-			truncateTableValue(s.DisplayScope(), m.columnWidths.scope),
-			truncateTableValue(s.Description, m.columnWidths.desc),
+type discoverListState struct {
+	platformOptions []model.Platform
+	platformIndex   int
+	columnWidths    discoverListColumnWidths
+	hScroll         horizontalTableState
+	lastWidth       int
+	phase           discoverListPhase
+	detailSkill     model.Skill
+	vp              viewport.Model
+	vpReady         bool
+}
+
+func (s *discoverListState) refresh(m *ListModel[model.Skill]) {
+	columns, widths := discoverListColumns(m.width, m.allItems)
+	s.columnWidths = widths
+	s.lastWidth = m.width
+	s.hScroll.SetColumns(columns)
+	s.hScroll.Apply(&m.table, m.width, m.cfg.ToRows(m.filtered))
+}
+
+func (s *discoverListState) renderPlatformTabs() string {
+	var tabs []string
+	if s.platformIndex == -1 {
+		tabs = append(tabs, discoverExtraStyles.PlatformActive.Render("[All]"))
+	} else {
+		tabs = append(tabs, discoverExtraStyles.PlatformTab.Render(" All "))
+	}
+	for i, platform := range s.platformOptions {
+		if i == s.platformIndex {
+			tabs = append(tabs, discoverExtraStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
+		} else {
+			tabs = append(tabs, discoverExtraStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
 		}
 	}
-	return rows
+	return strings.Join(tabs, "")
+}
+
+func (s *discoverListState) detailPanel(m *ListModel[model.Skill]) string {
+	width := m.width
+	if width <= 0 {
+		width = discoverListNameWidth + discoverListPlatformWidth + discoverListScopeWidth + discoverListDescWidth +
+			(discoverListColumnPadding * discoverListColumnCount)
+	}
+	contentWidth := max(width-4, 10)
+	skill := discoverSelectedSkill(m)
+	description := strings.TrimSpace(skill.Description)
+	if description == "" {
+		description = "No description available."
+	}
+	lines := wrapText(description, contentWidth, discoverListDetailLines)
+	lines = padLines(lines, discoverListDetailLines)
+	header := discoverExtraStyles.DetailTitle.Render("Description (selected)")
+	content := append([]string{header}, lines...)
+	return discoverExtraStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
+}
+
+func (s *discoverListState) ensureViewport(width, height int) {
+	if width <= 0 || height <= 0 {
+		return
+	}
+	headerHeight := 4
+	footerHeight := 4
+	vpHeight := max(height-headerHeight-footerHeight, 5)
+	if !s.vpReady {
+		s.vp = viewport.New(width-2, vpHeight)
+		s.vpReady = true
+		return
+	}
+	s.vp.Width = width - 2
+	s.vp.Height = vpHeight
+}
+
+// DiscoverListModel is the BubbleTea model for interactive skill discovery.
+type DiscoverListModel struct {
+	ListModel[model.Skill]
+	state       *discoverListState
+	// Deprecated compatibility fields kept for existing tests and callers.
+	skills      []model.Skill
+	detailSkill model.Skill
+}
+
+// Update implements tea.Model.
+func (m DiscoverListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.state.phase == discoverListPhaseDetail {
+		return m.updateDetail(msg)
+	}
+	inner, cmd := m.ListModel.Update(msg)
+	m.ListModel = inner.(ListModel[model.Skill])
+	// Re-apply hScroll projection after every base update (base.applyFilter sets rows
+	// without going through hScroll.Apply, which would leave row/column counts mismatched).
+	if m.width > 0 {
+		m.state.refresh(&m.ListModel)
+	}
+	return m, cmd
+}
+
+// View implements tea.Model.
+func (m DiscoverListModel) View() string {
+	if m.state.phase == discoverListPhaseDetail {
+		return m.viewDetail()
+	}
+	return m.ListModel.View()
+}
+
+// Result returns the result of the user interaction.
+func (m DiscoverListModel) Result() DiscoverListResult {
+	if r, ok := m.result.(DiscoverListResult); ok {
+		return r
+	}
+	return DiscoverListResult{}
+}
+
+func (m DiscoverListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	backKey := key.NewBinding(key.WithKeys("b", "esc"))
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.state.ensureViewport(m.width, m.height)
+		if m.state.vpReady {
+			m.state.vp.SetContent(m.buildDetailContent(m.state.vp.Width))
+		}
+
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keys.Quit):
+			m.quitting = true
+			return m, tea.Quit
+		case key.Matches(msg, m.keys.Help):
+			m.showHelp = !m.showHelp
+			return m, nil
+		case key.Matches(msg, backKey):
+			m.state.phase = discoverListPhaseList
+			return m, nil
+		}
+	}
+
+	m.state.vp, cmd = m.state.vp.Update(msg)
+	return m, cmd
+}
+
+func (m DiscoverListModel) viewDetail() string {
+	m.state.ensureViewport(m.width, m.height)
+	if !m.state.vpReady {
+		return "Loading..."
+	}
+	m.state.vp.SetContent(m.buildDetailContent(m.state.vp.Width))
+
+	var b strings.Builder
+	detailSkill := m.detailSkill
+	if detailSkill.Name == "" {
+		detailSkill = m.state.detailSkill
+	}
+	b.WriteString(listStyles.Title.Render(fmt.Sprintf("🔍 Skill Details: %s", detailSkill.Name)))
+	b.WriteString("\n\n")
+	b.WriteString(m.state.vp.View())
+	b.WriteString("\n")
+	b.WriteString(listStyles.Status.Render(fmt.Sprintf("Scroll: %d%% • Press b or Esc to go back",
+		int(m.state.vp.ScrollPercent()*100))))
+	b.WriteString("\n")
+	if m.showHelp {
+		b.WriteString("\n")
+		b.WriteString(listStyles.Help.Render(discoverDetailFullHelp))
+	} else {
+		b.WriteString(listStyles.Help.Render("↑/↓ scroll • b back • ? help • q quit"))
+	}
+	return b.String()
+}
+
+const discoverDetailFullHelp = `Navigation:
+  ↑/k      Scroll up
+  ↓/j      Scroll down
+  g/Home   Top
+  G/End    Bottom
+
+Actions:
+  b/Esc    Back to list
+
+General:
+  ?        Toggle full help
+  q        Quit`
+
+func (m DiscoverListModel) buildDetailContent(width int) string {
+	var b strings.Builder
+	skill := m.detailSkill
+	if skill.Name == "" {
+		skill = m.state.detailSkill
+	}
+	if skill.Name == "" {
+		return "No skill selected."
+	}
+	indent := "  "
+	b.WriteString(discoverExtraStyles.DetailTitle.Render("Skill"))
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "%sName: %s\n", indent, skill.Name)
+	fmt.Fprintf(&b, "%sPlatform: %s\n", indent, skill.Platform)
+	fmt.Fprintf(&b, "%sScope: %s\n", indent, skill.DisplayScope())
+	if skill.Path != "" {
+		fmt.Fprintf(&b, "%sPath: %s\n", indent, skill.Path)
+	}
+	if len(skill.Tools) > 0 {
+		fmt.Fprintf(&b, "%sTools: %s\n", indent, strings.Join(skill.Tools, ", "))
+	}
+	b.WriteString("\n")
+	b.WriteString(discoverExtraStyles.DetailTitle.Render("Description"))
+	b.WriteString("\n")
+	description := strings.TrimSpace(skill.Description)
+	if description == "" {
+		description = "No description available."
+	}
+	b.WriteString(lipgloss.NewStyle().Width(max(width, 10)).Render(description))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func discoverSelectedSkill(m *ListModel[model.Skill]) model.Skill {
+	cursor := m.table.Cursor()
+	if cursor >= 0 && cursor < len(m.filtered) {
+		return m.filtered[cursor]
+	}
+	return model.Skill{}
+}
+
+// skillsToRows is kept for test compatibility.
+func (m DiscoverListModel) skillsToRows(skills []model.Skill) []table.Row {
+	return m.cfg.ToRows(skills)
 }
 
 func discoverListColumns(totalWidth int, skills []model.Skill) ([]table.Column, discoverListColumnWidths) {
@@ -264,19 +319,16 @@ func discoverListColumns(totalWidth int, skills []model.Skill) ([]table.Column, 
 		if extra > 0 {
 			maxScopeWidth := widths.scope
 			for _, skill := range skills {
-				scopeWidth := runewidth.StringWidth(skill.DisplayScope())
-				if scopeWidth > maxScopeWidth {
-					maxScopeWidth = scopeWidth
+				if w := runewidth.StringWidth(skill.DisplayScope()); w > maxScopeWidth {
+					maxScopeWidth = w
 				}
 			}
-
 			scopeNeeded := maxScopeWidth - widths.scope
 			if scopeNeeded > 0 {
 				scopeExtra := min(scopeNeeded, extra)
 				widths.scope += scopeExtra
 				extra -= scopeExtra
 			}
-
 			nameExtra := extra / 3
 			descExtra := extra - nameExtra
 			widths.name += nameExtra
@@ -290,470 +342,99 @@ func discoverListColumns(totalWidth int, skills []model.Skill) ([]table.Column, 
 		{Title: "Scope", Width: widths.scope},
 		{Title: "Description", Width: widths.desc},
 	}
-
 	return columns, widths
 }
 
-func (m *DiscoverListModel) updateColumns(totalWidth int) {
-	columns, widths := discoverListColumns(totalWidth, m.skills)
-	m.columnWidths = widths
-	m.hScroll.SetColumns(columns)
-	m.refreshTable()
-}
+// NewDiscoverListModel creates a new discover list model.
+func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
+	sort.Slice(skills, func(i, j int) bool {
+		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
+	})
 
-func (m *DiscoverListModel) refreshTable() {
-	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
-}
-
-func (m DiscoverListModel) detailPanelWidth() int {
-	if m.width > 0 {
-		return m.width
+	platformSet := make(map[model.Platform]bool)
+	for _, s := range skills {
+		platformSet[s.Platform] = true
 	}
-	return m.columnWidths.name + m.columnWidths.platform + m.columnWidths.scope + m.columnWidths.desc +
-		(discoverListColumnPadding * discoverListColumnCount)
-}
-
-func (m DiscoverListModel) renderDetailPanel() string {
-	width := m.detailPanelWidth()
-	contentWidth := max(width-4, 10)
-
-	skill := m.getSelectedSkill()
-	description := strings.TrimSpace(skill.Description)
-	if description == "" {
-		description = "No description available."
+	var platformOptions []model.Platform
+	for _, p := range model.AllPlatforms() {
+		if platformSet[p] {
+			platformOptions = append(platformOptions, p)
+		}
 	}
 
-	lines := wrapText(description, contentWidth, discoverListDetailLines)
-	lines = padLines(lines, discoverListDetailLines)
-
-	header := discoverListStyles.DetailTitle.Render("Description (selected)")
-	content := append([]string{header}, lines...)
-
-	return discoverListStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
-}
-
-// Init implements tea.Model.
-func (m DiscoverListModel) Init() tea.Cmd {
-	return nil
-}
-
-// Update implements tea.Model.
-func (m DiscoverListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch m.phase {
-	case discoverListPhaseDetail:
-		return m.updateDetail(msg)
-	default:
-		return m.updateList(msg)
+	columns, columnWidths := discoverListColumns(0, skills)
+	state := &discoverListState{
+		platformOptions: platformOptions,
+		platformIndex:   -1,
+		columnWidths:    columnWidths,
+		hScroll:         newHorizontalTableState(columns),
 	}
-}
 
-//nolint:gocyclo // TUI message dispatch — each msg type is a distinct UI event
-func (m DiscoverListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	detailKey := key.NewBinding(key.WithKeys("enter", "v"), key.WithHelp("enter/v", "details"))
+	openKey := key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open"))
+	copyKey := key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy path"))
+	nextPlatKey := key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab/S-tab", "platform"))
+	prevPlatKey := key.NewBinding(key.WithKeys("shift+tab"))
 
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		// Adjust table height based on window
-		newHeight := max(msg.Height-10-discoverListDetailHeight-discoverListDetailGap, 5) // Reserve space for title, help, status, detail
-		m.table.SetHeight(newHeight)
-		m.updateColumns(msg.Width)
-
-	case tea.KeyMsg:
-		// Handle filtering mode
-		if m.filtering {
-			switch msg.String() {
-			case "enter":
-				m.filtering = false
-				return m, nil
-			case "esc":
-				m.filter = ""
-				m.filtering = false
-				m.applyFilter()
-				return m, nil
-			case "backspace":
-				if len(m.filter) > 0 {
-					m.filter = m.filter[:len(m.filter)-1]
-					m.applyFilter()
+	cfg := ListConfig[model.Skill]{
+		Title:   "🔍 Skillsync Skills",
+		Columns: columns,
+		ToRows: func(items []model.Skill) []table.Row {
+			rows := make([]table.Row, len(items))
+			for i, s := range items {
+				rows[i] = table.Row{
+					truncateTableValue(s.Name, state.columnWidths.name),
+					truncateTableValue(string(s.Platform), state.columnWidths.platform),
+					truncateTableValue(s.DisplayScope(), state.columnWidths.scope),
+					truncateTableValue(s.Description, state.columnWidths.desc),
 				}
-				return m, nil
-			default:
-				if len(msg.String()) == 1 {
-					m.filter += msg.String()
-					m.applyFilter()
+			}
+			return rows
+		},
+		Matches: func(skill model.Skill, lowerFilter string) bool {
+			if state.platformIndex >= 0 && state.platformIndex < len(state.platformOptions) {
+				if skill.Platform != state.platformOptions[state.platformIndex] {
+					return false
 				}
-				return m, nil
 			}
-		}
-
-		// Normal mode key handling
-		switch {
-		case msg.String() == "left" || msg.String() == "h":
-			if m.hScroll.MoveLeft() {
-				m.refreshTable()
+			if lowerFilter == "" {
+				return true
 			}
-			return m, nil
-
-		case msg.String() == "right" || msg.String() == "l":
-			if m.hScroll.MoveRight(m.width) {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Filter):
-			m.filtering = true
-			return m, nil
-
-		case key.Matches(msg, m.keys.ClearFlt):
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
-
-		case key.Matches(msg, m.keys.NextPlat):
-			if len(m.platformOptions) > 0 {
-				m.platformIndex++
-				if m.platformIndex >= len(m.platformOptions) {
-					m.platformIndex = -1 // Wrap to "all"
-				}
-				m.applyFilter()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.PrevPlat):
-			if len(m.platformOptions) > 0 {
-				m.platformIndex--
-				if m.platformIndex < -1 {
-					m.platformIndex = len(m.platformOptions) - 1 // Wrap to last platform
-				}
-				m.applyFilter()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Detail):
-			if len(m.filtered) > 0 {
-				m.detailSkill = m.getSelectedSkill()
-				m.phase = discoverListPhaseDetail
-				m.ready = false
-				m.ensureDetailViewport()
-				return m, nil
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Open):
-			if len(m.filtered) > 0 {
-				selected := m.getSelectedSkill()
-				m.result = DiscoverListResult{
-					Action: DiscoverActionView,
-					Skill:  selected,
-				}
-				m.quitting = true
-				return m, tea.Quit
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Copy):
-			if len(m.filtered) > 0 {
-				selected := m.getSelectedSkill()
-				m.result = DiscoverListResult{
-					Action: DiscoverActionCopy,
-					Skill:  selected,
-				}
-				m.quitting = true
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-	}
-
-	m.table, cmd = m.table.Update(msg)
-	return m, cmd
-}
-
-func (m DiscoverListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.ensureDetailViewport()
-
-	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Back):
-			m.phase = discoverListPhaseList
-			return m, nil
-		}
-	}
-
-	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
-}
-
-func (m *DiscoverListModel) applyFilter() {
-	// Start with all skills
-	filtered := m.skills
-
-	// Apply platform filter if not "all"
-	if m.platformIndex >= 0 && m.platformIndex < len(m.platformOptions) {
-		selectedPlatform := m.platformOptions[m.platformIndex]
-		var platformFiltered []model.Skill
-		for _, s := range filtered {
-			if s.Platform == selectedPlatform {
-				platformFiltered = append(platformFiltered, s)
-			}
-		}
-		filtered = platformFiltered
-	}
-
-	// Apply text filter
-	if m.filter != "" {
-		var textFiltered []model.Skill
-		lowerFilter := strings.ToLower(m.filter)
-		for _, s := range filtered {
-			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
-				textFiltered = append(textFiltered, s)
-			}
-		}
-		filtered = textFiltered
-	}
-
-	m.filtered = filtered
-	m.refreshTable()
-}
-
-func (m DiscoverListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
-// View implements tea.Model.
-func (m DiscoverListModel) View() string {
-	if m.quitting {
-		return ""
-	}
-
-	if m.phase == discoverListPhaseDetail {
-		return m.viewDetail()
-	}
-
-	var b strings.Builder
-
-	// Title
-	title := discoverListStyles.Title.Render("🔍 Skillsync Skills")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	// Platform tabs
-	b.WriteString(m.renderPlatformTabs())
-	b.WriteString("\n\n")
-
-	// Filter indicator
-	if m.filter != "" || m.filtering {
-		filterStr := discoverListStyles.Filter.Render("Filter: ")
-		filterVal := discoverListStyles.FilterInput.Render(m.filter)
-		if m.filtering {
-			filterVal += "█"
-		}
-		b.WriteString(filterStr + filterVal + "\n\n")
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Detail panel
-	b.WriteString(m.renderDetailPanel())
-	b.WriteString("\n")
-
-	// Status bar
-	status := fmt.Sprintf("%d skill(s)", len(m.filtered))
-	if m.filter != "" {
-		status = fmt.Sprintf("%d of %d skill(s) (filtered)", len(m.filtered), len(m.skills))
-	}
-	if scrollStatus := m.hScroll.Summary(m.width); scrollStatus != "" {
-		status += " • " + scrollStatus
-	}
-	b.WriteString(discoverListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	selected := m.getSelectedSkill()
-	if selected.Name != "" && selected.Description != "" {
-		descWidth := max(m.width-2, 40)
-		formatted := formatDescription(selected.Description, descWidth)
-		b.WriteString(discoverListStyles.Description.Render(formatted))
-		b.WriteString("\n")
-	}
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
-}
-
-func (m DiscoverListModel) viewDetail() string {
-	m.ensureDetailViewport()
-	if !m.ready {
-		return "Loading..."
-	}
-
-	var b strings.Builder
-
-	title := discoverListStyles.Title.Render(fmt.Sprintf("🔍 Skill Details: %s", m.detailSkill.Name))
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	b.WriteString(m.viewport.View())
-	b.WriteString("\n")
-
-	scrollPercent := int(m.viewport.ScrollPercent() * 100)
-	status := fmt.Sprintf("Scroll: %d%% • Press b or Esc to go back", scrollPercent)
-	b.WriteString(discoverListStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	if m.showHelp {
-		b.WriteString("\n")
-		b.WriteString(m.renderDetailHelp())
-	} else {
-		keys := []string{
-			"↑/↓ scroll",
-			"b back",
-			"? help",
-			"q quit",
-		}
-		b.WriteString(discoverListStyles.Help.Render(strings.Join(keys, " • ")))
-	}
-
-	return b.String()
-}
-
-func (m *DiscoverListModel) ensureDetailViewport() {
-	if m.width <= 0 || m.height <= 0 {
-		return
-	}
-
-	headerHeight := 4
-	footerHeight := 4
-	viewportHeight := max(m.height-headerHeight-footerHeight, 5)
-
-	if !m.ready {
-		m.viewport = viewport.New(m.width-2, viewportHeight)
-		m.viewport.SetContent(m.buildDetailContent(m.viewport.Width))
-		m.ready = true
-		return
-	}
-
-	m.viewport.Width = m.width - 2
-	m.viewport.Height = viewportHeight
-	m.viewport.SetContent(m.buildDetailContent(m.viewport.Width))
-}
-
-func (m DiscoverListModel) buildDetailContent(width int) string {
-	var b strings.Builder
-
-	skill := m.detailSkill
-	if skill.Name == "" {
-		return "No skill selected."
-	}
-
-	wrappedWidth := max(width, 10)
-	indent := "  "
-
-	b.WriteString(discoverListStyles.DetailTitle.Render("Skill"))
-	b.WriteString("\n")
-	fmt.Fprintf(&b, "%sName: %s\n", indent, skill.Name)
-	fmt.Fprintf(&b, "%sPlatform: %s\n", indent, skill.Platform)
-	fmt.Fprintf(&b, "%sScope: %s\n", indent, skill.DisplayScope())
-	if skill.Path != "" {
-		fmt.Fprintf(&b, "%sPath: %s\n", indent, skill.Path)
-	}
-	if len(skill.Tools) > 0 {
-		fmt.Fprintf(&b, "%sTools: %s\n", indent, strings.Join(skill.Tools, ", "))
-	}
-
-	b.WriteString("\n")
-	b.WriteString(discoverListStyles.DetailTitle.Render("Description"))
-	b.WriteString("\n")
-
-	description := strings.TrimSpace(skill.Description)
-	if description == "" {
-		description = "No description available."
-	}
-	b.WriteString(lipgloss.NewStyle().Width(wrappedWidth).Render(description))
-	b.WriteString("\n")
-
-	return b.String()
-}
-
-func (m DiscoverListModel) renderPlatformTabs() string {
-	var tabs []string
-
-	// "All" tab
-	if m.platformIndex == -1 {
-		tabs = append(tabs, discoverListStyles.PlatformActive.Render("[All]"))
-	} else {
-		tabs = append(tabs, discoverListStyles.PlatformTab.Render(" All "))
-	}
-
-	// Individual platform tabs
-	for i, platform := range m.platformOptions {
-		if i == m.platformIndex {
-			tabs = append(tabs, discoverListStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
-		} else {
-			tabs = append(tabs, discoverListStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
-		}
-	}
-
-	return strings.Join(tabs, "")
-}
-
-func (m DiscoverListModel) renderShortHelp() string {
-	keys := []string{
-		"↑/↓ navigate",
-		"←/→ columns",
-		"tab/S-tab platform",
-		"enter details",
-		"o open",
-		"c copy path",
-		"/ filter",
-		"? help",
-		"q quit",
-	}
-	return discoverListStyles.Help.Render(strings.Join(keys, " • "))
-}
-
-func (m DiscoverListModel) renderFullHelp() string {
-	help := `Navigation:
+			return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
+				strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
+				strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
+				strings.Contains(strings.ToLower(skill.Description), lowerFilter)
+		},
+		ReservedLines: 17,
+		Actions: []ActionBinding[model.Skill]{
+			{
+				Binding: openKey,
+				Apply: func(skill model.Skill) any {
+					return DiscoverListResult{Action: DiscoverActionView, Skill: skill}
+				},
+			},
+			{
+				Binding: copyKey,
+				Apply: func(skill model.Skill) any {
+					return DiscoverListResult{Action: DiscoverActionCopy, Skill: skill}
+				},
+			},
+		},
+		ShortHelp: func() string {
+			return strings.Join([]string{
+				"↑/↓ navigate",
+				"←/→ columns",
+				"tab/S-tab platform",
+				"enter details",
+				"o open",
+				"c copy path",
+				"/ filter",
+				"? help",
+				"q quit",
+			}, " • ")
+		},
+		FullHelp: func() string {
+			return `Navigation:
   ↑/k      Move up
   ↓/j      Move down
   ←/h      Show previous columns
@@ -778,28 +459,87 @@ Filter:
 General:
   ?        Toggle full help
   q        Quit`
-	return discoverListStyles.Help.Render(help)
-}
+		},
+		StatusText: func(filtered, total int, filter string) string {
+			status := fmt.Sprintf("%d skill(s)", filtered)
+			if filter != "" {
+				status = fmt.Sprintf("%d of %d skill(s) (filtered)", filtered, total)
+			}
+			if scrollStatus := state.hScroll.Summary(state.lastWidth); scrollStatus != "" {
+				status += " • " + scrollStatus
+			}
+			return status
+		},
+		Header: func() string {
+			return state.renderPlatformTabs()
+		},
+		ExtraBody: func(m *ListModel[model.Skill]) string {
+			var b strings.Builder
+			b.WriteString(state.detailPanel(m))
+			b.WriteString("\n")
+			selected := discoverSelectedSkill(m)
+			if selected.Name != "" && selected.Description != "" {
+				descWidth := max(m.width-2, 40)
+				b.WriteString(discoverExtraStyles.Description.Render(formatDescription(selected.Description, descWidth)))
+				b.WriteString("\n")
+			}
+			return b.String()
+		},
+		ExtraKeys: func(m *ListModel[model.Skill], msg tea.KeyMsg) bool {
+			switch {
+			case msg.String() == "left" || msg.String() == "h":
+				if state.hScroll.MoveLeft() {
+					state.refresh(m)
+				}
+				return true
+			case msg.String() == "right" || msg.String() == "l":
+				if state.hScroll.MoveRight(m.width) {
+					state.refresh(m)
+				}
+				return true
+			case key.Matches(msg, nextPlatKey):
+				if len(state.platformOptions) > 0 {
+					state.platformIndex++
+					if state.platformIndex >= len(state.platformOptions) {
+						state.platformIndex = -1
+					}
+					m.applyFilter()
+					state.refresh(m)
+				}
+				return true
+			case key.Matches(msg, prevPlatKey):
+				if len(state.platformOptions) > 0 {
+					state.platformIndex--
+					if state.platformIndex < -1 {
+						state.platformIndex = len(state.platformOptions) - 1
+					}
+					m.applyFilter()
+					state.refresh(m)
+				}
+				return true
+			case key.Matches(msg, detailKey):
+				if len(m.filtered) > 0 {
+					state.detailSkill = discoverSelectedSkill(m)
+					state.phase = discoverListPhaseDetail
+					state.vpReady = false
+					state.ensureViewport(m.width, m.height)
+				}
+				return true
+			}
+			return false
+		},
+		OnWindowSize: func(m *ListModel[model.Skill], width, _ int) {
+			state.refresh(m)
+		},
+	}
 
-func (m DiscoverListModel) renderDetailHelp() string {
-	help := `Navigation:
-  ↑/k      Scroll up
-  ↓/j      Scroll down
-  g/Home   Top
-  G/End    Bottom
-
-Actions:
-  b/Esc    Back to list
-
-General:
-  ?        Toggle full help
-  q        Quit`
-	return discoverListStyles.Help.Render(help)
-}
-
-// Result returns the result of the user interaction.
-func (m DiscoverListModel) Result() DiscoverListResult {
-	return m.result
+	mdl := DiscoverListModel{
+		ListModel: NewListModel(skills, cfg),
+		state:     state,
+		skills:    skills,
+	}
+	state.refresh(&mdl.ListModel)
+	return mdl
 }
 
 // RunDiscoverList runs the interactive discover list and returns the result.
@@ -808,8 +548,8 @@ func RunDiscoverList(skills []model.Skill) (DiscoverListResult, error) {
 		return DiscoverListResult{}, nil
 	}
 
-	model := NewDiscoverListModel(skills)
-	finalModel, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
+	mdl := NewDiscoverListModel(skills)
+	finalModel, err := tea.NewProgram(mdl, tea.WithAltScreen()).Run()
 	if err != nil {
 		return DiscoverListResult{}, err
 	}
@@ -817,6 +557,5 @@ func RunDiscoverList(skills []model.Skill) (DiscoverListResult, error) {
 	if m, ok := finalModel.(DiscoverListModel); ok {
 		return m.Result(), nil
 	}
-
 	return DiscoverListResult{}, nil
 }
