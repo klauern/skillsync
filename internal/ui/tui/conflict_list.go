@@ -50,8 +50,6 @@ const (
 
 // conflictKeyMap defines the key bindings for conflict resolution.
 type conflictKeyMap struct {
-	Up       key.Binding
-	Down     key.Binding
 	Select   key.Binding
 	Source   key.Binding
 	Target   key.Binding
@@ -67,14 +65,6 @@ type conflictKeyMap struct {
 
 func defaultConflictKeyMap() conflictKeyMap {
 	return conflictKeyMap{
-		Up: key.NewBinding(
-			key.WithKeys("up", "k"),
-			key.WithHelp("↑/k", "up"),
-		),
-		Down: key.NewBinding(
-			key.WithKeys("down", "j"),
-			key.WithHelp("↓/j", "down"),
-		),
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "view details"),
@@ -124,20 +114,14 @@ func defaultConflictKeyMap() conflictKeyMap {
 
 // ConflictListModel is the BubbleTea model for conflict resolution.
 type ConflictListModel struct {
-	conflicts   []*sync.Conflict
+	ListModel[*sync.Conflict]
 	resolutions map[string]sync.ResolutionChoice
-	table       table.Model
 	viewport    viewport.Model
 	keys        conflictKeyMap
-	result      ConflictListResult
 	phase       conflictPhase
 	cursor      int
-	showHelp    bool
-	confirmMode bool
-	width       int
-	height      int
-	quitting    bool
-	ready       bool
+	detail      *sync.Conflict
+	detailReady bool
 }
 
 // Styles for the conflict resolution TUI.
@@ -198,50 +182,96 @@ func formatConflictContentWithLineNumbers(content string, style lipgloss.Style) 
 func NewConflictListModel(conflicts []*sync.Conflict) ConflictListModel {
 	resolutions := make(map[string]sync.ResolutionChoice)
 
-	// Sort conflicts alphabetically by skill name (case-insensitive)
 	sort.Slice(conflicts, func(i, j int) bool {
 		return strings.ToLower(conflicts[i].SkillName) < strings.ToLower(conflicts[j].SkillName)
 	})
 
-	// Build table columns
-	columns := []table.Column{
-		{Title: "Status", Width: 8},
-		{Title: "Skill Name", Width: 25},
-		{Title: "Type", Width: 12},
-		{Title: "Changes", Width: 20},
-		{Title: "Resolution", Width: 12},
+	cfg := ListConfig[*sync.Conflict]{
+		Title: "⚠️  Resolve Conflicts",
+		Columns: []table.Column{
+			{Title: "Status", Width: 8},
+			{Title: "Skill Name", Width: 25},
+			{Title: "Type", Width: 12},
+			{Title: "Changes", Width: 20},
+			{Title: "Resolution", Width: 12},
+		},
+		ToRows: func(items []*sync.Conflict) []table.Row {
+			rows := make([]table.Row, len(items))
+			for i, c := range items {
+				resolution := ""
+				if res, ok := resolutions[c.SkillName]; ok {
+					resolution = string(res)
+				}
+				rows[i] = buildConflictRow(c, resolution)
+			}
+			return rows
+		},
+		Matches: func(conflict *sync.Conflict, lf string) bool {
+			if lf == "" {
+				return true
+			}
+			return strings.Contains(strings.ToLower(conflict.SkillName), lf) ||
+				strings.Contains(strings.ToLower(string(conflict.Type)), lf) ||
+				strings.Contains(strings.ToLower(conflict.DiffSummary()), lf)
+		},
+		ReservedLines: 10,
+		Header: func() string {
+			return conflictStyles.Info.Render("Select a resolution for each conflict before applying")
+		},
+		StatusText: func(filtered, total int, filter string) string {
+			status := fmt.Sprintf("%d/%d resolved", len(resolutions), total)
+			if len(resolutions) == total && total > 0 {
+				status += " • Press y to apply"
+			}
+			if filter != "" {
+				status = fmt.Sprintf("%d of %d conflict(s) shown • %s", filtered, total, status)
+			}
+			return status
+		},
+		ShortHelp: func() string {
+			return strings.Join([]string{
+				"↑/↓ navigate",
+				"enter details",
+				"s source",
+				"t target",
+				"m merge",
+				"x skip",
+				"/ filter",
+				"b cancel",
+				"? help",
+				"q quit",
+			}, " • ")
+		},
+		FullHelp: func() string {
+			return `Navigation:
+  ↑/k      Move up
+  ↓/j      Move down
+  Enter    View conflict details
+
+Resolution:
+  s/1      Use source version
+  t/2      Use target version
+  m/3      Merge both versions
+  x/4      Skip this conflict
+  y        Apply all resolutions
+
+Filter:
+  /        Start filtering
+  Esc      Clear filter
+  Enter    Finish filtering
+
+Actions:
+  b        Cancel and go back
+
+General:
+  ?        Toggle full help
+  q        Quit`
+		},
 	}
-
-	// Build table rows
-	rows := make([]table.Row, len(conflicts))
-	for i, c := range conflicts {
-		rows[i] = buildConflictRow(c, "")
-	}
-
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(true),
-		table.WithHeight(15),
-	)
-
-	// Style the table
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
 
 	return ConflictListModel{
-		conflicts:   conflicts,
+		ListModel:   NewListModel(conflicts, cfg),
 		resolutions: resolutions,
-		table:       t,
 		keys:        defaultConflictKeyMap(),
 		phase:       phaseList,
 	}
@@ -267,106 +297,88 @@ func buildConflictRow(c *sync.Conflict, resolution string) table.Row {
 	}
 }
 
-// Init implements tea.Model.
-func (m ConflictListModel) Init() tea.Cmd {
-	return nil
-}
-
 // Update implements tea.Model.
 func (m ConflictListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.phase {
-	case phaseList:
-		return m.updateList(msg)
 	case phaseDetail:
 		return m.updateDetail(msg)
+	case phaseList:
+		if m.confirmMode {
+			return m.updateConfirm(msg)
+		}
+		if handled, model, cmd := m.updateList(msg); handled {
+			return model, cmd
+		}
 	}
-	return m, nil
+
+	inner, cmd := m.ListModel.Update(msg)
+	m.ListModel = inner.(ListModel[*sync.Conflict])
+	return m, cmd
 }
 
-func (m ConflictListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		newHeight := max(msg.Height-10, 5)
-		m.table.SetHeight(newHeight)
-
-	case tea.KeyMsg:
-		// Handle confirmation mode first
-		if m.confirmMode {
-			switch msg.String() {
-			case "y", "Y":
-				m.result = ConflictListResult{
-					Action:      ConflictActionResolve,
-					Resolutions: m.buildResolutions(),
-				}
-				m.quitting = true
-				return m, tea.Quit
-			case "n", "N", "esc":
-				m.confirmMode = false
-				return m, nil
-			}
-			return m, nil
-		}
-
-		switch {
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Select):
-			if len(m.conflicts) > 0 {
-				m.cursor = m.table.Cursor()
-				m.phase = phaseDetail
-				m.ready = false
-				return m, nil
-			}
-
-		case key.Matches(msg, m.keys.Source):
-			if len(m.conflicts) > 0 {
-				m.resolveCurrentConflict(sync.ResolutionUseSource)
-				return m, nil
-			}
-
-		case key.Matches(msg, m.keys.Target):
-			if len(m.conflicts) > 0 {
-				m.resolveCurrentConflict(sync.ResolutionUseTarget)
-				return m, nil
-			}
-
-		case key.Matches(msg, m.keys.Merge):
-			if len(m.conflicts) > 0 {
-				m.resolveCurrentConflict(sync.ResolutionMerge)
-				return m, nil
-			}
-
-		case key.Matches(msg, m.keys.Skip):
-			if len(m.conflicts) > 0 {
-				m.resolveCurrentConflict(sync.ResolutionSkip)
-				return m, nil
-			}
-
-		case key.Matches(msg, m.keys.Confirm):
-			if m.allResolved() {
-				m.confirmMode = true
-				return m, nil
-			}
-
-		case key.Matches(msg, m.keys.Back):
-			m.result = ConflictListResult{Action: ConflictActionCancel}
-			m.quitting = true
-			return m, tea.Quit
-		}
+func (m ConflictListModel) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
 	}
 
-	m.table, cmd = m.table.Update(msg)
-	return m, cmd
+	switch keyMsg.String() {
+	case "y", "Y":
+		m.result = ConflictListResult{
+			Action:      ConflictActionResolve,
+			Resolutions: m.buildResolutions(),
+		}
+		m.quitting = true
+		return m, tea.Quit
+	case "n", "N", "esc":
+		m.confirmMode = false
+		m.confirmMsg = ""
+		return m, nil
+	default:
+		return m, nil
+	}
+}
+
+func (m ConflictListModel) updateList(msg tea.Msg) (bool, tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return false, nil, nil
+	}
+
+	switch {
+	case key.Matches(keyMsg, m.keys.Select):
+		if selected := m.selectedConflict(); selected != nil {
+			m.cursor = m.table.Cursor()
+			m.detail = selected
+			m.phase = phaseDetail
+			m.detailReady = false
+			return true, m, nil
+		}
+	case key.Matches(keyMsg, m.keys.Source):
+		m.resolveCurrentConflict(sync.ResolutionUseSource)
+		return true, m, nil
+	case key.Matches(keyMsg, m.keys.Target):
+		m.resolveCurrentConflict(sync.ResolutionUseTarget)
+		return true, m, nil
+	case key.Matches(keyMsg, m.keys.Merge):
+		m.resolveCurrentConflict(sync.ResolutionMerge)
+		return true, m, nil
+	case key.Matches(keyMsg, m.keys.Skip):
+		m.resolveCurrentConflict(sync.ResolutionSkip)
+		return true, m, nil
+	case key.Matches(keyMsg, m.keys.Confirm):
+		if m.allResolved() {
+			m.confirmMode = true
+			m.confirmMsg = fmt.Sprintf("Apply %d resolution(s)? (y/n)", len(m.resolutions))
+			return true, m, nil
+		}
+	case key.Matches(keyMsg, m.keys.Back):
+		m.result = ConflictListResult{Action: ConflictActionCancel}
+		m.quitting = true
+		return true, m, tea.Quit
+	}
+
+	return false, nil, nil
 }
 
 func (m ConflictListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -381,13 +393,14 @@ func (m ConflictListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 		footerHeight := 4
 		viewportHeight := max(msg.Height-headerHeight-footerHeight, 5)
 
-		if !m.ready {
+		if !m.detailReady {
 			m.viewport = viewport.New(msg.Width-2, viewportHeight)
 			m.viewport.SetContent(m.buildDetailContent())
-			m.ready = true
+			m.detailReady = true
 		} else {
 			m.viewport.Width = msg.Width - 2
 			m.viewport.Height = viewportHeight
+			m.viewport.SetContent(m.buildDetailContent())
 		}
 
 	case tea.KeyMsg:
@@ -395,32 +408,26 @@ func (m ConflictListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Quit):
 			m.quitting = true
 			return m, tea.Quit
-
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = !m.showHelp
 			return m, nil
-
 		case key.Matches(msg, m.keys.Back):
 			m.phase = phaseList
 			return m, nil
-
 		case key.Matches(msg, m.keys.Source):
-			m.resolveConflictAt(m.cursor, sync.ResolutionUseSource)
+			m.resolveDetailConflict(sync.ResolutionUseSource)
 			m.viewport.SetContent(m.buildDetailContent())
 			return m, nil
-
 		case key.Matches(msg, m.keys.Target):
-			m.resolveConflictAt(m.cursor, sync.ResolutionUseTarget)
+			m.resolveDetailConflict(sync.ResolutionUseTarget)
 			m.viewport.SetContent(m.buildDetailContent())
 			return m, nil
-
 		case key.Matches(msg, m.keys.Merge):
-			m.resolveConflictAt(m.cursor, sync.ResolutionMerge)
+			m.resolveDetailConflict(sync.ResolutionMerge)
 			m.viewport.SetContent(m.buildDetailContent())
 			return m, nil
-
 		case key.Matches(msg, m.keys.Skip):
-			m.resolveConflictAt(m.cursor, sync.ResolutionSkip)
+			m.resolveDetailConflict(sync.ResolutionSkip)
 			m.viewport.SetContent(m.buildDetailContent())
 			return m, nil
 		}
@@ -430,53 +437,64 @@ func (m ConflictListModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *ConflictListModel) resolveCurrentConflict(resolution sync.ResolutionChoice) {
+func (m *ConflictListModel) selectedConflict() *sync.Conflict {
 	cursor := m.table.Cursor()
-	m.resolveConflictAt(cursor, resolution)
+	if cursor < 0 || cursor >= len(m.filtered) {
+		return nil
+	}
+	return m.filtered[cursor]
+}
+
+func (m *ConflictListModel) resolveCurrentConflict(resolution sync.ResolutionChoice) {
+	if selected := m.selectedConflict(); selected != nil {
+		m.resolveConflict(selected, resolution)
+	}
+}
+
+func (m *ConflictListModel) resolveDetailConflict(resolution sync.ResolutionChoice) {
+	if m.detail == nil {
+		return
+	}
+	m.resolveConflict(m.detail, resolution)
+}
+
+func (m *ConflictListModel) resolveConflict(conflict *sync.Conflict, resolution sync.ResolutionChoice) {
+	m.resolutions[conflict.SkillName] = resolution
+	m.table.SetRows(m.cfg.ToRows(m.filtered))
 }
 
 func (m *ConflictListModel) resolveConflictAt(idx int, resolution sync.ResolutionChoice) {
-	if idx < 0 || idx >= len(m.conflicts) {
-		return
+	if conflict := m.conflictAt(idx); conflict != nil {
+		m.resolveConflict(conflict, resolution)
 	}
-
-	c := m.conflicts[idx]
-	m.resolutions[c.SkillName] = resolution
-
-	// Update the table row
-	m.updateTableRow(idx)
 }
 
 func (m *ConflictListModel) updateTableRow(idx int) {
-	if idx < 0 || idx >= len(m.conflicts) {
+	if m.conflictAt(idx) == nil {
 		return
 	}
+	m.table.SetRows(m.cfg.ToRows(m.filtered))
+}
 
-	c := m.conflicts[idx]
-	resolution := ""
-	if res, ok := m.resolutions[c.SkillName]; ok {
-		resolution = string(res)
+func (m ConflictListModel) conflictAt(idx int) *sync.Conflict {
+	if idx < 0 || idx >= len(m.allItems) {
+		return nil
 	}
-
-	rows := m.table.Rows()
-	if idx < len(rows) {
-		rows[idx] = buildConflictRow(c, resolution)
-		m.table.SetRows(rows)
-	}
+	return m.allItems[idx]
 }
 
 func (m ConflictListModel) allResolved() bool {
-	for _, c := range m.conflicts {
+	for _, c := range m.allItems {
 		if _, ok := m.resolutions[c.SkillName]; !ok {
 			return false
 		}
 	}
-	return len(m.conflicts) > 0
+	return len(m.allItems) > 0
 }
 
 func (m ConflictListModel) buildResolutions() []ConflictResolution {
 	var result []ConflictResolution
-	for _, c := range m.conflicts {
+	for _, c := range m.allItems {
 		if res, ok := m.resolutions[c.SkillName]; ok {
 			content := ""
 			switch res {
@@ -485,8 +503,6 @@ func (m ConflictListModel) buildResolutions() []ConflictResolution {
 			case sync.ResolutionUseTarget:
 				content = c.Target.Content
 			case sync.ResolutionMerge:
-				// For merge, we'd need to invoke the merger
-				// For now, use source as fallback
 				content = c.Source.Content
 			}
 			result = append(result, ConflictResolution{
@@ -499,35 +515,39 @@ func (m ConflictListModel) buildResolutions() []ConflictResolution {
 	return result
 }
 
+func (m ConflictListModel) currentDetailConflict() *sync.Conflict {
+	if m.detail != nil {
+		return m.detail
+	}
+	return m.conflictAt(m.cursor)
+}
+
 func (m ConflictListModel) buildDetailContent() string {
-	if m.cursor < 0 || m.cursor >= len(m.conflicts) {
+	conflict := m.currentDetailConflict()
+	if conflict == nil {
 		return "No conflict selected"
 	}
 
-	c := m.conflicts[m.cursor]
 	var b strings.Builder
 
-	// Conflict summary
 	b.WriteString(conflictStyles.SectionTitle.Render("Conflict Details"))
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "  Skill: %s\n", c.SkillName)
-	fmt.Fprintf(&b, "  Type:  %s\n", c.Type)
-	fmt.Fprintf(&b, "  %s\n", c.DiffSummary())
+	fmt.Fprintf(&b, "  Skill: %s\n", conflict.SkillName)
+	fmt.Fprintf(&b, "  Type:  %s\n", conflict.Type)
+	fmt.Fprintf(&b, "  %s\n", conflict.DiffSummary())
 
-	// Current resolution
-	if res, ok := m.resolutions[c.SkillName]; ok {
+	if res, ok := m.resolutions[conflict.SkillName]; ok {
 		b.WriteString("\n")
 		b.WriteString(conflictStyles.Resolved.Render(fmt.Sprintf("  Resolution: %s", res)))
 		b.WriteString("\n")
 	}
 
-	// Diff hunks
-	if len(c.Hunks) > 0 {
+	if len(conflict.Hunks) > 0 {
 		b.WriteString("\n")
 		b.WriteString(conflictStyles.SectionTitle.Render("Changes"))
 		b.WriteString("\n")
 
-		for i, hunk := range c.Hunks {
+		for i, hunk := range conflict.Hunks {
 			header := fmt.Sprintf("@@ -%d,%d +%d,%d @@",
 				hunk.SourceStart, hunk.SourceCount,
 				hunk.TargetStart, hunk.TargetCount)
@@ -548,24 +568,22 @@ func (m ConflictListModel) buildDetailContent() string {
 				b.WriteString("\n")
 			}
 
-			if i < len(c.Hunks)-1 {
+			if i < len(conflict.Hunks)-1 {
 				b.WriteString("\n")
 			}
 		}
 	} else {
-		// No hunks, show full content comparison
 		b.WriteString("\n")
 		b.WriteString(conflictStyles.SectionTitle.Render("Source Content"))
 		b.WriteString("\n")
-		b.WriteString(formatConflictContentWithLineNumbers(c.Source.Content, conflictStyles.Removed))
+		b.WriteString(formatConflictContentWithLineNumbers(conflict.Source.Content, conflictStyles.Removed))
 		b.WriteString("\n\n")
 
 		b.WriteString(conflictStyles.SectionTitle.Render("Target Content"))
 		b.WriteString("\n")
-		b.WriteString(formatConflictContentWithLineNumbers(c.Target.Content, conflictStyles.Added))
+		b.WriteString(formatConflictContentWithLineNumbers(conflict.Target.Content, conflictStyles.Added))
 	}
 
-	// Resolution options reminder
 	b.WriteString("\n\n")
 	b.WriteString(conflictStyles.Info.Render("Press: s=source, t=target, m=merge, x=skip"))
 
@@ -577,137 +595,40 @@ func (m ConflictListModel) View() string {
 	if m.quitting {
 		return ""
 	}
-
-	switch m.phase {
-	case phaseDetail:
+	if m.phase == phaseDetail {
 		return m.viewDetail()
-	default:
-		return m.viewList()
 	}
-}
-
-func (m ConflictListModel) viewList() string {
-	var b strings.Builder
-
-	// Title
-	title := conflictStyles.Title.Render("⚠️  Resolve Conflicts")
-	b.WriteString(title)
-	b.WriteString("\n\n")
-
-	// Info message
-	info := conflictStyles.Info.Render("Select a resolution for each conflict before applying")
-	b.WriteString(info)
-	b.WriteString("\n\n")
-
-	// Confirmation dialog
-	if m.confirmMode {
-		b.WriteString(m.table.View())
-		b.WriteString("\n\n")
-		confirmMsg := fmt.Sprintf("Apply %d resolution(s)? (y/n)", len(m.resolutions))
-		b.WriteString(conflictStyles.Confirm.Render(confirmMsg))
-		return b.String()
-	}
-
-	// Table
-	b.WriteString(m.table.View())
-	b.WriteString("\n")
-
-	// Status bar
-	resolved := len(m.resolutions)
-	total := len(m.conflicts)
-	status := fmt.Sprintf("%d/%d resolved", resolved, total)
-	if resolved == total && total > 0 {
-		status += " • Press y to apply"
-	}
-	b.WriteString(conflictStyles.Status.Render(status))
-	b.WriteString("\n")
-
-	// Help
-	if m.showHelp {
-		help := m.renderFullHelp()
-		b.WriteString("\n")
-		b.WriteString(help)
-	} else {
-		help := m.renderShortHelp()
-		b.WriteString(help)
-	}
-
-	return b.String()
+	return m.ListModel.View()
 }
 
 func (m ConflictListModel) viewDetail() string {
-	if !m.ready {
+	if !m.detailReady {
 		return "Loading..."
 	}
 
 	var b strings.Builder
 
-	// Title
 	skillName := ""
-	if m.cursor >= 0 && m.cursor < len(m.conflicts) {
-		skillName = m.conflicts[m.cursor].SkillName
+	if conflict := m.currentDetailConflict(); conflict != nil {
+		skillName = conflict.SkillName
 	}
-	title := conflictStyles.Title.Render(fmt.Sprintf("📄 Conflict: %s", skillName))
-	b.WriteString(title)
+	b.WriteString(conflictStyles.Title.Render(fmt.Sprintf("📄 Conflict: %s", skillName)))
 	b.WriteString("\n\n")
-
-	// Viewport
 	b.WriteString(m.viewport.View())
 	b.WriteString("\n")
 
-	// Status bar
 	scrollPercent := int(m.viewport.ScrollPercent() * 100)
-	status := fmt.Sprintf("Scroll: %d%%", scrollPercent)
-	b.WriteString(conflictStyles.Status.Render(status))
+	b.WriteString(conflictStyles.Status.Render(fmt.Sprintf("Scroll: %d%%", scrollPercent)))
 	b.WriteString("\n")
 
-	// Help
 	if m.showHelp {
-		help := m.renderDetailHelp()
 		b.WriteString("\n")
-		b.WriteString(help)
+		b.WriteString(m.renderDetailHelp())
 	} else {
-		help := m.renderDetailShortHelp()
-		b.WriteString(help)
+		b.WriteString(m.renderDetailShortHelp())
 	}
 
 	return b.String()
-}
-
-func (m ConflictListModel) renderShortHelp() string {
-	keys := []string{
-		"↑/↓ navigate",
-		"enter details",
-		"s source",
-		"t target",
-		"m merge",
-		"x skip",
-		"? help",
-		"q quit",
-	}
-	return conflictStyles.Help.Render(strings.Join(keys, " • "))
-}
-
-func (m ConflictListModel) renderFullHelp() string {
-	help := `Navigation:
-  ↑/k      Move up
-  ↓/j      Move down
-  Enter    View conflict details
-
-Resolution:
-  s/1      Use source version
-  t/2      Use target version
-  m/3      Merge both versions
-  x/4      Skip this conflict
-
-Actions:
-  y        Apply all resolutions
-  b/Esc    Cancel and go back
-
-General:
-  ?        Toggle full help
-  q        Quit`
-	return conflictStyles.Help.Render(help)
 }
 
 func (m ConflictListModel) renderDetailShortHelp() string {
@@ -747,7 +668,10 @@ General:
 
 // Result returns the result of the user interaction.
 func (m ConflictListModel) Result() ConflictListResult {
-	return m.result
+	if r, ok := m.result.(ConflictListResult); ok {
+		return r
+	}
+	return ConflictListResult{}
 }
 
 // RunConflictList runs the interactive conflict resolution and returns the result.

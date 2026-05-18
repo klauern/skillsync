@@ -147,8 +147,8 @@ func TestConflictListModel_ConfirmFlow(t *testing.T) {
 
 	newModel, cmd := confirmModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	finalModel := newModel.(ConflictListModel)
-	if finalModel.result.Action != ConflictActionResolve {
-		t.Errorf("expected resolve action, got %v", finalModel.result.Action)
+	if finalModel.Result().Action != ConflictActionResolve {
+		t.Errorf("expected resolve action, got %v", finalModel.Result().Action)
 	}
 	if !finalModel.quitting {
 		t.Error("expected model to be quitting after confirmation")
