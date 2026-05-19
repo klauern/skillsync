@@ -502,7 +502,7 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 	displaySyncResults(result)
 
 	if !result.Success() {
-		return errors.New("sync completed with errors")
+		return summarizeSyncFailures(result, "sync completed with errors")
 	}
 
 	return nil
@@ -1031,7 +1031,7 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	}
 
 	if !result.Success() {
-		return errors.New("sync completed with errors")
+		return summarizeSyncFailures(result, "sync completed with errors")
 	}
 
 	return nil
@@ -1642,10 +1642,28 @@ func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, totalAvailabl
 	displaySyncResults(result)
 
 	if !result.Success() {
-		return errors.New("delete sync completed with errors")
+		return summarizeSyncFailures(result, "delete sync completed with errors")
 	}
 
 	return nil
+}
+
+func summarizeSyncFailures(result *sync.Result, summary string) error {
+	failed := result.Failed()
+	if len(failed) == 0 {
+		return errors.New(summary)
+	}
+
+	errs := make([]error, 0, len(failed))
+	for _, sr := range failed {
+		if sr.Error != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", sr.Skill.Name, sr.Error))
+			continue
+		}
+		errs = append(errs, fmt.Errorf("%s: operation failed", sr.Skill.Name))
+	}
+
+	return fmt.Errorf("%s: %w", summary, errors.Join(errs...))
 }
 
 // applyResolvedConflicts writes the resolved conflict content to the target files.

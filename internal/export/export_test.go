@@ -712,6 +712,45 @@ func TestExporter_YAML_Golden(t *testing.T) {
 	util.GoldenFile(t, testdataDir(), "yaml-pretty", buf.String())
 }
 
+type failWriter struct {
+	err error
+}
+
+func (w *failWriter) Write(_ []byte) (int, error) {
+	return 0, w.err
+}
+
+func TestExporter_YAML_EncodeError(t *testing.T) {
+	exporter := New(Options{
+		Format:          FormatYAML,
+		Pretty:          true,
+		IncludeMetadata: true,
+	})
+
+	err := exporter.Export([]model.Skill{{
+		Name:        "yaml-skill",
+		Description: "A YAML exported skill",
+		Platform:    model.Cursor,
+		Path:        "yaml-skill.md",
+		Content:     "# YAML Skill",
+	}}, &failWriter{err: assertError("writer failed")})
+	if err == nil {
+		t.Fatal("Export() error = nil, want encode failure")
+	}
+	if !strings.Contains(err.Error(), "encode YAML export") {
+		t.Fatalf("Export() error = %v, want encode context", err)
+	}
+	if !strings.Contains(err.Error(), "writer failed") {
+		t.Fatalf("Export() error = %v, want writer failure detail", err)
+	}
+}
+
+type assertError string
+
+func (e assertError) Error() string {
+	return string(e)
+}
+
 func TestExporter_Markdown_Golden(t *testing.T) {
 	fixedTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
 
