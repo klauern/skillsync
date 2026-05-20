@@ -295,7 +295,7 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	if typeStr := extractString(fm, "type"); typeStr != "" {
 		parsedType, err := model.ParseSkillType(typeStr)
 		if err != nil {
-			return f, err
+			return f, fmt.Errorf("parse skill type %q: %w", typeStr, err)
 		}
 		f.skillType = parsedType
 	}

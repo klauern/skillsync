@@ -3,6 +3,7 @@ package cache
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -36,7 +37,7 @@ const (
 func New(sourceName string) (*Cache, error) {
 	cacheDir := filepath.Join(util.SkillsyncConfigPath(), "cache")
 	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create cache directory %q: %w", cacheDir, err)
 	}
 
 	cachePath := filepath.Join(cacheDir, sourceName+".json")
@@ -102,16 +103,22 @@ func (c *Cache) Set(key string, skill model.Skill) {
 func (c *Cache) Save() error {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal cache: %w", err)
 	}
 	// #nosec G306 - cache files should be readable by user
-	return os.WriteFile(c.path, data, 0o644)
+	if err := os.WriteFile(c.path, data, 0o644); err != nil {
+		return fmt.Errorf("write cache file %q: %w", c.path, err)
+	}
+	return nil
 }
 
 // Clear removes all entries from the cache
 func (c *Cache) Clear() error {
 	c.Entries = make(map[string]Entry)
-	return os.Remove(c.path)
+	if err := os.Remove(c.path); err != nil {
+		return fmt.Errorf("remove cache file %q: %w", c.path, err)
+	}
+	return nil
 }
 
 // Size returns the number of entries in the cache

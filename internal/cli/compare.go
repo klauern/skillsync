@@ -339,7 +339,10 @@ func makePairKey(s1, s2 model.Skill) string {
 func outputCompareResults(results []*similarity.ComparisonResult, format string) error {
 	switch format {
 	case "table":
-		return similarity.FormatComparisonTable(os.Stdout, results)
+		if err := similarity.FormatComparisonTable(os.Stdout, results); err != nil {
+			return fmt.Errorf("format comparison table: %w", err)
+		}
+		return nil
 	case "unified":
 		return outputCompareUnified(results)
 	case "side-by-side":

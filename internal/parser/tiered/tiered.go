@@ -2,6 +2,7 @@
 package tiered
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -272,7 +273,7 @@ func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
 		}
 		skills, err := p.pluginParser.Parse()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse plugin skills: %w", err)
 		}
 		for i := range skills {
 			skills[i].Scope = model.ScopePlugin

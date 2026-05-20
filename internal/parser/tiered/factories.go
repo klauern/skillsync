@@ -85,7 +85,7 @@ func ParserFactoryFor(platform model.Platform) (ParserFactory, error) {
 func NewForPlatform(platform model.Platform) (*Parser, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get working directory: %w", err)
 	}
 
 	factory, err := ParserFactoryFor(platform)

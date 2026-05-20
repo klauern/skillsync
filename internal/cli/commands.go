@@ -210,7 +210,7 @@ func editConfig() error {
 	if !config.Exists() {
 		fmt.Println("No config file found. Creating default configuration...")
 		if err := initConfig(false); err != nil {
-			return err
+			return fmt.Errorf("initialize config: %w", err)
 		}
 	}
 
@@ -287,7 +287,7 @@ func runExport(cmd *cli.Command) error {
 	formatStr := cmd.String("format")
 	format, err := export.ParseFormat(formatStr)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse export format %q: %w", formatStr, err)
 	}
 
 	// Parse platform filter
@@ -442,7 +442,7 @@ func backupCreateCommand() *cli.Command {
 
 			scopeFilter, err := parseScopeFilter(scopeStr)
 			if err != nil {
-				return err
+				return fmt.Errorf("invalid scope filter %q: %w", scopeStr, err)
 			}
 
 			var platforms []model.Platform
@@ -451,7 +451,7 @@ func backupCreateCommand() *cli.Command {
 			} else {
 				platform, err := model.ParsePlatform(platformStr)
 				if err != nil {
-					return err
+					return fmt.Errorf("invalid platform %q: %w", platformStr, err)
 				}
 				platforms = []model.Platform{platform}
 			}
@@ -469,7 +469,7 @@ func backupCreateCommand() *cli.Command {
 				prepareBackup(platform)
 				created, err := createBackupsForSkills(platform, skills, "manual backup", []string{"manual"})
 				if err != nil {
-					return err
+					return fmt.Errorf("create backups for %s: %w", platform, err)
 				}
 				totalCreated += created
 			}
@@ -1167,57 +1167,57 @@ func runTUI() error {
 
 		case tui.DashboardViewDiscover:
 			if err := runDiscoverTUI(); err != nil {
-				return err
+				return fmt.Errorf("run discover TUI: %w", err)
 			}
 
 		case tui.DashboardViewBackups:
 			if err := runBackupsTUI(); err != nil {
-				return err
+				return fmt.Errorf("run backups TUI: %w", err)
 			}
 
 		case tui.DashboardViewSync:
 			if err := runSyncTUI(); err != nil {
-				return err
+				return fmt.Errorf("run sync TUI: %w", err)
 			}
 
 		case tui.DashboardViewCompare:
 			if err := runCompareTUI(); err != nil {
-				return err
+				return fmt.Errorf("run compare TUI: %w", err)
 			}
 
 		case tui.DashboardViewConfig:
 			if err := runConfigTUI(); err != nil {
-				return err
+				return fmt.Errorf("run config TUI: %w", err)
 			}
 
 		case tui.DashboardViewExport:
 			if err := runExportTUI(); err != nil {
-				return err
+				return fmt.Errorf("run export TUI: %w", err)
 			}
 
 		case tui.DashboardViewImport:
 			if err := runImportTUI(); err != nil {
-				return err
+				return fmt.Errorf("run import TUI: %w", err)
 			}
 
 		case tui.DashboardViewScope:
 			if err := runScopeTUI(); err != nil {
-				return err
+				return fmt.Errorf("run scope TUI: %w", err)
 			}
 
 		case tui.DashboardViewPromote:
 			if err := runPromoteDemoteTUI(); err != nil {
-				return err
+				return fmt.Errorf("run promote/demote TUI: %w", err)
 			}
 
 		case tui.DashboardViewDelete:
 			if err := runDeleteTUI(); err != nil {
-				return err
+				return fmt.Errorf("run delete TUI: %w", err)
 			}
 
 		case tui.DashboardViewConflicts:
 			if err := runConflictsTUI(); err != nil {
-				return err
+				return fmt.Errorf("run conflicts TUI: %w", err)
 			}
 		}
 	}
@@ -1319,7 +1319,7 @@ func runSyncTUI() error {
 		[]string{"sync"},
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("create backups for %s: %w", targetPlatform, err)
 	}
 	if created > 0 {
 		fmt.Printf("✓ Created %d backup(s)\n", created)

@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -165,12 +166,12 @@ func Load() (*Config, error) {
 			cfg.applyEnvironment()
 			return cfg, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("parse config %q: %w", configPath, err)
 	}
 
 	// Parse YAML over defaults
 	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse config %q: %w", configPath, err)
 	}
 
 	// Apply environment variable overrides
@@ -186,11 +187,11 @@ func LoadFromPath(path string) (*Config, error) {
 	// #nosec G304 - path is provided by caller
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read config %q: %w", path, err)
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
 
 	cfg.applyEnvironment()
@@ -203,32 +204,38 @@ func (c *Config) Save() error {
 
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
-		return err
+		return fmt.Errorf("create config directory %q: %w", filepath.Dir(configPath), err)
 	}
 
 	data, err := yaml.Marshal(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal config: %w", err)
 	}
 
 	// #nosec G306 - config file should be readable by user
-	return os.WriteFile(configPath, data, 0o644)
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		return fmt.Errorf("write config %q: %w", configPath, err)
+	}
+	return nil
 }
 
 // SaveToPath writes the configuration to a specific path.
 func (c *Config) SaveToPath(path string) error {
 	// Ensure directory exists
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
+		return fmt.Errorf("create config directory %q: %w", filepath.Dir(path), err)
 	}
 
 	data, err := yaml.Marshal(c)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal config: %w", err)
 	}
 
 	// #nosec G306 - config file should be readable by user
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write config %q: %w", path, err)
+	}
+	return nil
 }
 
 // applyEnvironment applies environment variable overrides.

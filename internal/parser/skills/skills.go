@@ -614,7 +614,7 @@ func ListSkillDirectories(basePath string) ([]string, error) {
 	}
 	files, err := parser.DiscoverFiles(basePath, patterns)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("discover skill directories in %q: %w", basePath, err)
 	}
 
 	// Deduplicate directories (in case multiple case variants exist)

@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/urfave/cli/v3"
@@ -64,7 +65,10 @@ func Run(ctx context.Context, args []string) error {
 			tuiCommand(),
 		},
 	}
-	return app.Run(ctx, args)
+	if err := app.Run(ctx, args); err != nil {
+		return fmt.Errorf("run CLI: %w", err)
+	}
+	return nil
 }
 
 // configureColors sets up color output based on CLI flags and config.

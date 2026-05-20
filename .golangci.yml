@@ -18,6 +18,7 @@ linters:
     - bodyclose     # HTTP response body close
     - errname       # Error naming conventions
     - errorlint     # Error wrapping
+    - wrapcheck     # Ensure external errors are wrapped with context
     - gosec         # Security issues
 
   settings:
@@ -29,6 +30,28 @@ linters:
         - name: exported
           disabled: false
 
+    wrapcheck:
+      ignore-sigs:
+        # Low-level passthroughs that are intentionally leaf errors.
+        - encoding/json.MarshalIndent
+        - encoding/json.(*Encoder).Encode
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - gopkg.in/yaml.v3.Marshal
+        - gopkg.in/yaml.v3.Unmarshal
+        - gopkg.in/yaml.v3.(*Encoder).Encode
+        - gopkg.in/yaml.v3.(*Encoder).Close
+        - io.Writer.Write
+        - os.Create
+        - os.Getwd
+        - os.MkdirAll
+        - os.ReadFile
+        - os.Remove
+        - os.Stat
+        - os.WriteFile
+        - os/exec.(*Cmd).Run
+        - time.ParseDuration
+
   exclusions:
     paths:
       - vendor
@@ -38,6 +61,7 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+          - wrapcheck
       # Exclude gosec permissions checks in test files
       - path: _test\.go
         linters:

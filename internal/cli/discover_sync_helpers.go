@@ -195,7 +195,7 @@ func parseTypeFilter(typeStr string) ([]model.SkillType, error) {
 	for t := range strings.SplitSeq(typeStr, ",") {
 		skillType, err := model.ParseSkillType(strings.TrimSpace(t))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse skill type %q: %w", strings.TrimSpace(t), err)
 		}
 		typeFilter = append(typeFilter, skillType)
 	}
@@ -289,7 +289,7 @@ func discoverPluginSkills(repoURL string, useCache bool) ([]model.Skill, error) 
 	// Parse plugins from ~/.skillsync/plugins/
 	skills, err := pluginParser.Parse()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse plugin skills: %w", err)
 	}
 
 	// Also discover skills from Claude plugin cache (~/.claude/plugins/cache/)
@@ -324,7 +324,7 @@ func discoverClaudePluginCacheSkills(existingSkills []model.Skill) ([]model.Skil
 	cacheParser := claude.NewCachePluginsParser("")
 	cacheSkills, err := cacheParser.Parse()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse Claude plugin cache skills: %w", err)
 	}
 
 	// Build a deduplication index from existing skills
@@ -448,7 +448,7 @@ func syncSkillsInteractive(cfg *syncConfig) error {
 			case tui.DiffActionSync:
 				// Sync just this one skill
 				if err := executeSyncForSkills(cfg, []model.Skill{diffResult.Skill}, len(cfg.sourceSkills)); err != nil {
-					return err
+					return fmt.Errorf("execute sync for selected skill: %w", err)
 				}
 				return nil
 			case tui.DiffActionNone:
@@ -465,7 +465,7 @@ func syncSkillsInteractive(cfg *syncConfig) error {
 			}
 
 			if err := executeSyncForSkills(cfg, result.SelectedSkills, len(cfg.sourceSkills)); err != nil {
-				return err
+				return fmt.Errorf("execute sync for selected skills: %w", err)
 			}
 			return nil
 		}
@@ -475,7 +475,7 @@ func syncSkillsInteractive(cfg *syncConfig) error {
 // executeSyncForSkills performs the actual sync operation for the given skills
 func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable int) error {
 	if err := runSyncBackup(cfg); err != nil {
-		return err
+		return fmt.Errorf("prepare sync backup: %w", err)
 	}
 
 	opts := sync.Options{
@@ -889,7 +889,7 @@ func syncCommand() *cli.Command {
 			deleteMode := cmd.Bool("delete")
 			cfg, err := parseSyncConfig(cmd, cmd.Name, deleteMode)
 			if err != nil {
-				return err
+				return fmt.Errorf("parse sync config: %w", err)
 			}
 
 			if cfg.sourceSpec.HasScopes() {
@@ -956,7 +956,7 @@ func deleteCommand() *cli.Command {
 func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	cfg, err := parseSyncConfig(cmd, cmd.Name, deleteMode)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse sync config: %w", err)
 	}
 
 	// Always parse source skills (use tiered parser for scope filtering)
@@ -984,7 +984,7 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	// Validate source skills before sync (unless skipped)
 	if !cfg.skipValidation {
 		if err := validateSourceSkills(cfg); err != nil {
-			return err
+			return fmt.Errorf("validate source skills: %w", err)
 		}
 	}
 
@@ -1002,7 +1002,7 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 
 	// Create backup before sync (unless skipped or dry-run)
 	if err := runSyncBackup(cfg); err != nil {
-		return err
+		return fmt.Errorf("prepare sync backup: %w", err)
 	}
 
 	// Create sync options and execute
@@ -1020,14 +1020,14 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 
 	// Handle conflicts if interactive strategy is used
 	if err := runSyncConflictResolution(cfg, result); err != nil {
-		return err
+		return fmt.Errorf("run sync conflict resolution: %w", err)
 	}
 
 	displaySyncResults(result)
 
 	// Post-sync orphan deletion (--delete flag)
 	if err := runSyncOrphanDeletion(cfg); err != nil {
-		return err
+		return fmt.Errorf("run sync orphan deletion: %w", err)
 	}
 
 	if !result.Success() {
@@ -1051,7 +1051,7 @@ func runSyncBackup(cfg *syncConfig) error {
 		[]string{"sync"},
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("create backups for %s: %w", cfg.targetSpec.Platform, err)
 	}
 	if created > 0 {
 		fmt.Printf("✓ Created %d backup(s)\n", created)
@@ -1189,7 +1189,7 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 
 	typeFilter, err := resolveSyncTypeFilter(cmd)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve sync type filter: %w", err)
 	}
 
 	strategyStr := cmd.String("strategy")
@@ -1250,7 +1250,7 @@ func validateSourceSkills(cfg *syncConfig) error {
 	// from potentially multiple scopes (project, user, admin, system). The primary
 	// platform path may not exist, but that's fine if other scopes have skills.
 	if err := validateTargetPath(cfg.targetSpec.Platform); err != nil {
-		return err
+		return fmt.Errorf("validate target path: %w", err)
 	}
 
 	fmt.Println("Validation passed")
@@ -1613,7 +1613,7 @@ func executeDeleteForSkills(cfg *syncConfig, skills []model.Skill, totalAvailabl
 			[]string{"delete"},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse sync config: %w", err)
 		}
 		if created > 0 {
 			fmt.Printf("✓ Created %d backup(s)\n", created)
@@ -1711,7 +1711,7 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 
 	paths, repoRoot, err := platformSkillsPaths(cfg, platform)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve platform skills paths for %s: %w", platform, err)
 	}
 	if len(paths) == 0 {
 		return []model.Skill{}, nil
@@ -2069,7 +2069,7 @@ func nearestExistingDir(path string) (string, error) {
 			return cur, nil
 		}
 		if !os.IsNotExist(err) {
-			return "", err
+			return "", fmt.Errorf("stat %q: %w", cur, err)
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {

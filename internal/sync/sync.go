@@ -306,7 +306,11 @@ func (s *Synchronizer) parseSkills(platform model.Platform, basePath string) ([]
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 
-	return p.Parse()
+	skills, err := p.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("parse synchronized skills for %s: %w", platform, err)
+	}
+	return skills, nil
 }
 
 // filterNestedDirectorySkills removes nested directory/symlink skills that would

@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ type portabilitySnapshotYAML struct {
 func loadLossyFieldMapFromSnapshot() (map[string][]model.Platform, error) {
 	root, err := validation.FindRepoRoot()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find repository root: %w", err)
 	}
 	// #nosec G304 -- reads only repo-controlled documentation paths.
 	data, err := os.ReadFile(filepath.Join(root, "docs", "platforms", "portability-snapshot.yaml"))
