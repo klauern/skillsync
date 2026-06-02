@@ -149,7 +149,7 @@ func (s *discoverListState) ensureViewport(width, height int) {
 // DiscoverListModel is the BubbleTea model for interactive skill discovery.
 type DiscoverListModel struct {
 	ListModel[model.Skill]
-	state       *discoverListState
+	state *discoverListState
 	// Deprecated compatibility fields kept for existing tests and callers.
 	skills      []model.Skill
 	detailSkill model.Skill

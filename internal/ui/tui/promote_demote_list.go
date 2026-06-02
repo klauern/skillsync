@@ -629,17 +629,17 @@ func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
 	state.hOffset = 0
 
 	m := PromoteDemoteListModel{
-		state:         state,
-		keys:          defaultPromoteDemoteListKeyMap(),
-		selected:      state.selected,
-		platformIndex: state.platformIndex,
+		state:           state,
+		keys:            defaultPromoteDemoteListKeyMap(),
+		selected:        state.selected,
+		platformIndex:   state.platformIndex,
 		platformOptions: state.platformOptions,
-		removeSource:  state.removeSource,
-		columnWidths:  state.columnWidths,
-		hOffset:       state.hOffset,
-		hScroll:       newHorizontalTableState(columns),
-		skills:        state.skills,
-		filtered:      state.filtered,
+		removeSource:    state.removeSource,
+		columnWidths:    state.columnWidths,
+		hOffset:         state.hOffset,
+		hScroll:         newHorizontalTableState(columns),
+		skills:          state.skills,
+		filtered:        state.filtered,
 	}
 
 	cfg := newPromoteDemoteConfig(state)

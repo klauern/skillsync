@@ -386,17 +386,17 @@ func NewDeleteListModel(skills []model.Skill) DeleteListModel {
 
 	m.table = t
 	m.ListModel = NewListModel(deletableSkills, ListConfig[model.Skill]{
-		Title:       "🗑️  Delete Skills",
-		Columns:     columns,
-		ToRows:      state.skillsToRows,
-		Matches:     state.matches,
-		ShortHelp:   state.shortHelp,
-		FullHelp:    state.fullHelp,
-		StatusText:  state.statusText,
-		Header:      state.header,
-		ExtraBody:   state.extraBody,
-		ExtraKeys:   state.extraKeys,
-		OnWindowSize: state.onWindowSize,
+		Title:         "🗑️  Delete Skills",
+		Columns:       columns,
+		ToRows:        state.skillsToRows,
+		Matches:       state.matches,
+		ShortHelp:     state.shortHelp,
+		FullHelp:      state.fullHelp,
+		StatusText:    state.statusText,
+		Header:        state.header,
+		ExtraBody:     state.extraBody,
+		ExtraKeys:     state.extraKeys,
+		OnWindowSize:  state.onWindowSize,
 		ReservedLines: 10 + deleteListDetailHeight + deleteListDetailGap,
 		Actions: []ActionBinding[model.Skill]{
 			{
@@ -780,6 +780,7 @@ func (s *deleteListState) extraKeys(m *ListModel[model.Skill], msg tea.KeyMsg) b
 	}
 	return false
 }
+
 func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 	if m.state != nil {
 		return m.state.skillsToRows(skills)

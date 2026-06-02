@@ -61,3 +61,6 @@ graphify-out/
 
 # Local automation scripts not part of the CLI
 background_agent.py
+
+# Beads proxied dolt directory (auto-managed, not versioned)
+.beads/proxieddb/

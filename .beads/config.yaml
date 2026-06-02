@@ -68,3 +68,5 @@ federation.remote: "https://github.com/klauern/skillsync.git"
 dolt.auto-push: false
 
 sync.remote: "git+https://github.com/klauern/skillsync.git"
+
+dolt.issue-prefix: "ss"
