@@ -8,18 +8,18 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 )
 
-// SyncDirection represents the direction to sync a skill.
-type SyncDirection int
+// Direction represents the direction to sync a skill.
+type Direction int
 
 const (
-	// SyncDirectionAtoB means sync from platform A to B.
-	SyncDirectionAtoB SyncDirection = iota
+	// DirectionAtoB means sync from platform A to B.
+	DirectionAtoB Direction = iota
 
-	// SyncDirectionBtoA means sync from platform B to A.
-	SyncDirectionBtoA
+	// DirectionBtoA means sync from platform B to A.
+	DirectionBtoA
 
-	// SyncDirectionConflict means there's a conflict requiring manual resolution.
-	SyncDirectionConflict
+	// DirectionConflict means there's a conflict requiring manual resolution.
+	DirectionConflict
 )
 
 // BidirectionalConflict represents a conflict in bidirectional sync.
@@ -114,9 +114,9 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 		}
 
 		switch s.determineSyncDirection(skillA, skillB, opts.Strategy) {
-		case SyncDirectionAtoB:
+		case DirectionAtoB:
 			syncAtoB = append(syncAtoB, skillA)
-		case SyncDirectionBtoA:
+		case DirectionBtoA:
 			syncBtoA = append(syncBtoA, skillB)
 		default:
 			conflicts = append(conflicts, BidirectionalConflict{
@@ -196,22 +196,22 @@ func (s *Synchronizer) SyncBidirectional(platformA, platformB model.Platform, op
 }
 
 // determineSyncDirection decides which direction to sync based on strategy.
-func (s *Synchronizer) determineSyncDirection(skillA, skillB model.Skill, strategy Strategy) SyncDirection {
+func (s *Synchronizer) determineSyncDirection(skillA, skillB model.Skill, strategy Strategy) Direction {
 	switch strategy {
 	case StrategyNewer:
 		if skillA.ModifiedAt.After(skillB.ModifiedAt) {
-			return SyncDirectionAtoB
+			return DirectionAtoB
 		}
 		if skillB.ModifiedAt.After(skillA.ModifiedAt) {
-			return SyncDirectionBtoA
+			return DirectionBtoA
 		}
-		return SyncDirectionConflict
+		return DirectionConflict
 	case StrategyOverwrite:
-		return SyncDirectionAtoB
+		return DirectionAtoB
 	case StrategyThreeWay, StrategyInteractive, StrategyMerge, StrategySkip:
-		return SyncDirectionConflict
+		return DirectionConflict
 	default:
-		return SyncDirectionConflict
+		return DirectionConflict
 	}
 }
 

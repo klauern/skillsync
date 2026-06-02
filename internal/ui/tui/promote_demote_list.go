@@ -616,10 +616,6 @@ func (m *PromoteDemoteListModel) updateColumns(totalWidth int) {
 	m.hOffset = m.state.hOffset
 }
 
-func (m *PromoteDemoteListModel) currentModel() *ListModel[model.Skill] {
-	return &m.ListModel
-}
-
 // NewPromoteDemoteListModel creates a new promote/demote list model.
 // Only promotable/demotable skills (repo and user scope) are included.
 func NewPromoteDemoteListModel(skills []model.Skill) PromoteDemoteListModel {
@@ -664,13 +660,14 @@ func (m PromoteDemoteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.confirmMode {
 			switch msg.String() {
 			case "y", "Y":
-				if m.confirmAction == PromoteDemoteActionPromote {
+				switch m.confirmAction {
+				case PromoteDemoteActionPromote:
 					m.result = PromoteDemoteListResult{
 						Action:         PromoteDemoteActionPromote,
 						SelectedSkills: promoteDemotePromotableSelectedSkills(m.state),
 						RemoveSource:   m.removeSource,
 					}
-				} else if m.confirmAction == PromoteDemoteActionDemote {
+				case PromoteDemoteActionDemote:
 					m.result = PromoteDemoteListResult{
 						Action:         PromoteDemoteActionDemote,
 						SelectedSkills: promoteDemoteDemotableSelectedSkills(m.state),
@@ -830,16 +827,6 @@ func (m PromoteDemoteListModel) getSelectedSkill() model.Skill {
 		return m.filtered[cursor]
 	}
 	return model.Skill{}
-}
-
-func (m PromoteDemoteListModel) getSelectedSkills() []model.Skill {
-	var selected []model.Skill
-	for _, s := range m.skills {
-		if m.selected[promoteDemoteSkillKey(s)] {
-			selected = append(selected, s)
-		}
-	}
-	return selected
 }
 
 func (m *PromoteDemoteListModel) applyFilter() {

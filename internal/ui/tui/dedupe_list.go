@@ -729,30 +729,6 @@ func (m *DedupeListModel) applyFilter() {
 	m.syncCompatFromBase()
 }
 
-func (m DedupeListModel) getSelectedSkill() model.Skill {
-	if m.state != nil {
-		return m.state.selectedSkill(&m.ListModel)
-	}
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
-}
-
-func (m DedupeListModel) getSelectedSkills() []model.Skill {
-	if m.state != nil {
-		return m.state.selectedSkills()
-	}
-	var selected []model.Skill
-	for _, s := range m.flatSkills {
-		if m.selected[dedupeSkillKey(s)] {
-			selected = append(selected, s)
-		}
-	}
-	return selected
-}
-
 // View implements tea.Model.
 func (m DedupeListModel) View() string {
 	m.syncStateFromCompat()
@@ -778,73 +754,6 @@ func (m DedupeListModel) View() string {
 	view := m.ListModel.View()
 	m.syncCompatFromBase()
 	return view
-}
-
-func (m DedupeListModel) renderShortHelp() string {
-	keys := []string{
-		"↑/↓ navigate",
-		"space toggle",
-		"a toggle all",
-		"d delete",
-		"/ filter",
-		"? help",
-		"q quit",
-	}
-	return dedupeListStyles.Help.Render(strings.Join(keys, " • "))
-}
-
-func (m DedupeListModel) renderFullHelp() string {
-	help := `Navigation:
-  ↑/k      Move up
-  ↓/j      Move down
-  g/Home   Go to top
-  G/End    Go to bottom
-
-Selection:
-  Space/Tab  Toggle current skill for deletion
-  a          Toggle all skills
-
-Actions:
-  d        Confirm and delete selected duplicate skills
-
-Filter:
-  /        Start filtering (by name, platform, scope, or description)
-  Esc      Clear filter
-  Enter    Finish filtering
-
-General:
-  ?        Toggle full help
-  q        Quit without changes
-
-Tip: Keep the version you want, delete the duplicates!`
-	return dedupeListStyles.Help.Render(help)
-}
-
-func (m *DedupeListModel) applyColumnWidths(totalWidth int) {
-	widths := defaultDedupeListColumnWidths()
-	if totalWidth > 0 {
-		const checkboxWidth = 3
-		const separatorWidth = 14
-
-		descWidth := totalWidth - (checkboxWidth + widths.name + widths.platform + widths.scope + widths.similar + widths.nameScore + widths.contentScore + separatorWidth)
-		if descWidth < 40 {
-			descWidth = 40
-		}
-		widths.desc = descWidth
-	}
-
-	m.columnWidths = widths
-	m.table.SetColumns([]table.Column{
-		{Title: " ", Width: 3},
-		{Title: "Name", Width: widths.name},
-		{Title: "Platform", Width: widths.platform},
-		{Title: "Scope", Width: widths.scope},
-		{Title: "Similar To", Width: widths.similar},
-		{Title: "Name%", Width: widths.nameScore},
-		{Title: "Content%", Width: widths.contentScore},
-		{Title: "Description", Width: widths.desc},
-	})
-	m.table.SetRows(m.skillsToRows(m.filtered))
 }
 
 // Result returns the result of the user interaction.

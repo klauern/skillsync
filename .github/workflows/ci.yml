@@ -57,6 +57,10 @@ jobs:
         run: go vet ./...
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
+        with:
+          # Pin explicitly (was floating on 'latest') so linter upgrades are a
+          # deliberate, reviewable change rather than silent CI drift.
+          version: v2.12.2
 
   test:
     name: Test
