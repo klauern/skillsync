@@ -276,17 +276,17 @@ func NewDedupeListModel(duplicates []*similarity.ComparisonResult) DedupeListMod
 
 	m.table = t
 	m.ListModel = NewListModel(deletableSkills, ListConfig[model.Skill]{
-		Title:        "🔍 Dedupe Skills - Find and Remove Duplicates",
-		Columns:      columns,
-		ToRows:       state.skillsToRows,
-		Matches:      state.matches,
-		ShortHelp:    state.shortHelp,
-		FullHelp:     state.fullHelp,
-		StatusText:   state.statusText,
-		Header:       state.header,
-		ExtraBody:    state.extraBody,
-		ExtraKeys:    state.extraKeys,
-		OnWindowSize: state.onWindowSize,
+		Title:         "🔍 Dedupe Skills - Find and Remove Duplicates",
+		Columns:       columns,
+		ToRows:        state.skillsToRows,
+		Matches:       state.matches,
+		ShortHelp:     state.shortHelp,
+		FullHelp:      state.fullHelp,
+		StatusText:    state.statusText,
+		Header:        state.header,
+		ExtraBody:     state.extraBody,
+		ExtraKeys:     state.extraKeys,
+		OnWindowSize:  state.onWindowSize,
 		ReservedLines: 12,
 	})
 	m.ListModel.table = t
