@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/ui"
 )
 
 func dedupeCommand() *cli.Command {
@@ -190,6 +191,20 @@ func runDedupeDelete(cmd *cli.Command, skillName string) error {
 	}
 
 	// Delete the skill file
+	if err := deleteResolvedSkill(*skill); err != nil {
+		return err
+	}
+
+	fmt.Printf("\n✓ Deleted skill %q from %s scope\n", skillName, scope)
+	return nil
+}
+
+// deleteResolvedSkill removes an already-resolved skill file (and prunes its
+// parent directory for directory-based skills). The caller is responsible for
+// any confirmation and writable-scope validation; this performs the deletion
+// unconditionally so it can be shared between the CLI dedupe command and the
+// interactive dedupe TUI flow.
+func deleteResolvedSkill(skill model.Skill) error {
 	if err := os.Remove(skill.Path); err != nil {
 		return fmt.Errorf("failed to delete skill: %w", err)
 	}
@@ -200,8 +215,29 @@ func runDedupeDelete(cmd *cli.Command, skillName string) error {
 		// Only try if it looks like a skill directory
 		_ = os.Remove(parentDir) // Ignore error - directory may not be empty or may not exist
 	}
+	return nil
+}
 
-	fmt.Printf("\n✓ Deleted skill %q from %s scope\n", skillName, scope)
+// deleteSelectedDuplicates removes the writable skills the user selected in the
+// interactive dedupe TUI. The dedupe model already filters to writable scopes
+// and confirms the deletion, but the scope guard is repeated here defensively so
+// a future caller cannot delete a non-writable skill.
+func deleteSelectedDuplicates(skills []model.Skill) error {
+	deleted := 0
+	for i := range skills {
+		skill := skills[i]
+		if skill.Scope != model.ScopeRepo && skill.Scope != model.ScopeUser {
+			ui.PrintWarning("Skipped %q: %s scope is not writable", skill.Name, skill.Scope)
+			continue
+		}
+		if err := deleteResolvedSkill(skill); err != nil {
+			ui.PrintError("Failed to delete %q: %v", skill.Name, err)
+			continue
+		}
+		ui.PrintSuccess("Deleted %q (%s, %s scope)", skill.Name, skill.Platform, skill.Scope)
+		deleted++
+	}
+	ui.PrintInfo("Removed %d duplicate skill(s)", deleted)
 	return nil
 }
 

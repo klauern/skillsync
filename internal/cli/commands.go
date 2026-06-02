@@ -1823,14 +1823,21 @@ func runCompareTUI() error {
 	if err != nil {
 		return fmt.Errorf("compare TUI error: %w", err)
 	}
+	// For CompareActionView the TUI already displayed the comparison inline;
+	// no extra handling is needed before offering the dedupe action below.
+	_ = result
 
-	// Handle the result
-	if result.Action == tui.CompareActionNone {
-		return nil
+	// Offer an interactive dedupe action on the same duplicates so the user can
+	// select and delete them without re-typing platform/scope/name. RunDedupeList
+	// filters to writable scopes and returns early (no TUI) when nothing is
+	// deletable, so the empty case is handled.
+	dedupeResult, err := tui.RunDedupeList(comparisons)
+	if err != nil {
+		return fmt.Errorf("dedupe TUI error: %w", err)
 	}
-
-	// For CompareActionView, the TUI already displayed the comparison
-	// No additional action needed
+	if dedupeResult.Action == tui.DedupeActionDelete {
+		return deleteSelectedDuplicates(dedupeResult.SelectedSkills)
+	}
 
 	return nil
 }

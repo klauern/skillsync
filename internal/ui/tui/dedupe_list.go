@@ -690,6 +690,19 @@ func (m DedupeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state.height = m.height
 	}
 	if msg, ok := msg.(tea.KeyMsg); ok {
+		// Declining the delete confirmation must roll back the staged delete
+		// result. The 'd' handler sets result=DedupeActionDelete before opening
+		// the confirm prompt, but the generic confirm handler only clears
+		// confirmMode on decline — not the result — so a later quit would
+		// otherwise return a stale delete the user already rejected. Resetting
+		// to a typed zero (not nil) lets syncCompatFromBase propagate it.
+		if m.confirmMode {
+			switch msg.String() {
+			case "n", "N", "esc":
+				m.result = DedupeListResult{}
+				m.ListModel.result = DedupeListResult{}
+			}
+		}
 		if m.state != nil && !m.filtering && !m.confirmMode && m.state.extraKeys(&m.ListModel, msg) {
 			m.syncCompatFromBase()
 			return m, nil
