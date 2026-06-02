@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/similarity"
 	"github.com/klauern/skillsync/internal/sync"
@@ -189,5 +191,43 @@ func TestRunCompareList_EmptyComparisons(t *testing.T) {
 	}
 	if result.Action != CompareActionNone {
 		t.Fatalf("expected CompareActionNone, got %v", result.Action)
+	}
+}
+
+// TestCompareListModel_DedupeKeyTriggersDedupeAction verifies that pressing 'd'
+// in the compare list signals the explicit dedupe intent (distinct from quit),
+// so the caller can proceed to the deletion workflow.
+func TestCompareListModel_DedupeKeyTriggersDedupeAction(t *testing.T) {
+	comp := &similarity.ComparisonResult{
+		Skill1: model.Skill{Name: "a", Platform: model.Cursor, Scope: model.ScopeRepo},
+		Skill2: model.Skill{Name: "a", Platform: model.ClaudeCode, Scope: model.ScopeRepo},
+	}
+	m := NewCompareListModel([]*similarity.ComparisonResult{comp})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	cm, ok := updated.(*CompareListModel)
+	if !ok {
+		t.Fatalf("expected *CompareListModel, got %T", updated)
+	}
+	if cm.Result().Action != CompareActionDedupe {
+		t.Fatalf("expected CompareActionDedupe after 'd', got %v", cm.Result().Action)
+	}
+}
+
+// TestCompareListModel_QuitDoesNotTriggerDedupe is the regression guard: quitting
+// the compare TUI must leave CompareActionNone so the caller does not drop the
+// user into the deletion workflow on a quit.
+func TestCompareListModel_QuitDoesNotTriggerDedupe(t *testing.T) {
+	comp := &similarity.ComparisonResult{
+		Skill1: model.Skill{Name: "a", Platform: model.Cursor, Scope: model.ScopeRepo},
+		Skill2: model.Skill{Name: "a", Platform: model.ClaudeCode, Scope: model.ScopeRepo},
+	}
+	m := NewCompareListModel([]*similarity.ComparisonResult{comp})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	cm, ok := updated.(*CompareListModel)
+	if !ok {
+		t.Fatalf("expected *CompareListModel, got %T", updated)
+	}
+	if cm.Result().Action != CompareActionNone {
+		t.Fatalf("expected CompareActionNone after quit, got %v", cm.Result().Action)
 	}
 }

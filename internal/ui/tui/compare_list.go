@@ -24,6 +24,9 @@ const (
 	CompareActionNone CompareAction = iota
 	// CompareActionView means the user wants to view a detailed comparison.
 	CompareActionView
+	// CompareActionDedupe means the user wants to proceed to interactive
+	// deletion of the duplicates (distinct from quitting).
+	CompareActionDedupe
 )
 
 // CompareListResult contains the result of the compare list TUI interaction.
@@ -37,6 +40,7 @@ type compareListKeyMap struct {
 	Up       key.Binding
 	Down     key.Binding
 	View     key.Binding
+	Dedupe   key.Binding
 	Filter   key.Binding
 	ClearFlt key.Binding
 	Help     key.Binding
@@ -74,6 +78,10 @@ func defaultCompareListKeyMap() compareListKeyMap {
 		View: key.NewBinding(
 			key.WithKeys("enter", "v"),
 			key.WithHelp("enter/v", "view diff"),
+		),
+		Dedupe: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "dedupe"),
 		),
 		Filter: key.NewBinding(
 			key.WithKeys("/"),
@@ -266,6 +274,16 @@ func (m *CompareListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+	}
+
+	// Proceed to interactive dedupe on an explicit 'd' (not while filtering,
+	// where 'd' is literal input). This is distinct from quitting: 'q'/ctrl+c
+	// leave Action as CompareActionNone so the caller does not open the dedupe
+	// TUI on a quit.
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && !m.filtering && key.Matches(keyMsg, m.keys.Dedupe) {
+		m.result = CompareListResult{Action: CompareActionDedupe}
+		m.quitting = true
+		return m, tea.Quit
 	}
 
 	updated, cmd := m.ListModel.Update(msg)
@@ -521,6 +539,7 @@ func (m CompareListModel) renderShortHelp() string {
 		"↑/↓ navigate",
 		"←/→ columns",
 		"enter view",
+		"d dedupe",
 		"/ filter",
 		"? help",
 		"q quit",
@@ -539,6 +558,7 @@ func (m CompareListModel) renderFullHelp() string {
 
 Actions:
   Enter/v  View detailed comparison for selected pair
+  d        Proceed to interactive dedupe (select and delete duplicates)
 
 Filter:
   /        Start filtering (by skill name or platform)

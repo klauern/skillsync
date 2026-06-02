@@ -1823,9 +1823,13 @@ func runCompareTUI() error {
 	if err != nil {
 		return fmt.Errorf("compare TUI error: %w", err)
 	}
-	// For CompareActionView the TUI already displayed the comparison inline;
-	// no extra handling is needed before offering the dedupe action below.
-	_ = result
+
+	// Only proceed to dedupe when the user explicitly asked for it ('d').
+	// Quitting the compare TUI ('q'/ctrl+c) leaves CompareActionNone and must
+	// not drop the user into the deletion workflow.
+	if result.Action != tui.CompareActionDedupe {
+		return nil
+	}
 
 	// Offer an interactive dedupe action on the same duplicates so the user can
 	// select and delete them without re-typing platform/scope/name. RunDedupeList
