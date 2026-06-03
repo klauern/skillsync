@@ -31,26 +31,50 @@ linters:
           disabled: false
 
     wrapcheck:
+      # NOTE: setting ignore-sigs REPLACES wrapcheck's built-in defaults
+      # (.Errorf(, errors.New(, .Wrap(, ...), so those constructors are
+      # re-listed first or fmt.Errorf/errors.New themselves get flagged.
+      # Method signatures must use the rendered form "(*pkg.Type).Method",
+      # not "pkg.(*Type).Method", or they silently fail to match.
       ignore-sigs:
+        # wrapcheck built-in defaults (must be repeated since we override).
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
         # Low-level passthroughs that are intentionally leaf errors.
         - encoding/json.MarshalIndent
-        - encoding/json.(*Encoder).Encode
+        - (*encoding/json.Encoder).Encode
         - fmt.Fprintf
         - fmt.Fprintln
+        - fmt.Sscanf
         - gopkg.in/yaml.v3.Marshal
         - gopkg.in/yaml.v3.Unmarshal
-        - gopkg.in/yaml.v3.(*Encoder).Encode
-        - gopkg.in/yaml.v3.(*Encoder).Close
-        - io.Writer.Write
+        - (*gopkg.in/yaml.v3.Encoder).Encode
+        - (*gopkg.in/yaml.v3.Encoder).Close
+        - (io.Writer).Write
         - os.Create
         - os.Getwd
+        - os.Lstat
         - os.MkdirAll
         - os.ReadFile
         - os.Remove
         - os.Stat
         - os.WriteFile
-        - os/exec.(*Cmd).Run
+        - (*os/exec.Cmd).Run
+        - path/filepath.Abs
+        - path/filepath.Walk
         - time.ParseDuration
+        - (*github.com/charmbracelet/bubbletea.Program).Run
+      # Errors from our own internal packages carry their own context;
+      # wrapcheck targets third-party/stdlib boundaries, not intra-module calls.
+      ignore-package-globs:
+        - github.com/klauern/skillsync/*
 
   exclusions:
     paths:
@@ -72,6 +96,15 @@ linters:
         linters:
           - revive
         text: "var-naming.*package"
+      # QF1008 (remove embedded-field selector) fires 25x across the TUI list
+      # models, whose generic-model compat layer (ss-0l9) deliberately writes
+      # m.ListModel.<field> to target the embedded base — adjacent lines set
+      # shadowed own-fields (table/filtered/filter) where the prefix is
+      # mandatory. Simplifying only the unshadowed subset would make the sync
+      # blocks inconsistent, so the explicit selector is the intended style.
+      - linters:
+          - staticcheck
+        text: "QF1008"
 
 run:
   timeout: 5m

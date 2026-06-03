@@ -812,52 +812,8 @@ func (m DeleteListModel) skillsToRows(skills []model.Skill) []table.Row {
 	return rows
 }
 
-func (m *DeleteListModel) shiftHOffset(delta int) {
-	newOffset := m.hOffset + delta
-	if newOffset < 0 || newOffset > deleteListMaxHOffset {
-		return
-	}
-	m.hOffset = newOffset
-	m.updateColumns(m.width)
-	m.table.SetRows(m.skillsToRows(m.filtered))
-}
-
-func (m *DeleteListModel) updateColumns(totalWidth int) {
-	columns, widths := deleteListColumns(totalWidth, m.skills, m.hOffset)
-	m.columnWidths = widths
-	m.hScroll.SetColumns(columns)
-	m.refreshTable()
-}
-
 func (m *DeleteListModel) refreshTable() {
 	m.hScroll.Apply(&m.table, m.width, m.skillsToRows(m.filtered))
-}
-
-func (m DeleteListModel) detailPanelWidth() int {
-	if m.width > 0 {
-		return m.width
-	}
-	return deleteListCheckboxWidth + m.columnWidths.name + m.columnWidths.platform + m.columnWidths.scope + m.columnWidths.desc +
-		(deleteListColumnPadding * 5)
-}
-
-func (m DeleteListModel) renderDetailPanel() string {
-	width := m.detailPanelWidth()
-	contentWidth := max(width-4, 10)
-
-	skill := m.getSelectedSkill()
-	description := strings.TrimSpace(skill.Description)
-	if description == "" {
-		description = "No description available."
-	}
-
-	lines := wrapText(description, contentWidth, deleteListDetailLines)
-	lines = padLines(lines, deleteListDetailLines)
-
-	header := deleteListStyles.DetailTitle.Render("Description (selected)")
-	content := append([]string{header}, lines...)
-
-	return deleteListStyles.DetailBox.Width(width).Render(strings.Join(content, "\n"))
 }
 
 // Init implements tea.Model.
@@ -889,169 +845,6 @@ func (m DeleteListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ListModel = next
 	}
 	m.syncCompatFromBase()
-	return m, cmd
-}
-
-//nolint:gocyclo // interactive table/event handling is intentionally centralized here
-func (m DeleteListModel) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		// Adjust table height based on window
-		newHeight := max(msg.Height-10-deleteListDetailHeight-deleteListDetailGap, 5) // Reserve space for title, warning, help, status, detail
-		m.table.SetHeight(newHeight)
-		m.updateColumns(msg.Width)
-
-	case tea.KeyMsg:
-		// Handle confirmation mode
-		if m.confirmMode {
-			switch msg.String() {
-			case "y", "Y":
-				m.result = DeleteListResult{
-					Action:         DeleteActionDelete,
-					SelectedSkills: m.getSelectedSkills(),
-				}
-				m.quitting = true
-				return m, tea.Quit
-			case "n", "N", "esc":
-				m.confirmMode = false
-				return m, nil
-			}
-			return m, nil
-		}
-
-		// Handle filtering mode
-		if m.filtering {
-			switch msg.String() {
-			case "enter":
-				m.filtering = false
-				return m, nil
-			case "esc":
-				m.filter = ""
-				m.filtering = false
-				m.applyFilter()
-				return m, nil
-			case "backspace":
-				if len(m.filter) > 0 {
-					m.filter = m.filter[:len(m.filter)-1]
-					m.applyFilter()
-				}
-				return m, nil
-			default:
-				if len(msg.String()) == 1 {
-					m.filter += msg.String()
-					m.applyFilter()
-				}
-				return m, nil
-			}
-		}
-
-		// Normal mode key handling
-		switch {
-		case msg.String() == "left":
-			if m.hScroll.MoveLeft() {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case msg.String() == "right":
-			if m.hScroll.MoveRight(m.width) {
-				m.refreshTable()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Quit):
-			m.quitting = true
-			return m, tea.Quit
-
-		case key.Matches(msg, m.keys.Help):
-			m.showHelp = !m.showHelp
-			return m, nil
-
-		case key.Matches(msg, m.keys.Filter):
-			m.filtering = true
-			return m, nil
-
-		case key.Matches(msg, m.keys.ClearFlt):
-			m.filter = ""
-			m.applyFilter()
-			return m, nil
-
-		case key.Matches(msg, m.keys.NextPlat):
-			if len(m.platformOptions) > 0 {
-				m.platformIndex++
-				if m.platformIndex >= len(m.platformOptions) {
-					m.platformIndex = -1
-				}
-				m.applyFilter()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.PrevPlat):
-			if len(m.platformOptions) > 0 {
-				m.platformIndex--
-				if m.platformIndex < -1 {
-					m.platformIndex = len(m.platformOptions) - 1
-				}
-				m.applyFilter()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Toggle):
-			if len(m.filtered) > 0 {
-				skill := m.getSelectedSkill()
-				m.selected[deleteSkillKey(skill)] = !m.selected[deleteSkillKey(skill)]
-				m.refreshTable()
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.ToggleAll):
-			// Count how many are currently selected
-			selectedCount := 0
-			for _, s := range m.filtered {
-				if m.selected[deleteSkillKey(s)] {
-					selectedCount++
-				}
-			}
-			// If all or most are selected, deselect all; otherwise select all
-			selectAll := selectedCount < len(m.filtered)/2+1
-			for _, s := range m.filtered {
-				m.selected[deleteSkillKey(s)] = selectAll
-			}
-			m.refreshTable()
-			return m, nil
-
-		case key.Matches(msg, m.keys.View):
-			if len(m.filtered) > 0 {
-				m.detailSkill = m.getSelectedSkill()
-				m.phase = deleteListPhaseDetail
-				m.ready = false
-				m.ensureDetailViewport()
-				return m, nil
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Confirm):
-			selectedSkills := m.getSelectedSkills()
-			if len(selectedSkills) > 0 {
-				m.confirmMode = true
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.ScrollLeft):
-			m.shiftHOffset(-1)
-			return m, nil
-
-		case key.Matches(msg, m.keys.ScrollRight):
-			m.shiftHOffset(1)
-			return m, nil
-		}
-	}
-
-	m.table, cmd = m.table.Update(msg)
 	return m, cmd
 }
 
@@ -1114,14 +907,6 @@ func (m *DeleteListModel) applyFilter() {
 
 	m.filtered = filtered
 	m.refreshTable()
-}
-
-func (m DeleteListModel) getSelectedSkill() model.Skill {
-	cursor := m.table.Cursor()
-	if cursor >= 0 && cursor < len(m.filtered) {
-		return m.filtered[cursor]
-	}
-	return model.Skill{}
 }
 
 func (m DeleteListModel) getSelectedSkills() []model.Skill {
@@ -1330,26 +1115,6 @@ General:
   ?        Toggle full help
  q        Quit`
 	return deleteListStyles.Help.Render(help)
-}
-
-func (m DeleteListModel) renderPlatformTabs() string {
-	var tabs []string
-
-	if m.platformIndex == -1 {
-		tabs = append(tabs, deleteListStyles.PlatformActive.Render("[All]"))
-	} else {
-		tabs = append(tabs, deleteListStyles.PlatformTab.Render(" All "))
-	}
-
-	for i, platform := range m.platformOptions {
-		if i == m.platformIndex {
-			tabs = append(tabs, deleteListStyles.PlatformActive.Render(fmt.Sprintf("[%s]", platform)))
-		} else {
-			tabs = append(tabs, deleteListStyles.PlatformTab.Render(fmt.Sprintf(" %s ", platform)))
-		}
-	}
-
-	return strings.Join(tabs, "")
 }
 
 // Result returns the result of the user interaction.

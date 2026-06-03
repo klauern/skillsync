@@ -47,7 +47,7 @@ func onboardGuide() string {
 - Sync: skillsync sync --strategy newer cursor claude-code
 - Delete: skillsync delete --dry-run cursor codex
 - Compare: skillsync compare
-- Dedupe: skillsync dedupe list --platform cursor
+- Dedupe: skillsync dedupe delete <skill> --platform cursor --dry-run  (or interactively via skillsync compare)
 - Export: skillsync export --format json --output skills.json
 - Backups: skillsync backup list | backup verify | backup restore <id>
 - Promote/Demote: skillsync promote my-skill | skillsync demote my-skill

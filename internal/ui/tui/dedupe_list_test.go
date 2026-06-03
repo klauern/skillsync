@@ -111,3 +111,60 @@ func TestRunDedupeList_EmptyDuplicates(t *testing.T) {
 		t.Fatalf("expected DedupeActionNone, got %v", result.Action)
 	}
 }
+
+func sendRune(m DedupeListModel, r rune) DedupeListModel {
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	return next.(DedupeListModel)
+}
+
+// TestDedupeListModel_ConfirmDeleteReturnsSelection verifies the accept path:
+// select-all (a) -> stage delete (d) -> confirm (y) yields a delete result
+// carrying the selected skills.
+func TestDedupeListModel_ConfirmDeleteReturnsSelection(t *testing.T) {
+	skillA := model.Skill{Name: "alpha", Platform: model.ClaudeCode, Scope: model.ScopeRepo}
+	skillB := model.Skill{Name: "beta", Platform: model.Cursor, Scope: model.ScopeRepo}
+	duplicates := []*similarity.ComparisonResult{makeComparison(skillA, skillB, 0.5, 0.5)}
+
+	m := NewDedupeListModel(duplicates)
+	m = sendRune(m, 'a') // select all deletable skills
+	m = sendRune(m, 'd') // stage delete -> opens confirmation
+	if !m.confirmMode {
+		t.Fatal("expected confirmMode after pressing 'd'")
+	}
+	m = sendRune(m, 'y') // confirm
+
+	result := m.Result()
+	if result.Action != DedupeActionDelete {
+		t.Fatalf("expected DedupeActionDelete after confirm, got %v", result.Action)
+	}
+	if len(result.SelectedSkills) != 2 {
+		t.Fatalf("expected 2 selected skills, got %d", len(result.SelectedSkills))
+	}
+}
+
+// TestDedupeListModel_DeclineConfirmClearsResult is the regression guard for the
+// stale-result bug: select-all (a) -> stage delete (d) -> decline (n) -> quit (q)
+// must NOT return a delete action for skills the user rejected.
+func TestDedupeListModel_DeclineConfirmClearsResult(t *testing.T) {
+	skillA := model.Skill{Name: "alpha", Platform: model.ClaudeCode, Scope: model.ScopeRepo}
+	skillB := model.Skill{Name: "beta", Platform: model.Cursor, Scope: model.ScopeRepo}
+	duplicates := []*similarity.ComparisonResult{makeComparison(skillA, skillB, 0.5, 0.5)}
+
+	m := NewDedupeListModel(duplicates)
+	m = sendRune(m, 'a') // select all
+	m = sendRune(m, 'd') // stage delete -> opens confirmation
+	if !m.confirmMode {
+		t.Fatal("expected confirmMode after pressing 'd'")
+	}
+	m = sendRune(m, 'n') // decline
+	if m.confirmMode {
+		t.Fatal("expected confirmMode cleared after declining")
+	}
+	m = sendRune(m, 'q') // quit
+
+	result := m.Result()
+	if result.Action != DedupeActionNone {
+		t.Fatalf("expected DedupeActionNone after decline+quit, got %v (%d skills)",
+			result.Action, len(result.SelectedSkills))
+	}
+}
