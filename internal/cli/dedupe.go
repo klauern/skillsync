@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -210,9 +211,8 @@ func deleteResolvedSkill(skill model.Skill) error {
 	}
 
 	// Try to remove the parent directory if it's empty (for directory-based skills)
-	parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
-	if parentDir != skill.Path {
-		// Only try if it looks like a skill directory
+	if strings.HasSuffix(skill.Path, "/SKILL.md") {
+		parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
 		_ = os.Remove(parentDir) // Ignore error - directory may not be empty or may not exist
 	}
 	return nil
