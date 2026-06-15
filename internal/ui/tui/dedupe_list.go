@@ -317,6 +317,24 @@ func (m *DedupeListModel) syncStateFromCompat() {
 	m.state.height = m.height
 }
 
+func (m *DedupeListModel) syncListModelFromCompat() {
+	if m == nil {
+		return
+	}
+	m.syncStateFromCompat()
+	m.ListModel.filter = m.filter
+	m.ListModel.filtering = m.filtering
+	m.ListModel.showHelp = m.showHelp
+	m.ListModel.confirmMode = m.confirmMode
+	m.ListModel.quitting = m.quitting
+	m.ListModel.width = m.width
+	m.ListModel.height = m.height
+	m.ListModel.filtered = m.filtered
+	m.ListModel.allItems = m.flatSkills
+	m.ListModel.table = m.table
+	m.ListModel.result = m.result
+}
+
 func (m *DedupeListModel) syncCompatFromBase() {
 	if m == nil {
 		return
@@ -465,11 +483,15 @@ func (s *dedupeListState) findSimilarSkill(skill model.Skill) (model.Skill, floa
 	if s == nil {
 		return model.Skill{}, 0, 0
 	}
+	return findBestDuplicateMatch(s.duplicates, skill)
+}
+
+func findBestDuplicateMatch(duplicates []*similarity.ComparisonResult, skill model.Skill) (model.Skill, float64, float64) {
 	skillKey := dedupeSkillKey(skill)
 	var bestMatch model.Skill
 	var bestNameScore, bestContentScore float64
 
-	for _, dup := range s.duplicates {
+	for _, dup := range duplicates {
 		key1 := dedupeSkillKey(dup.Skill1)
 		key2 := dedupeSkillKey(dup.Skill2)
 
@@ -497,17 +519,20 @@ func (s *dedupeListState) skillsToRows(skills []model.Skill) []table.Row {
 	if s == nil {
 		return nil
 	}
-	widths := s.columnWidths
+	return dedupeSkillsToRows(skills, s.selected, s.columnWidths, s.findSimilarSkill)
+}
+
+func dedupeSkillsToRows(skills []model.Skill, selected map[string]bool, widths dedupeListColumnWidths, findSimilar func(model.Skill) (model.Skill, float64, float64)) []table.Row {
 	if widths.desc == 0 {
 		widths = defaultDedupeListColumnWidths()
 	}
 	rows := make([]table.Row, len(skills))
 	for i, skill := range skills {
 		checkbox := "[ ]"
-		if s.selected[dedupeSkillKey(skill)] {
+		if selected[dedupeSkillKey(skill)] {
 			checkbox = "[✓]"
 		}
-		similarSkill, nameScore, contentScore := s.findSimilarSkill(skill)
+		similarSkill, nameScore, contentScore := findSimilar(skill)
 		rows[i] = table.Row{
 			checkbox,
 			truncateTableValue(skill.Name, widths.name),
@@ -601,66 +626,14 @@ func (s *dedupeListState) extraKeys(m *ListModel[model.Skill], msg tea.KeyMsg) b
 
 // findSimilarSkill finds the best matching similar skill for a given skill.
 func (m DedupeListModel) findSimilarSkill(skill model.Skill) (model.Skill, float64, float64) {
-	skillKey := dedupeSkillKey(skill)
-	var bestMatch model.Skill
-	var bestNameScore, bestContentScore float64
-
-	for _, dup := range m.duplicates {
-		key1 := dedupeSkillKey(dup.Skill1)
-		key2 := dedupeSkillKey(dup.Skill2)
-
-		if key1 == skillKey {
-			// This skill is Skill1, its pair is Skill2
-			score := dup.NameScore + dup.ContentScore
-			if score > bestNameScore+bestContentScore {
-				bestMatch = dup.Skill2
-				bestNameScore = dup.NameScore
-				bestContentScore = dup.ContentScore
-			}
-		} else if key2 == skillKey {
-			// This skill is Skill2, its pair is Skill1
-			score := dup.NameScore + dup.ContentScore
-			if score > bestNameScore+bestContentScore {
-				bestMatch = dup.Skill1
-				bestNameScore = dup.NameScore
-				bestContentScore = dup.ContentScore
-			}
-		}
-	}
-
-	return bestMatch, bestNameScore, bestContentScore
+	return findBestDuplicateMatch(m.duplicates, skill)
 }
 
 func (m DedupeListModel) skillsToRows(skills []model.Skill) []table.Row {
 	if m.state != nil {
 		return m.state.skillsToRows(skills)
 	}
-	widths := m.columnWidths
-	if widths.desc == 0 {
-		widths = defaultDedupeListColumnWidths()
-	}
-	rows := make([]table.Row, len(skills))
-	for i, s := range skills {
-		checkbox := "[ ]"
-		if m.selected[dedupeSkillKey(s)] {
-			checkbox = "[✓]"
-		}
-
-		// Find similar skill info
-		similarSkill, nameScore, contentScore := m.findSimilarSkill(s)
-
-		rows[i] = table.Row{
-			checkbox,
-			truncateTableValue(s.Name, 22),
-			truncateTableValue(string(s.Platform), 12),
-			truncateTableValue(s.DisplayScope(), 8),
-			truncateTableValue(similarSkill.Name, 22),
-			fmt.Sprintf("%.0f%%", nameScore*100),
-			fmt.Sprintf("%.0f%%", contentScore*100),
-			truncateTableValue(s.Description, 25),
-		}
-	}
-	return rows
+	return dedupeSkillsToRows(skills, m.selected, m.columnWidths, m.findSimilarSkill)
 }
 
 // Init implements tea.Model.
@@ -670,25 +643,7 @@ func (m DedupeListModel) Init() tea.Cmd {
 
 // Update implements tea.Model.
 func (m DedupeListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.syncStateFromCompat()
-	m.ListModel.filter = m.filter
-	m.ListModel.filtering = m.filtering
-	m.ListModel.showHelp = m.showHelp
-	m.ListModel.confirmMode = m.confirmMode
-	m.ListModel.quitting = m.quitting
-	m.ListModel.width = m.width
-	m.ListModel.height = m.height
-	m.ListModel.filtered = m.filtered
-	m.ListModel.allItems = m.flatSkills
-	m.ListModel.table = m.table
-	if m.state != nil {
-		m.state.duplicates = m.duplicates
-		m.state.flatSkills = m.flatSkills
-		m.state.selected = m.selected
-		m.state.columnWidths = m.columnWidths
-		m.state.width = m.width
-		m.state.height = m.height
-	}
+	m.syncListModelFromCompat()
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		// Declining the delete confirmation must roll back the staged delete
 		// result. The 'd' handler sets result=DedupeActionDelete before opening
@@ -721,36 +676,14 @@ func (m *DedupeListModel) applyFilter() {
 	if m == nil {
 		return
 	}
-	m.syncStateFromCompat()
-	m.ListModel.filter = m.filter
-	m.ListModel.allItems = m.flatSkills
-	m.ListModel.table = m.table
+	m.syncListModelFromCompat()
 	m.ListModel.applyFilter()
 	m.syncCompatFromBase()
 }
 
 // View implements tea.Model.
 func (m DedupeListModel) View() string {
-	m.syncStateFromCompat()
-	m.ListModel.filter = m.filter
-	m.ListModel.filtering = m.filtering
-	m.ListModel.showHelp = m.showHelp
-	m.ListModel.confirmMode = m.confirmMode
-	m.ListModel.quitting = m.quitting
-	m.ListModel.width = m.width
-	m.ListModel.height = m.height
-	m.ListModel.filtered = m.filtered
-	m.ListModel.allItems = m.flatSkills
-	m.ListModel.table = m.table
-	m.ListModel.result = m.result
-	if m.state != nil {
-		m.state.duplicates = m.duplicates
-		m.state.flatSkills = m.flatSkills
-		m.state.selected = m.selected
-		m.state.columnWidths = m.columnWidths
-		m.state.width = m.width
-		m.state.height = m.height
-	}
+	m.syncListModelFromCompat()
 	view := m.ListModel.View()
 	m.syncCompatFromBase()
 	return view
