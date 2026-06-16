@@ -2046,7 +2046,7 @@ func validateTargetPath(targetPlatform model.Platform) error {
 			if err != nil {
 				return fmt.Errorf("target parent directory validation failed: %w", err)
 			}
-			if err := checkWritePermission(parentDir); err != nil {
+			if err := validation.CheckWritePermission(parentDir); err != nil {
 				return fmt.Errorf("target directory not writable: %w", err)
 			}
 		} else {
@@ -2077,32 +2077,6 @@ func nearestExistingDir(path string) (string, error) {
 		}
 		cur = parent
 	}
-}
-
-// checkWritePermission verifies a directory is writable
-func checkWritePermission(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("cannot access directory: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("path is not a directory: %s", path)
-	}
-
-	testFile := filepath.Join(path, ".skillsync-write-test")
-	// #nosec G304 - testFile is constructed from validated path and is not user input
-	f, err := os.Create(testFile)
-	if err != nil {
-		return fmt.Errorf("cannot write to directory: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(testFile)
-		return fmt.Errorf("failed to close write-test file: %w", err)
-	}
-	if err := os.Remove(testFile); err != nil {
-		return fmt.Errorf("failed to remove write-test file: %w", err)
-	}
-	return nil
 }
 
 // riskLevel defines the severity level for confirmation prompts
