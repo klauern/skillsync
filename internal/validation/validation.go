@@ -332,6 +332,33 @@ func checkConflicts(_, target model.Platform, skills []model.Skill) error {
 	return nil
 }
 
+// CheckWritePermission checks if a directory is writable by creating a probe file.
+func CheckWritePermission(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("cannot access directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory: %s", path)
+	}
+
+	testFile := filepath.Join(path, ".skillsync-write-test")
+	// #nosec G304 - testFile is constructed from a validated path.
+	f, err := os.Create(testFile)
+	if err != nil {
+		return fmt.Errorf("cannot write to directory: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(testFile)
+		return fmt.Errorf("failed to close write-test file: %w", err)
+	}
+	if err := os.Remove(testFile); err != nil {
+		return fmt.Errorf("failed to remove write-test file: %w", err)
+	}
+
+	return nil
+}
+
 // validateWritePermission checks if the target directory is writable.
 func validateWritePermission(platform model.Platform) error {
 	path, err := GetPlatformPath(platform)
@@ -339,34 +366,15 @@ func validateWritePermission(platform model.Platform) error {
 		return fmt.Errorf("failed to get platform path: %w", err)
 	}
 
-	// If path doesn't exist, check parent directory
+	// If path doesn't exist, check parent directory.
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		path = filepath.Dir(path)
 	}
 
-	// Check write permission by creating a temp file
-	testFile := filepath.Join(path, ".skillsync-write-test")
-	// #nosec G304 - testFile is constructed from validated path
-	f, err := os.Create(testFile)
-	if err != nil {
+	if err := CheckWritePermission(path); err != nil {
 		return &Error{
 			Field:   "write permission",
 			Message: fmt.Sprintf("target directory is not writable: %s", path),
-			Err:     err,
-		}
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(testFile)
-		return &Error{
-			Field:   "write permission",
-			Message: fmt.Sprintf("failed to close write-test file: %s", testFile),
-			Err:     err,
-		}
-	}
-	if err := os.Remove(testFile); err != nil {
-		return &Error{
-			Field:   "write permission",
-			Message: fmt.Sprintf("failed to remove write-test file: %s", testFile),
 			Err:     err,
 		}
 	}

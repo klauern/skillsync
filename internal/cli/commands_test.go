@@ -193,7 +193,7 @@ func TestFormatValidationError(t *testing.T) {
 	}
 }
 
-func TestCheckWritePermission(t *testing.T) {
+func TestValidationCheckWritePermission(t *testing.T) {
 	tests := map[string]struct {
 		setup   func(t *testing.T) string
 		wantErr bool
@@ -215,9 +215,9 @@ func TestCheckWritePermission(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			path := tt.setup(t)
-			err := checkWritePermission(path)
+			err := validation.CheckWritePermission(path)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("checkWritePermission(%q) error = %v, wantErr %v", path, err, tt.wantErr)
+				t.Errorf("validation.CheckWritePermission(%q) error = %v, wantErr %v", path, err, tt.wantErr)
 			}
 		})
 	}
