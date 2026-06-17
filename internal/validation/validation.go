@@ -363,7 +363,11 @@ func CheckWritePermission(path string) error {
 func validateWritePermission(platform model.Platform) error {
 	path, err := GetPlatformPath(platform)
 	if err != nil {
-		return fmt.Errorf("failed to get platform path: %w", err)
+		return &Error{
+			Field:   "write permission",
+			Message: "failed to get platform path",
+			Err:     err,
+		}
 	}
 
 	// If path doesn't exist, check parent directory.
