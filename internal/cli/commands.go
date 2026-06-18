@@ -1592,11 +1592,7 @@ func executeDelete(result tui.DeleteListResult) error {
 			continue
 		}
 
-		// Try to remove the parent directory if it's empty (for directory-based skills)
-		if strings.HasSuffix(skill.Path, "/SKILL.md") {
-			parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
-			_ = os.Remove(parentDir) // Ignore error - directory may not be empty
-		}
+		pruneEmptySkillParentDir(skill.Path)
 
 		deleted++
 	}
