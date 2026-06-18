@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -210,11 +209,7 @@ func deleteResolvedSkill(skill model.Skill) error {
 		return fmt.Errorf("failed to delete skill: %w", err)
 	}
 
-	// Try to remove the parent directory if it's empty (for directory-based skills)
-	if strings.HasSuffix(skill.Path, "/SKILL.md") {
-		parentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
-		_ = os.Remove(parentDir) // Ignore error - directory may not be empty or may not exist
-	}
+	pruneEmptySkillParentDir(skill.Path)
 	return nil
 }
 
@@ -345,11 +340,7 @@ func runDedupeRename(cmd *cli.Command, oldName, newName string) error {
 		return fmt.Errorf("failed to remove old skill: %w", err)
 	}
 
-	// Try to remove old parent directory if it's empty
-	oldParentDir := skill.Path[:len(skill.Path)-len("/SKILL.md")]
-	if oldParentDir != skill.Path {
-		_ = os.Remove(oldParentDir) // Ignore error - directory may not be empty
-	}
+	pruneEmptySkillParentDir(skill.Path)
 
 	fmt.Printf("\n✓ Renamed skill %q to %q in %s scope\n", oldName, newName, scope)
 	return nil
