@@ -37,11 +37,11 @@ func WriteFile(t *testing.T, path, content string) {
 	}
 }
 
-// ReadFile reads a file in test code.
-func ReadFile(t *testing.T, path string) []byte {
+// ReadTestFile reads a caller-controlled fixture or temp file in test code.
+func ReadTestFile(t *testing.T, path string) []byte {
 	t.Helper()
 
-	data, err := os.ReadFile(path) //nolint:gosec // G304 - caller controls temp/test path
+	data, err := os.ReadFile(path) //nolint:gosec // G304 - test helper only reads caller-controlled fixture/temp paths
 	if err != nil {
 		t.Fatalf("failed read file: %v", err)
 	}
@@ -85,7 +85,7 @@ func GoldenFile(t *testing.T, testdataDir, name, got string) {
 		return
 	}
 
-	want := ReadFile(t, goldenPath)
+	want := ReadTestFile(t, goldenPath)
 	if got != string(want) {
 		t.Errorf("output mismatch %s\n--- got ---\n%s\n--- want ---\n%s", name, got, string(want))
 	}

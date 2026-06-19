@@ -24,7 +24,7 @@ func TestWriteFile(t *testing.T) {
 
 	WriteFile(t, path, content)
 
-	got := ReadFile(t, path)
+	got := ReadTestFile(t, path)
 	if string(got) != content {
 		t.Errorf("file content = %q, want %q", got, content)
 	}
@@ -62,7 +62,7 @@ func TestGoldenFile(t *testing.T) {
 		GoldenFile(t, testdataDir, "test_output", content)
 
 		goldenPath := filepath.Join(testdataDir, "test_output.golden")
-		got := ReadFile(t, goldenPath)
+	got := ReadTestFile(t, goldenPath)
 		if string(got) != content {
 			t.Errorf("golden file content = %q, want %q", got, content)
 		}
