@@ -22,6 +22,9 @@ linters:
     - gosec         # Security issues
 
   settings:
+    errorlint:
+      errorf: true
+
     gocyclo:
       min-complexity: 30
 

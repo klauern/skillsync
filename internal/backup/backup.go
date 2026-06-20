@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -535,7 +536,7 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 }
 
 // VerifyBackup verifies that a backup file is intact and matches its hash
-func VerifyBackup(backupID string) error {
+func VerifyBackup(backupID string) (err error) {
 	// Load index
 	index, err := LoadIndex()
 	if err != nil {
@@ -560,7 +561,7 @@ func VerifyBackup(backupID string) error {
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
-			err = fmt.Errorf("failed to close backup file: %w", closeErr)
+			err = errors.Join(err, fmt.Errorf("failed to close backup file: %w", closeErr))
 		}
 	}()
 

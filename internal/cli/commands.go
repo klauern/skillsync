@@ -1578,17 +1578,17 @@ func executeDelete(result tui.DeleteListResult) error {
 
 	// Delete each selected skill
 	var deleted int
-	var errors []string
+	var errs []error
 	for _, skill := range result.SelectedSkills {
 		// Verify the skill is in a writable scope
 		if skill.Scope != model.ScopeRepo && skill.Scope != model.ScopeUser {
-			errors = append(errors, fmt.Sprintf("%s: scope %q is not writable", skill.Name, skill.Scope))
+			errs = append(errs, fmt.Errorf("%s: scope %q is not writable", skill.Name, skill.Scope))
 			continue
 		}
 
 		// Delete the skill file
 		if err := os.Remove(skill.Path); err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", skill.Name, err))
+			errs = append(errs, fmt.Errorf("%s: %w", skill.Name, err))
 			continue
 		}
 
@@ -1601,11 +1601,11 @@ func executeDelete(result tui.DeleteListResult) error {
 		ui.Success(fmt.Sprintf("Deleted %d skill(s)", deleted))
 	}
 
-	if len(errors) > 0 {
-		for _, e := range errors {
-			ui.Error(fmt.Sprintf("Failed: %s", e))
+	if len(errs) > 0 {
+		for _, err := range errs {
+			ui.Error(fmt.Sprintf("Failed: %s", err))
 		}
-		return fmt.Errorf("some deletions failed")
+		return fmt.Errorf("some deletions failed: %w", errors.Join(errs...))
 	}
 
 	return nil
@@ -1963,7 +1963,7 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 	}
 
 	var processed int
-	var errors []string
+	var errs []error
 
 	for _, skill := range result.SelectedSkills {
 		// Determine source and target scopes based on operation type
@@ -1987,7 +1987,7 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 		// Get target path
 		targetPath, err := getSkillPathForScope(skill.Platform, toScope, skill.Name)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("%s: failed to determine target path: %v", skill.Name, err))
+			errs = append(errs, fmt.Errorf("%s: failed to determine target path: %w", skill.Name, err))
 			continue
 		}
 
@@ -1995,7 +1995,7 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 		// #nosec G301 - skill directories need to be readable by the platform
 		targetDir := filepath.Dir(targetPath)
 		if err := os.MkdirAll(targetDir, 0o750); err != nil {
-			errors = append(errors, fmt.Sprintf("%s: failed to create target directory: %v", skill.Name, err))
+			errs = append(errs, fmt.Errorf("%s: failed to create target directory: %w", skill.Name, err))
 			continue
 		}
 
@@ -2003,21 +2003,21 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 		// #nosec G304 - skill.Path comes from parsed skill files
 		content, err := os.ReadFile(skill.Path)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("%s: failed to read source: %v", skill.Name, err))
+			errs = append(errs, fmt.Errorf("%s: failed to read source: %w", skill.Name, err))
 			continue
 		}
 
 		// Write to target
 		// #nosec G306 G703 - skill files should be readable; targetPath comes from getSkillPathForScope (controlled internal function)
 		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
-			errors = append(errors, fmt.Sprintf("%s: failed to write to target: %v", skill.Name, err))
+			errs = append(errs, fmt.Errorf("%s: failed to write to target: %w", skill.Name, err))
 			continue
 		}
 
 		// Remove source if requested
 		if result.RemoveSource {
 			if err := os.Remove(skill.Path); err != nil {
-				errors = append(errors, fmt.Sprintf("%s: copied but failed to remove source: %v", skill.Name, err))
+				errs = append(errs, fmt.Errorf("%s: copied but failed to remove source: %w", skill.Name, err))
 				// Don't continue - the copy was successful
 			}
 		}
@@ -2034,11 +2034,11 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 		ui.Success(fmt.Sprintf("%sd %d skill(s) (%s)", operation, processed, modeText))
 	}
 
-	if len(errors) > 0 {
-		for _, e := range errors {
-			ui.Error(fmt.Sprintf("Failed: %s", e))
+	if len(errs) > 0 {
+		for _, err := range errs {
+			ui.Error(fmt.Sprintf("Failed: %s", err))
 		}
-		return fmt.Errorf("some operations failed")
+		return fmt.Errorf("some operations failed: %w", errors.Join(errs...))
 	}
 
 	return nil

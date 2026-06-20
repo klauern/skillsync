@@ -2,6 +2,7 @@ package export
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -197,11 +198,23 @@ func (e *Exporter) exportYAML(skills []model.Skill, w io.Writer) error {
 	if e.opts.Pretty {
 		encoder.SetIndent(2)
 	}
-	if err := encoder.Encode(exported); err != nil {
-		_ = encoder.Close()
-		return err
+
+	encodeErr := encoder.Encode(exported)
+	closeErr := encoder.Close()
+
+	switch {
+	case encodeErr != nil && closeErr != nil:
+		return errors.Join(
+			fmt.Errorf("encode YAML export: %w", encodeErr),
+			fmt.Errorf("close YAML encoder: %w", closeErr),
+		)
+	case encodeErr != nil:
+		return fmt.Errorf("encode YAML export: %w", encodeErr)
+	case closeErr != nil:
+		return fmt.Errorf("close YAML encoder: %w", closeErr)
 	}
-	return encoder.Close()
+
+	return nil
 }
 
 // exportMarkdown exports skills as Markdown.
