@@ -469,13 +469,6 @@ func (m *ConflictListModel) resolveConflictAt(idx int, resolution sync.Resolutio
 	}
 }
 
-func (m *ConflictListModel) updateTableRow(idx int) {
-	if m.conflictAt(idx) == nil {
-		return
-	}
-	m.table.SetRows(m.cfg.ToRows(m.filtered))
-}
-
 func (m ConflictListModel) conflictAt(idx int) *sync.Conflict {
 	if idx < 0 || idx >= len(m.allItems) {
 		return nil
