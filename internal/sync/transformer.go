@@ -22,6 +22,30 @@ func NewTransformer() *Transformer {
 	return &Transformer{}
 }
 
+func promptTargetPath(skillName string, target model.Platform) string {
+	switch target {
+	case model.Codex, model.Gemini, model.PiDev:
+		// These platforms discover prompts as SKILL.md-based artifacts.
+		return filepath.Join(skillName, "SKILL.md")
+	case model.Cursor, model.ClaudeCode:
+		// Cursor and Claude prompts stay in flat markdown files.
+		return skillName + ".md"
+	default:
+		return ""
+	}
+}
+
+func nameBasedSkillTargetPath(skillName string, target model.Platform) string {
+	switch target {
+	case model.Codex, model.Gemini, model.PiDev:
+		return filepath.Join(skillName, "SKILL.md")
+	case model.Cursor, model.ClaudeCode:
+		return skillName + ".md"
+	default:
+		return ""
+	}
+}
+
 // Transform converts a skill from source to target platform format.
 func (t *Transformer) Transform(skill model.Skill, targetPlatform model.Platform) (model.Skill, error) {
 	logging.Debug(
@@ -102,11 +126,11 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 			return "GEMINI.md"
 		}
 		if skill.Type == model.SkillTypePrompt {
-			return filepath.Join(skill.Name, "SKILL.md")
+			return promptTargetPath(skill.Name, target)
 		}
 		baseName := filepath.Base(skill.Path)
 		if isSkillFile(baseName) && skill.Name != "" {
-			return filepath.Join(skill.Name, "SKILL.md")
+			return nameBasedSkillTargetPath(skill.Name, target)
 		}
 		if baseName == "" {
 			return "SKILL.md"
@@ -115,35 +139,17 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 	}
 
 	if skill.Type == model.SkillTypePrompt {
-		switch target {
-		case model.Codex:
-			// Codex discovery is SKILL.md-centric; store prompts as SKILL artifacts.
-			return filepath.Join(skill.Name, "SKILL.md")
-		case model.PiDev:
-			return filepath.Join(skill.Name, "SKILL.md")
-		case model.Cursor:
-			// Cursor prompt artifacts are markdown-based; keep simple filename layout.
-			return skill.Name + ".md"
-		case model.ClaudeCode:
-			// Claude prompt/command legacy artifacts are markdown files.
-			return skill.Name + ".md"
+		if targetPath := promptTargetPath(skill.Name, target); targetPath != "" {
+			return targetPath
 		}
 	}
 
 	baseName := filepath.Base(skill.Path)
 	if isSkillFile(baseName) && skill.Name != "" {
-		switch target {
-		case model.Codex:
-			return filepath.Join(skill.Name, "SKILL.md")
-		case model.PiDev:
-			return filepath.Join(skill.Name, "SKILL.md")
-		case model.Cursor:
-			return skill.Name + ".md"
-		case model.ClaudeCode:
-			return skill.Name + ".md"
-		default:
-			return baseName
+		if targetPath := nameBasedSkillTargetPath(skill.Name, target); targetPath != "" {
+			return targetPath
 		}
+		return baseName
 	}
 	nameWithoutExt := strings.TrimSuffix(baseName, filepath.Ext(baseName))
 
