@@ -89,11 +89,11 @@ linters:
         linters:
           - errcheck
           - wrapcheck
-      # Exclude gosec permissions checks in test files
+      # Exclude gosec file permission/inclusion checks in test files
       - path: _test\.go
         linters:
           - gosec
-        text: "G30[16]"
+        text: "G30[0-9]"
       # Exclude revive var-naming for packages that share stdlib names
       - path: "internal/(parser|sync)"
         linters:
