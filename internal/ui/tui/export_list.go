@@ -181,7 +181,7 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 			}
 			return fmt.Sprintf("%d skill(s) selected of %d", selectedCount, filtered)
 		},
-		Header: func(_ *ListModel[model.Skill]) string {
+		Header: func() string {
 			return exportHeader(state)
 		},
 		ExtraBody: func(m *ListModel[model.Skill]) string {

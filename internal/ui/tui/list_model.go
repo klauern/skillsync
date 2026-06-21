@@ -77,7 +77,7 @@ type ListConfig[T any] struct {
 	// Optional hooks for screen-specific extensions.
 
 	// Header is rendered between the title and the filter indicator.
-	Header func(m *ListModel[T]) string
+	Header func() string
 	// ExtraBody is rendered between the status bar and the help line.
 	ExtraBody func(m *ListModel[T]) string
 	// ExtraKeys handles screen-specific key presses in normal mode.
@@ -265,7 +265,7 @@ func (m ListModel[T]) View() string {
 	b.WriteString("\n\n")
 
 	if m.cfg.Header != nil {
-		b.WriteString(m.cfg.Header(&m))
+		b.WriteString(m.cfg.Header())
 		b.WriteString("\n\n")
 	}
 
