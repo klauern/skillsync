@@ -106,7 +106,7 @@ func TestCopySkillFile(t *testing.T) {
 			t.Fatalf("copySkillFile() error = %v", err)
 		}
 
-		got, err := os.ReadFile(targetPath)
+		got, err := os.ReadFile(targetPath) // #nosec G304 -- targetPath is a test-controlled temp file path.
 		if err != nil {
 			t.Fatalf("failed to read copied skill: %v", err)
 		}
