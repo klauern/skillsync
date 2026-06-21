@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,6 +83,51 @@ func TestPruneEmptySkillParentDir(t *testing.T) {
 		}
 		if !info.IsDir() {
 			t.Fatalf("expected %q to remain a directory", skillDir)
+		}
+	})
+}
+
+func TestCopySkillFile(t *testing.T) {
+	t.Run("copies skill content and creates parent directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		sourcePath := filepath.Join(tempDir, "source", skillDefinitionFile)
+		targetPath := filepath.Join(tempDir, "target", "copied-skill", skillDefinitionFile)
+
+		if err := os.MkdirAll(filepath.Dir(sourcePath), 0o750); err != nil {
+			t.Fatalf("failed to create source directory: %v", err)
+		}
+
+		want := "# Copied Skill\nbody\n"
+		if err := os.WriteFile(sourcePath, []byte(want), 0o644); err != nil {
+			t.Fatalf("failed to write source skill: %v", err)
+		}
+
+		if err := copySkillFile(sourcePath, targetPath); err != nil {
+			t.Fatalf("copySkillFile() error = %v", err)
+		}
+
+		got, err := os.ReadFile(targetPath) // #nosec G304 -- targetPath is a test-controlled temp file path.
+		if err != nil {
+			t.Fatalf("failed to read copied skill: %v", err)
+		}
+
+		if string(got) != want {
+			t.Fatalf("copied content = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("returns read error when source is missing", func(t *testing.T) {
+		tempDir := t.TempDir()
+		sourcePath := filepath.Join(tempDir, "missing", skillDefinitionFile)
+		targetPath := filepath.Join(tempDir, "target", "copied-skill", skillDefinitionFile)
+
+		err := copySkillFile(sourcePath, targetPath)
+		if err == nil {
+			t.Fatal("copySkillFile() error = nil, want missing source error")
+		}
+
+		if !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("copySkillFile() error = %v, want not-exist", err)
 		}
 	})
 }
