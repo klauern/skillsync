@@ -146,7 +146,7 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 			}
 			return status
 		},
-		Header: func(_ *ListModel[model.Skill]) string {
+		Header: func() string {
 			var tabs []string
 			if scopeIndex == -1 {
 				tabs = append(tabs, scopeListStyles.ScopeActive.Render("[All]"))
