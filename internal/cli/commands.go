@@ -1991,26 +1991,8 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 			continue
 		}
 
-		// Ensure target directory exists
-		// #nosec G301 - skill directories need to be readable by the platform
-		targetDir := filepath.Dir(targetPath)
-		if err := os.MkdirAll(targetDir, 0o750); err != nil {
-			errs = append(errs, fmt.Errorf("%s: failed to create target directory: %w", skill.Name, err))
-			continue
-		}
-
-		// Read source content
-		// #nosec G304 - skill.Path comes from parsed skill files
-		content, err := os.ReadFile(skill.Path)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: failed to read source: %w", skill.Name, err))
-			continue
-		}
-
-		// Write to target
-		// #nosec G306 G703 - skill files should be readable; targetPath comes from getSkillPathForScope (controlled internal function)
-		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
-			errs = append(errs, fmt.Errorf("%s: failed to write to target: %w", skill.Name, err))
+		if err := copySkillFile(skill.Path, targetPath); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", skill.Name, err))
 			continue
 		}
 

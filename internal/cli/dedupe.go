@@ -313,24 +313,8 @@ func runDedupeRename(cmd *cli.Command, oldName, newName string) error {
 		}
 	}
 
-	// Read source content
-	// #nosec G304 - skill.Path comes from parsed skill files
-	content, err := os.ReadFile(skill.Path)
-	if err != nil {
-		return fmt.Errorf("failed to read source skill: %w", err)
-	}
-
-	// Ensure target directory exists
-	// #nosec G301 - skill directories need to be readable by the platform
-	targetDir := targetPath[:len(targetPath)-len("/SKILL.md")]
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
-		return fmt.Errorf("failed to create target directory: %w", err)
-	}
-
-	// Write to new location
-	// #nosec G306 G703 - skill files should be readable; targetPath is derived from controlled scope resolution
-	if err := os.WriteFile(targetPath, content, 0o644); err != nil {
-		return fmt.Errorf("failed to write skill to new location: %w", err)
+	if err := copySkillFile(skill.Path, targetPath); err != nil {
+		return err
 	}
 
 	// Remove old skill
