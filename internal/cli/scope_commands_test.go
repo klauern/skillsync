@@ -511,7 +511,7 @@ func writeScopeMoveFixture(
 func assertFileHasContent(t *testing.T, path, want string) {
 	t.Helper()
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is test-controlled fixture.
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", path, err)
 	}
