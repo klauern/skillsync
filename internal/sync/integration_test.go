@@ -413,7 +413,7 @@ Target content.
 				t.Fatalf("expected message to contain %q, got %q", tt.wantMessage, skillResult.Message)
 			}
 
-			content, err := os.ReadFile(targetPath)
+			content, err := os.ReadFile(targetPath) // #nosec G304 -- targetPath is test-controlled.
 			util.AssertNoError(t, err)
 			got := string(content)
 			for _, want := range tt.contains {
@@ -474,7 +474,7 @@ Target content.
 	}
 	util.AssertEqual(t, skillResult.Conflict.Type, ConflictTypeBoth)
 
-	content, err := os.ReadFile(targetPath)
+	content, err := os.ReadFile(targetPath) // #nosec G304 -- targetPath is test-controlled.
 	util.AssertNoError(t, err)
 	if string(content) != originalTarget {
 		t.Fatal("target content should remain unchanged when conflict is detected")
