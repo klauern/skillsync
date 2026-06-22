@@ -84,17 +84,17 @@ linters:
       - vendor
 
     rules:
-      # Exclude error checks in tests
-      - path: _test\.go
+      # Exclude error checks in test files
+      - path: _test\.go$
         linters:
           - errcheck
           - wrapcheck
       # Exclude gosec file permission/inclusion checks in test files
-      - path: _test\.go
+      - path: _test\.go$
         linters:
           - gosec
         text: "G30[0-9]"
-      # Exclude revive var-naming for packages that share stdlib names
+      # Exclude revive var-naming for packages that share stdlib names.
       - path: "internal/(parser|sync)"
         linters:
           - revive
@@ -105,10 +105,15 @@ linters:
       # shadowed own-fields (table/filtered/filter) where the prefix is
       # mandatory. Simplifying only the unshadowed subset would make the sync
       # blocks inconsistent, so the explicit selector is the intended style.
-      - path: "internal/ui/tui/.*_list(_test)?\\.go"
+      - path: internal/ui/tui/.*_list(_test)?\.go
         linters:
           - staticcheck
         text: "QF1008"
+      # Exclude revive stuttering warning for type names in sync package.
+      - path: "internal/sync/.*"
+        linters:
+          - revive
+        text: "will be used as sync\\."
 
 run:
   timeout: 5m
