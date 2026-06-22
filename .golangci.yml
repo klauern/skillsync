@@ -34,20 +34,24 @@ linters:
       - vendor
 
     rules:
-      # Exclude error checks in tests
-      - path: _test\.go
+      # Exclude error checks in test files
+      - path: _test\.go$
         linters:
           - errcheck
-      # Exclude gosec permissions checks in test files
-      - path: _test\.go
+      # Exclude gosec file permission checks in test files
+      - path: _test\.go$
         linters:
           - gosec
-        text: "G30[16]"
-      # Exclude revive var-naming for packages that share stdlib names
+      # Exclude revive var-naming for packages that share stdlib names.
       - path: "internal/(parser|sync)"
         linters:
           - revive
         text: "var-naming.*package"
+      # Exclude revive stuttering warning for type names in sync package.
+      - path: "internal/sync/.*"
+        linters:
+          - revive
+        text: "will be used as sync\\."
 
 run:
   timeout: 5m
