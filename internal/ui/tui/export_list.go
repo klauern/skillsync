@@ -117,6 +117,8 @@ func (m ExportListModel) Result() ExportListResult {
 }
 
 // NewExportListModel creates a new export list model.
+//
+//nolint:gocyclo // UI builder with complex key handling and callbacks.
 func NewExportListModel(skills []model.Skill) ExportListModel {
 	sort.Slice(skills, func(i, j int) bool {
 		return strings.ToLower(skills[i].Name) < strings.ToLower(skills[j].Name)
