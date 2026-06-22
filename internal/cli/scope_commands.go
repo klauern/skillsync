@@ -296,11 +296,11 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 
 	// Validate scope direction
 	if isPromotion {
-		if !toScope.IsHigherPrecedence(fromScope) && toScope != fromScope {
+		if !isHigherMoveScope(toScope, fromScope) && toScope != fromScope {
 			return fmt.Errorf("promotion requires target scope (%s) to have higher precedence than source scope (%s)", toScope, fromScope)
 		}
 	} else {
-		if !fromScope.IsHigherPrecedence(toScope) && fromScope != toScope {
+		if !isHigherMoveScope(fromScope, toScope) && fromScope != toScope {
 			return fmt.Errorf("demotion requires source scope (%s) to have higher precedence than target scope (%s)", fromScope, toScope)
 		}
 	}
@@ -400,6 +400,25 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 		return fmt.Errorf("skill %q not found in %s scope for platform %s", skillName, scopeList, platformStr)
 	}
 	return fmt.Errorf("skill %q not found in %s scope across any platform", skillName, scopeList)
+}
+
+func isHigherMoveScope(a, b model.SkillScope) bool {
+	return scopeMoveRank(a) < scopeMoveRank(b)
+}
+
+func scopeMoveRank(scope model.SkillScope) int {
+	switch scope {
+	case model.ScopeSystem:
+		return 0
+	case model.ScopeAdmin:
+		return 1
+	case model.ScopeUser:
+		return 2
+	case model.ScopeRepo:
+		return 3
+	default:
+		return 100
+	}
 }
 
 // runScopeList shows all locations where a skill exists.
@@ -773,11 +792,15 @@ func getSkillPathForScope(platform model.Platform, scope model.SkillScope, skill
 		return "", fmt.Errorf("scope %q is not writable", scope)
 	}
 
-	// Construct the skill file path
-	// Skills can be either:
-	// 1. A directory with SKILL.md: basePath/skill-name/SKILL.md
-	// 2. A single .md file: basePath/skill-name.md
-	// We'll use the directory format for consistency with Agent Skills Standard
+	// Construct a writable target path that the destination platform parser
+	// will discover again within the selected scope.
+	switch platform {
+	case model.Copilot:
+		return filepath.Join(basePath, "agents", skillName+".agent.md"), nil
+	case model.Gemini:
+		return filepath.Join(basePath, "skills", skillName, "SKILL.md"), nil
+	}
+
 	return filepath.Join(basePath, skillName, "SKILL.md"), nil
 }
 

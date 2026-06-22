@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/util"
 )
 
 func TestPromoteCommand(t *testing.T) {
@@ -255,6 +256,25 @@ func TestScopePruneCommand(t *testing.T) {
 }
 
 func TestGetSkillPathForScope(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create home .agents skills dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".agents", "skills"), 0o750); err != nil {
+		t.Fatalf("failed to create repo .agents skills dir: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working dir: %v", err)
+	}
+	if err := os.Chdir(repoRoot); err != nil {
+		t.Fatalf("failed to chdir to repo root: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
 	tests := map[string]struct {
 		platform   model.Platform
 		scope      model.SkillScope
@@ -281,6 +301,62 @@ func TestGetSkillPathForScope(t *testing.T) {
 			scope:      model.ScopeRepo,
 			skillName:  "test-skill",
 			wantSuffix: filepath.Join(".claude", "skills", "test-skill", "SKILL.md"),
+			wantErr:    false,
+		},
+		"repo scope codex": {
+			platform:   model.Codex,
+			scope:      model.ScopeRepo,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".codex", "skills", "test-skill", "SKILL.md"),
+			wantErr:    false,
+		},
+		"user scope codex prefers agents": {
+			platform:   model.Codex,
+			scope:      model.ScopeUser,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".agents", "skills", "test-skill", "SKILL.md"),
+			wantErr:    false,
+		},
+		"repo scope copilot": {
+			platform:   model.Copilot,
+			scope:      model.ScopeRepo,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".github", "agents", "test-skill.agent.md"),
+			wantErr:    false,
+		},
+		"user scope copilot": {
+			platform:   model.Copilot,
+			scope:      model.ScopeUser,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".github", "agents", "test-skill.agent.md"),
+			wantErr:    false,
+		},
+		"repo scope gemini": {
+			platform:   model.Gemini,
+			scope:      model.ScopeRepo,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".gemini", "skills", "test-skill", "SKILL.md"),
+			wantErr:    false,
+		},
+		"user scope gemini": {
+			platform:   model.Gemini,
+			scope:      model.ScopeUser,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".gemini", "skills", "test-skill", "SKILL.md"),
+			wantErr:    false,
+		},
+		"repo scope pi.dev": {
+			platform:   model.PiDev,
+			scope:      model.ScopeRepo,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".agents", "skills", "test-skill", "SKILL.md"),
+			wantErr:    false,
+		},
+		"user scope pi.dev": {
+			platform:   model.PiDev,
+			scope:      model.ScopeUser,
+			skillName:  "test-skill",
+			wantSuffix: filepath.Join(".agents", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
 		"admin scope not writable": {
@@ -310,6 +386,137 @@ func TestGetSkillPathForScope(t *testing.T) {
 				t.Errorf("getSkillPathForScope() = %q, want suffix %q", got, tt.wantSuffix)
 			}
 		})
+	}
+}
+
+func TestPromoteDemoteCommand_AllPlatforms(t *testing.T) {
+	tests := []struct {
+		name        string
+		platformArg string
+		platform    model.Platform
+	}{
+		{name: "claude-code", platformArg: "claude-code", platform: model.ClaudeCode},
+		{name: "cursor", platformArg: "cursor", platform: model.Cursor},
+		{name: "codex", platformArg: "codex", platform: model.Codex},
+		{name: "copilot", platformArg: "copilot", platform: model.Copilot},
+		{name: "gemini", platformArg: "gemini", platform: model.Gemini},
+		{name: "pi.dev", platformArg: "pi.dev", platform: model.PiDev},
+		{name: "pi-agent alias", platformArg: "pi-agent", platform: model.PiDev},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repoRoot := t.TempDir()
+			home := filepath.Join(t.TempDir(), "home")
+			if err := os.MkdirAll(home, 0o750); err != nil {
+				t.Fatalf("failed to create home dir: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o750); err != nil {
+				t.Fatalf("failed to create repo marker: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(repoRoot, ".agents", "skills"), 0o750); err != nil {
+				t.Fatalf("failed to create repo .agents skills dir: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
+				t.Fatalf("failed to create user .agents skills dir: %v", err)
+			}
+
+			t.Setenv("HOME", home)
+
+			oldWd, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("failed to get working dir: %v", err)
+			}
+			if err := os.Chdir(repoRoot); err != nil {
+				t.Fatalf("failed to chdir to repo root: %v", err)
+			}
+			defer func() { _ = os.Chdir(oldWd) }()
+
+			promoteName := "repo-promote"
+			demoteName := "user-demote"
+
+			promoteSource := writeScopeMoveFixture(t, tt.platform, model.ScopeRepo, repoRoot, home, promoteName)
+			promoteTarget, err := getSkillPathForScope(tt.platform, model.ScopeUser, promoteName)
+			if err != nil {
+				t.Fatalf("failed to determine promote target: %v", err)
+			}
+
+			ctx := context.Background()
+			if err := Run(ctx, []string{"skillsync", "promote", promoteName, "--platform", tt.platformArg, "--force"}); err != nil {
+				t.Fatalf("promote failed for %s: %v", tt.platformArg, err)
+			}
+
+			assertFileHasContent(t, promoteTarget, promoteName)
+			assertFileHasContent(t, promoteSource, promoteName)
+
+			demoteSource := writeScopeMoveFixture(t, tt.platform, model.ScopeUser, repoRoot, home, demoteName)
+			demoteTarget, err := getSkillPathForScope(tt.platform, model.ScopeRepo, demoteName)
+			if err != nil {
+				t.Fatalf("failed to determine demote target: %v", err)
+			}
+
+			if err := Run(ctx, []string{"skillsync", "demote", demoteName, "--platform", tt.platformArg, "--force"}); err != nil {
+				t.Fatalf("demote failed for %s: %v", tt.platformArg, err)
+			}
+
+			assertFileHasContent(t, demoteTarget, demoteName)
+			assertFileHasContent(t, demoteSource, demoteName)
+		})
+	}
+}
+
+func writeScopeMoveFixture(
+	t *testing.T,
+	platform model.Platform,
+	scope model.SkillScope,
+	repoRoot, home, skillName string,
+) string {
+	t.Helper()
+
+	var targetPath string
+
+	switch platform {
+	case model.Copilot:
+		basePath := filepath.Join(home, ".github")
+		if scope == model.ScopeRepo {
+			basePath = filepath.Join(repoRoot, ".github")
+		}
+		targetPath = filepath.Join(basePath, "agents", skillName+".agent.md")
+	case model.Gemini:
+		basePath := filepath.Join(home, ".gemini")
+		if scope == model.ScopeRepo {
+			basePath = filepath.Join(repoRoot, ".gemini")
+		}
+		targetPath = filepath.Join(basePath, "skills", skillName, "SKILL.md")
+	default:
+		basePath := util.PlatformSkillsPath(platform)
+		if scope == model.ScopeRepo {
+			basePath = util.RepoSkillsPath(platform, repoRoot)
+		}
+		targetPath = filepath.Join(basePath, skillName, "SKILL.md")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o750); err != nil {
+		t.Fatalf("failed to create fixture dir for %s: %v", targetPath, err)
+	}
+
+	content := "---\nname: " + skillName + "\ndescription: test fixture\n---\n\n# " + skillName + "\n"
+	if err := os.WriteFile(targetPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write fixture %s: %v", targetPath, err)
+	}
+
+	return targetPath
+}
+
+func assertFileHasContent(t *testing.T, path, want string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path) // #nosec G304 -- path is test-controlled fixture.
+	if err != nil {
+		t.Fatalf("failed to read %s: %v", path, err)
+	}
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("file %s missing expected content %q", path, want)
 	}
 }
 
