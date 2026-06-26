@@ -12,7 +12,7 @@ type Fixture struct {
 	baseDir string
 }
 
-// NewFixture creates a new fixture helper rooted at the given directory.
+// NewFixture creates a new fixture helper rooted at a directory.
 func NewFixture(t *testing.T, baseDir string) *Fixture {
 	t.Helper()
 	return &Fixture{
@@ -40,7 +40,7 @@ func (f *Fixture) WriteFile(relPath, content string) string {
 }
 
 // WriteSkill writes a skill file with frontmatter and content.
-// This is a convenience helper for creating typical skill files.
+// It is a convenience helper for creating typical skill files.
 func (f *Fixture) WriteSkill(relPath, name, description, content string) string {
 	f.t.Helper()
 
@@ -59,11 +59,9 @@ func (f *Fixture) WriteSkill(relPath, name, description, content string) string 
 func (f *Fixture) MkdirAll(relPath string) string {
 	f.t.Helper()
 	fullPath := filepath.Join(f.baseDir, relPath)
-
 	if err := os.MkdirAll(fullPath, 0o750); err != nil {
 		f.t.Fatalf("failed to create directory %s: %v", fullPath, err)
 	}
-
 	return fullPath
 }
 
@@ -72,7 +70,7 @@ func (f *Fixture) Path(relPath string) string {
 	return filepath.Join(f.baseDir, relPath)
 }
 
-// Exists returns true if the file or directory exists.
+// Exists returns true if a file or directory exists.
 func (f *Fixture) Exists(relPath string) bool {
 	f.t.Helper()
 	fullPath := filepath.Join(f.baseDir, relPath)
@@ -80,12 +78,12 @@ func (f *Fixture) Exists(relPath string) bool {
 	return err == nil
 }
 
-// ReadFile reads and returns the content of a file.
+// ReadFile reads and returns file content.
 func (f *Fixture) ReadFile(relPath string) string {
 	f.t.Helper()
 	fullPath := filepath.Join(f.baseDir, relPath)
 
-	// #nosec G304 - fullPath is constructed from trusted test fixture base and test-provided path
+	// #nosec G304 - fullPath is constructed from a trusted fixture base and test-provided path.
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		f.t.Fatalf("failed to read file %s: %v", fullPath, err)
@@ -94,112 +92,68 @@ func (f *Fixture) ReadFile(relPath string) string {
 	return string(data)
 }
 
-// ClaudeCodeFixture creates a fixture helper for Claude Code skills directory.
+func (h *Harness) platformFixture(envKey, label string, fallbackParts ...string) *Fixture {
+	h.t.Helper()
+
+	skillsDir := h.env[envKey]
+	if skillsDir == "" {
+		skillsDir = filepath.Join(append([]string{h.homeDir}, fallbackParts...)...)
+	}
+	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
+		h.t.Fatalf("failed to create %s directory: %v", label, err)
+	}
+
+	return NewFixture(h.t, skillsDir)
+}
+
+// ClaudeCodeFixture creates a fixture helper for the Claude Code skills directory.
 // It sets up the expected directory structure for Claude Code.
 // The path matches the SKILLSYNC_CLAUDE_CODE_PATH environment variable set by NewHarness.
 func (h *Harness) ClaudeCodeFixture() *Fixture {
 	h.t.Helper()
-
-	// Claude Code stores skills in the path set by SKILLSYNC_CLAUDE_CODE_PATH
-	skillsDir := h.env["SKILLSYNC_CLAUDE_CODE_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".claude", "commands")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Claude Code skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
+	return h.platformFixture("SKILLSYNC_CLAUDE_CODE_PATH", "Claude Code skills", ".claude", "commands")
 }
 
-// CursorFixture creates a fixture helper for Cursor skills directory.
+// CursorFixture creates a fixture helper for the Cursor skills directory.
 // It sets up the expected directory structure for Cursor.
 // The path matches the SKILLSYNC_CURSOR_PATH environment variable set by NewHarness.
 func (h *Harness) CursorFixture() *Fixture {
 	h.t.Helper()
-
-	// Cursor stores skills in the path set by SKILLSYNC_CURSOR_PATH
-	skillsDir := h.env["SKILLSYNC_CURSOR_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".cursor", "rules")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Cursor skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
+	return h.platformFixture("SKILLSYNC_CURSOR_PATH", "Cursor skills", ".cursor", "rules")
 }
 
-// CodexFixture creates a fixture helper for Codex skills directory.
+// CodexFixture creates a fixture helper for the Codex skills directory.
 // It sets up the expected directory structure for Codex.
 // The path matches the SKILLSYNC_CODEX_PATH environment variable set by NewHarness.
 func (h *Harness) CodexFixture() *Fixture {
 	h.t.Helper()
-
-	// Codex stores skills in the path set by SKILLSYNC_CODEX_PATH
-	skillsDir := h.env["SKILLSYNC_CODEX_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".codex", "skills")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Codex skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
+	return h.platformFixture("SKILLSYNC_CODEX_PATH", "Codex skills", ".codex", "skills")
 }
 
-// PiDevFixture creates a fixture helper for Pi.dev skills directory.
-// It sets up the expected ~/.pi/agent/skills structure in the isolated home.
+// PiDevFixture creates a fixture helper for the Pi.dev skills directory.
+// It sets up the expected ~/.pi/agent/skills structure in an isolated home.
 func (h *Harness) PiDevFixture() *Fixture {
 	h.t.Helper()
-
-	skillsDir := h.env["SKILLSYNC_PIDEV_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".pi", "agent", "skills")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Pi.dev skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
+	return h.platformFixture("SKILLSYNC_PIDEV_PATH", "Pi.dev skills", ".pi", "agent", "skills")
 }
 
-// CopilotFixture creates a fixture helper for GitHub Copilot skills directory.
-// It sets up the expected ~/.github structure in the isolated home.
+// CopilotFixture creates a fixture helper for the GitHub Copilot skills directory.
+// It sets up the expected ~/.github structure in an isolated home.
 func (h *Harness) CopilotFixture() *Fixture {
 	h.t.Helper()
-
-	skillsDir := h.env["SKILLSYNC_COPILOT_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".github")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Copilot skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
+	return h.platformFixture("SKILLSYNC_COPILOT_PATH", "Copilot skills", ".github")
 }
 
-// GeminiFixture creates a fixture helper for Gemini CLI skills directory.
-// It sets up the expected ~/.gemini structure in the isolated home.
+// GeminiFixture creates a fixture helper for the Gemini CLI skills directory.
+// It sets up the expected ~/.gemini structure in an isolated home.
 func (h *Harness) GeminiFixture() *Fixture {
 	h.t.Helper()
-
-	skillsDir := h.env["SKILLSYNC_GEMINI_PATH"]
-	if skillsDir == "" {
-		skillsDir = filepath.Join(h.homeDir, ".gemini")
-	}
-	if err := os.MkdirAll(skillsDir, 0o750); err != nil {
-		h.t.Fatalf("failed to create Gemini skills directory: %v", err)
-	}
-
-	return NewFixture(h.t, skillsDir)
+	return h.platformFixture("SKILLSYNC_GEMINI_PATH", "Gemini skills", ".gemini")
 }
 
-// TempFixture creates a fixture helper for a new temporary directory.
+// TempFixture creates a fixture helper rooted at a new temporary directory.
 func (h *Harness) TempFixture() *Fixture {
 	h.t.Helper()
-
 	tempDir := h.t.TempDir()
 	return NewFixture(h.t, tempDir)
 }
