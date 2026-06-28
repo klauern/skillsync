@@ -24,6 +24,41 @@ type matrixPlatform struct {
 	parse func(t *testing.T) model.Skill
 }
 
+type matrixFixtureSpec struct {
+	relPath string
+	content string
+	parser  func(tmpDir string) interface{ Parse() ([]model.Skill, error) }
+}
+
+const (
+	defaultMatrixFixture = `---
+name: matrix-skill
+description: matrix fixture
+---
+
+Compare matrix fixture.
+`
+	cursorMatrixFixture = `---
+name: matrix-skill
+globs: ["*.go"]
+---
+
+Compare matrix fixture.
+`
+	copilotMatrixFixture = `---
+description: matrix fixture
+tools:
+- read
+- search
+agent: agent
+model: GPT-4o
+argument-hint: Compare matrix fixture
+---
+
+Compare matrix fixture.
+`
+)
+
 func TestCompareAndDedupePlatformPairs(t *testing.T) {
 	platforms := []matrixPlatform{
 		{name: "claude-code", parse: parseClaudeFixture},
@@ -111,91 +146,68 @@ func captureStdoutToString(t *testing.T, fn func()) string {
 
 func parseClaudeFixture(t *testing.T) model.Skill {
 	t.Helper()
-
-	tmpDir := t.TempDir()
-	writeFixture(t, filepath.Join(tmpDir, "matrix-skill.md"), `---
-name: matrix-skill
-description: matrix fixture
----
-
-Compare matrix fixture.
-`)
-	return mustParseMatrixSkill(t, claude.New(tmpDir))
+	return parseMatrixFixture(t, matrixFixtureSpec{
+		relPath: "matrix-skill.md",
+		content: defaultMatrixFixture,
+		parser: func(tmpDir string) interface{ Parse() ([]model.Skill, error) } {
+			return claude.New(tmpDir)
+		},
+	})
 }
 
 func parseCursorFixture(t *testing.T) model.Skill {
 	t.Helper()
-
-	tmpDir := t.TempDir()
-	writeFixture(t, filepath.Join(tmpDir, "matrix-skill.md"), `---
-name: matrix-skill
-globs: ["*.go"]
----
-
-Compare matrix fixture.
-`)
-	return mustParseMatrixSkill(t, cursor.New(tmpDir))
+	return parseMatrixFixture(t, matrixFixtureSpec{
+		relPath: "matrix-skill.md",
+		content: cursorMatrixFixture,
+		parser: func(tmpDir string) interface{ Parse() ([]model.Skill, error) } {
+			return cursor.New(tmpDir)
+		},
+	})
 }
 
 func parseCodexFixture(t *testing.T) model.Skill {
 	t.Helper()
-
-	tmpDir := t.TempDir()
-	writeFixture(t, filepath.Join(tmpDir, "matrix-skill", "SKILL.md"), `---
-name: matrix-skill
-description: matrix fixture
----
-
-Compare matrix fixture.
-`)
-	return mustParseMatrixSkill(t, codex.New(tmpDir))
+	return parseMatrixFixture(t, matrixFixtureSpec{
+		relPath: filepath.Join("matrix-skill", "SKILL.md"),
+		content: defaultMatrixFixture,
+		parser: func(tmpDir string) interface{ Parse() ([]model.Skill, error) } {
+			return codex.New(tmpDir)
+		},
+	})
 }
 
 func parseCopilotFixture(t *testing.T) model.Skill {
 	t.Helper()
-
-	tmpDir := t.TempDir()
-	writeFixture(t, filepath.Join(tmpDir, ".github", "prompts", "matrix-skill.prompt.md"), `---
-description: matrix fixture
-tools:
-  - read
-  - search
-agent: agent
-model: GPT-4o
-argument-hint: Compare matrix fixture
----
-
-Compare matrix fixture.
-`)
-	return mustParseMatrixSkill(t, copilot.New(filepath.Join(tmpDir, ".github")))
+	return parseMatrixFixture(t, matrixFixtureSpec{
+		relPath: filepath.Join(".github", "prompts", "matrix-skill.prompt.md"),
+		content: copilotMatrixFixture,
+		parser: func(tmpDir string) interface{ Parse() ([]model.Skill, error) } {
+			return copilot.New(filepath.Join(tmpDir, ".github"))
+		},
+	})
 }
 
 func parseGeminiFixture(t *testing.T) model.Skill {
 	t.Helper()
-
-	tmpDir := t.TempDir()
-	writeFixture(t, filepath.Join(tmpDir, "skills", "matrix-skill", "SKILL.md"), `---
-name: matrix-skill
-description: matrix fixture
----
-
-Compare matrix fixture.
-`)
-	return mustParseMatrixSkill(t, gemini.New(filepath.Join(tmpDir, "skills")))
+	return parseMatrixFixture(t, matrixFixtureSpec{
+		relPath: filepath.Join("skills", "matrix-skill", "SKILL.md"),
+		content: defaultMatrixFixture,
+		parser: func(tmpDir string) interface{ Parse() ([]model.Skill, error) } {
+			return gemini.New(filepath.Join(tmpDir, "skills"))
+		},
+	})
 }
 
 func parsePiDevFixture(t *testing.T) model.Skill {
 	t.Helper()
-
-	tmpDir := t.TempDir()
-	writeFixture(t, filepath.Join(tmpDir, "skills", "matrix-skill", "SKILL.md"), `---
-name: matrix-skill
-description: matrix fixture
----
-
-Compare matrix fixture.
-`)
-	return mustParseMatrixSkill(t, pidev.New(tmpDir))
+	return parseMatrixFixture(t, matrixFixtureSpec{
+		relPath: filepath.Join("skills", "matrix-skill", "SKILL.md"),
+		content: defaultMatrixFixture,
+		parser: func(tmpDir string) interface{ Parse() ([]model.Skill, error) } {
+			return pidev.New(tmpDir)
+		},
+	})
 }
 
 func parsePiAgentFixture(t *testing.T) model.Skill {
@@ -220,13 +232,17 @@ func mustParseMatrixSkill(t *testing.T, parser interface{ Parse() ([]model.Skill
 	return model.Skill{}
 }
 
-func writeFixture(t *testing.T, path, content string) {
+func parseMatrixFixture(t *testing.T, spec matrixFixtureSpec) model.Skill {
 	t.Helper()
 
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, spec.relPath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("failed to create fixture dir %s: %v", filepath.Dir(path), err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(spec.content), 0o644); err != nil {
 		t.Fatalf("failed to write fixture %s: %v", path, err)
 	}
+
+	return mustParseMatrixSkill(t, spec.parser(tmpDir))
 }
