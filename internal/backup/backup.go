@@ -65,6 +65,20 @@ func resolveSourcePath(sourcePath string) (string, error) {
 	return sourcePath, nil
 }
 
+func loadBackupMetadata(backupID string) (*Index, Metadata, error) {
+	index, err := LoadIndex()
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("failed to load backup index: %w", err)
+	}
+
+	metadata, exists := index.Backups[backupID]
+	if !exists {
+		return nil, Metadata{}, fmt.Errorf("backup %q not found", backupID)
+	}
+
+	return index, metadata, nil
+}
+
 // CreateBackup creates a backup of the specified file or directory.
 // When the source is a skill entrypoint file (SKILL.md), backs up the entire
 // parent directory as a zip archive.
@@ -169,16 +183,9 @@ func CreateBackup(sourcePath string, opts Options) (*Metadata, error) {
 
 // RestoreBackup restores a backup to the specified target path
 func RestoreBackup(backupID string, targetPath string) error {
-	// Load index
-	index, err := LoadIndex()
+	_, metadata, err := loadBackupMetadata(backupID)
 	if err != nil {
-		return fmt.Errorf("failed to load backup index: %w", err)
-	}
-
-	// Find backup
-	metadata, exists := index.Backups[backupID]
-	if !exists {
-		return fmt.Errorf("backup %q not found", backupID)
+		return err
 	}
 
 	// Read backup file
@@ -431,16 +438,9 @@ func ListBackups(platform string) ([]Metadata, error) {
 
 // DeleteBackup deletes a backup and removes it from the index
 func DeleteBackup(backupID string) error {
-	// Load index
-	index, err := LoadIndex()
+	index, metadata, err := loadBackupMetadata(backupID)
 	if err != nil {
-		return fmt.Errorf("failed to load backup index: %w", err)
-	}
-
-	// Find backup
-	metadata, exists := index.Backups[backupID]
-	if !exists {
-		return fmt.Errorf("backup %q not found", backupID)
+		return err
 	}
 
 	// Delete backup file
@@ -537,16 +537,9 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 
 // VerifyBackup verifies that a backup file is intact and matches its hash
 func VerifyBackup(backupID string) (err error) {
-	// Load index
-	index, err := LoadIndex()
+	_, metadata, err := loadBackupMetadata(backupID)
 	if err != nil {
-		return fmt.Errorf("failed to load backup index: %w", err)
-	}
-
-	// Find backup
-	metadata, exists := index.Backups[backupID]
-	if !exists {
-		return fmt.Errorf("backup %q not found", backupID)
+		return err
 	}
 
 	// Check if file exists
