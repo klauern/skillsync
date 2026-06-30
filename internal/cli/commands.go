@@ -1763,7 +1763,7 @@ func runConflictsTUI() error {
 					continue // Already has the resolved content
 				}
 				if skill.Path != "" {
-					if err := os.WriteFile(skill.Path, []byte(content), 0o600); err != nil {
+					if err := util.WriteFileWithPerms(skill.Path, []byte(content), 0o750, 0o600); err != nil {
 						ui.Warning(fmt.Sprintf("Failed to update %s on %s: %v", skill.Name, skill.Platform, err))
 						continue
 					}

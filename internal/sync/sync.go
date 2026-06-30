@@ -17,6 +17,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/pidev"
+	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
 )
 
@@ -684,8 +685,8 @@ func (s *Synchronizer) processSkill(
 				return result
 			}
 
-			// #nosec G306 - skill files should be readable
-			if err := os.WriteFile(targetEntryPath, []byte(content), 0o644); err != nil {
+			// #nosec G301 G306 - skill files should be readable.
+			if err := util.WriteFileWithPerms(targetEntryPath, []byte(content), 0o750, 0o644); err != nil {
 				logging.Error(
 					"failed to write skill file",
 					logging.Skill(source.Name),

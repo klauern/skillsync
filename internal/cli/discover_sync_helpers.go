@@ -1672,8 +1672,8 @@ func applyResolvedConflicts(result *sync.Result, resolved map[string]string) err
 		sr := &result.Skills[i]
 		if sr.Action == sync.ActionConflict {
 			if content, ok := resolved[sr.Skill.Name]; ok {
-				// #nosec G306 - skill files should be readable
-				if err := os.WriteFile(sr.TargetPath, []byte(content), 0o644); err != nil {
+				// #nosec G301 G306 - skill files should be readable.
+				if err := util.WriteFileWithPerms(sr.TargetPath, []byte(content), 0o750, 0o644); err != nil {
 					return fmt.Errorf("failed to write resolved content for %s: %w", sr.Skill.Name, err)
 				}
 				// Update the action to indicate it was resolved
