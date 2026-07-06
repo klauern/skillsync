@@ -362,19 +362,7 @@ func discoverSkillsForExport(platform model.Platform) ([]model.Skill, error) {
 		platforms = model.AllPlatforms()
 	}
 
-	var allSkills []model.Skill
-	for _, p := range platforms {
-		skills, err := parsePlatformSkills(p)
-		if err != nil {
-			// Log warning but continue with other platforms
-			fmt.Fprintf(os.Stderr, "Warning: failed to parse %s: %v\n", p, err)
-			continue
-		}
-
-		allSkills = append(allSkills, skills...)
-	}
-
-	return allSkills, nil
+	return discoverSkillsAcrossPlatforms(platforms), nil
 }
 
 func backupCommand() *cli.Command {
