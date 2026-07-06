@@ -14,6 +14,8 @@ import (
 	"github.com/klauern/skillsync/internal/util"
 )
 
+var parsePlatformSkillsFn = parsePlatformSkills
+
 // parsePlatformSkillsWithScope loads configured search paths for a platform and
 // parses matching skills for the requested scopes.
 func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope, includePlugins bool) ([]model.Skill, error) {
@@ -31,6 +33,21 @@ func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.S
 	}
 
 	return parsePlatformSkillsFromPaths(platform, paths, repoRoot, scopeFilter, includePlugins), nil
+}
+
+func discoverSkillsAcrossPlatforms(platforms []model.Platform) []model.Skill {
+	var allSkills []model.Skill
+
+	for _, platform := range platforms {
+		skills, err := parsePlatformSkillsFn(platform)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed parse %s: %v\n", platform, err)
+			continue
+		}
+		allSkills = append(allSkills, skills...)
+	}
+
+	return allSkills
 }
 
 var platformConfigGetters = map[model.Platform]func(*config.Config) *config.PlatformConfig{

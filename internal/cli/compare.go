@@ -14,7 +14,6 @@ import (
 
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/model"
-	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/similarity"
 )
 
@@ -214,22 +213,7 @@ func discoverSkillsForCompare(platform string) ([]model.Skill, error) {
 		platforms = model.AllPlatforms()
 	}
 
-	var allSkills []model.Skill
-	for _, p := range platforms {
-		parser, err := tiered.NewForPlatform(p)
-		if err != nil {
-			fmt.Printf("Warning: failed to create parser for %s: %v\n", p, err)
-			continue
-		}
-		skills, err := parser.Parse()
-		if err != nil {
-			fmt.Printf("Warning: failed to parse %s: %v\n", p, err)
-			continue
-		}
-		allSkills = append(allSkills, skills...)
-	}
-
-	return allSkills, nil
+	return discoverSkillsAcrossPlatforms(platforms), nil
 }
 
 // findSimilarSkills finds similar skill pairs based on configuration.
