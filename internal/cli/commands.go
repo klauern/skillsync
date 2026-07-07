@@ -1213,22 +1213,7 @@ func runTUI() error {
 
 // runDiscoverTUI runs the discover skills TUI view.
 func runDiscoverTUI() error {
-	// Discover skills from all platforms
-	var allSkills []model.Skill
-	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil, false)
-		if err != nil {
-			// Log error but continue with other platforms
-			continue
-		}
-		allSkills = append(allSkills, skills...)
-	}
-
-	// Include plugin skills
-	pluginSkills, err := discoverPluginSkills("", true)
-	if err == nil {
-		allSkills = append(allSkills, pluginSkills...)
-	}
+	allSkills := discoverSkillsAcrossPlatformsForTUI(model.AllPlatforms(), true)
 
 	if len(allSkills) == 0 {
 		ui.Info("No skills found across any platform")
@@ -1524,16 +1509,7 @@ func executeImport(result tui.ImportListResult) error {
 
 // runDeleteTUI runs the delete skills TUI view.
 func runDeleteTUI() error {
-	// Discover skills from all platforms
-	var allSkills []model.Skill
-	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil, false)
-		if err != nil {
-			// Log error but continue with other platforms
-			continue
-		}
-		allSkills = append(allSkills, skills...)
-	}
+	allSkills := discoverSkillsAcrossPlatformsForTUI(model.AllPlatforms(), false)
 
 	if len(allSkills) == 0 {
 		ui.Info("No skills found")
@@ -1601,22 +1577,7 @@ func executeDelete(result tui.DeleteListResult) error {
 
 // runScopeTUI runs the scope management TUI view.
 func runScopeTUI() error {
-	// Discover skills from all platforms
-	var allSkills []model.Skill
-	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil, false)
-		if err != nil {
-			// Log error but continue with other platforms
-			continue
-		}
-		allSkills = append(allSkills, skills...)
-	}
-
-	// Include plugin skills
-	pluginSkills, err := discoverPluginSkills("", true)
-	if err == nil {
-		allSkills = append(allSkills, pluginSkills...)
-	}
+	allSkills := discoverSkillsAcrossPlatformsForTUI(model.AllPlatforms(), true)
 
 	if len(allSkills) == 0 {
 		ui.Info("No skills found")
@@ -1769,16 +1730,7 @@ func runConflictsTUI() error {
 
 // runCompareTUI runs the compare skills TUI view with side-by-side comparison.
 func runCompareTUI() error {
-	// Discover skills from all platforms
-	var allSkills []model.Skill
-	for _, p := range model.AllPlatforms() {
-		skills, err := parsePlatformSkillsWithScope(p, nil, false)
-		if err != nil {
-			// Log error but continue with other platforms
-			continue
-		}
-		allSkills = append(allSkills, skills...)
-	}
+	allSkills := discoverSkillsAcrossPlatformsForTUI(model.AllPlatforms(), false)
 
 	if len(allSkills) < 2 {
 		ui.Info("Not enough skills to compare (need at least 2)")

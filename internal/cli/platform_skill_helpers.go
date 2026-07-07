@@ -15,6 +15,7 @@ import (
 )
 
 var parsePlatformSkillsFn = parsePlatformSkills
+var discoverPluginSkillsFn = discoverPluginSkills
 
 // parsePlatformSkillsWithScope loads configured search paths for a platform and
 // parses matching skills for the requested scopes.
@@ -48,6 +49,20 @@ func discoverSkillsAcrossPlatforms(platforms []model.Platform) []model.Skill {
 	}
 
 	return allSkills
+}
+
+func discoverSkillsAcrossPlatformsForTUI(platforms []model.Platform, includePlugins bool) []model.Skill {
+	allSkills := discoverSkillsAcrossPlatforms(platforms)
+	if !includePlugins {
+		return allSkills
+	}
+
+	pluginSkills, err := discoverPluginSkillsFn("", true)
+	if err != nil {
+		return allSkills
+	}
+
+	return append(allSkills, pluginSkills...)
 }
 
 var platformConfigGetters = map[model.Platform]func(*config.Config) *config.PlatformConfig{
