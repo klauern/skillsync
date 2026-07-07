@@ -37,6 +37,76 @@ func TestDiscoverSkillsAcrossPlatforms(t *testing.T) {
 	}
 }
 
+func TestDiscoverSkillsAcrossPlatformsForTUIIncludesPlugins(t *testing.T) {
+	originalParse := parsePlatformSkillsFn
+	originalPlugins := discoverPluginSkillsFn
+	t.Cleanup(func() {
+		parsePlatformSkillsFn = originalParse
+		discoverPluginSkillsFn = originalPlugins
+	})
+
+	parsePlatformSkillsFn = func(platform model.Platform) ([]model.Skill, error) {
+		return []model.Skill{{Name: string(platform), Platform: platform}}, nil
+	}
+	discoverPluginSkillsFn = func(_ string, _ bool) ([]model.Skill, error) {
+		return []model.Skill{{Name: "plugin-skill", Platform: model.ClaudeCode}}, nil
+	}
+
+	skills := discoverSkillsAcrossPlatformsForTUI([]model.Platform{model.ClaudeCode, model.Cursor}, true)
+	if len(skills) != 3 {
+		t.Fatalf("discoverSkillsAcrossPlatformsForTUI() returned %d skills, want 3", len(skills))
+	}
+	if skills[2].Name != "plugin-skill" {
+		t.Fatalf("discoverSkillsAcrossPlatformsForTUI() last skill = %q, want plugin-skill", skills[2].Name)
+	}
+}
+
+func TestDiscoverSkillsAcrossPlatformsForTUISkipsPluginLookupWhenDisabled(t *testing.T) {
+	originalParse := parsePlatformSkillsFn
+	originalPlugins := discoverPluginSkillsFn
+	t.Cleanup(func() {
+		parsePlatformSkillsFn = originalParse
+		discoverPluginSkillsFn = originalPlugins
+	})
+
+	parsePlatformSkillsFn = func(platform model.Platform) ([]model.Skill, error) {
+		return []model.Skill{{Name: string(platform), Platform: platform}}, nil
+	}
+	discoverPluginSkillsFn = func(_ string, _ bool) ([]model.Skill, error) {
+		t.Fatal("discoverPluginSkillsFn should not be called when plugins are disabled")
+		return nil, nil
+	}
+
+	skills := discoverSkillsAcrossPlatformsForTUI([]model.Platform{model.ClaudeCode, model.Cursor}, false)
+	if len(skills) != 2 {
+		t.Fatalf("discoverSkillsAcrossPlatformsForTUI() returned %d skills, want 2", len(skills))
+	}
+}
+
+func TestDiscoverSkillsAcrossPlatformsForTUIContinuesWhenPluginLookupFails(t *testing.T) {
+	originalParse := parsePlatformSkillsFn
+	originalPlugins := discoverPluginSkillsFn
+	t.Cleanup(func() {
+		parsePlatformSkillsFn = originalParse
+		discoverPluginSkillsFn = originalPlugins
+	})
+
+	parsePlatformSkillsFn = func(platform model.Platform) ([]model.Skill, error) {
+		return []model.Skill{{Name: string(platform), Platform: platform}}, nil
+	}
+	discoverPluginSkillsFn = func(_ string, _ bool) ([]model.Skill, error) {
+		return nil, errors.New("boom")
+	}
+
+	skills := discoverSkillsAcrossPlatformsForTUI([]model.Platform{model.ClaudeCode}, true)
+	if len(skills) != 1 {
+		t.Fatalf("discoverSkillsAcrossPlatformsForTUI() returned %d skills, want 1", len(skills))
+	}
+	if skills[0].Name != string(model.ClaudeCode) {
+		t.Fatalf("discoverSkillsAcrossPlatformsForTUI() first skill = %q, want %q", skills[0].Name, model.ClaudeCode)
+	}
+}
+
 func TestDiscoverSkillsAcrossPlatformsContinuesAfterParseError(t *testing.T) {
 	original := parsePlatformSkillsFn
 	t.Cleanup(func() {
