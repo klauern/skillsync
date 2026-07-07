@@ -14,8 +14,10 @@ import (
 	"github.com/klauern/skillsync/internal/util"
 )
 
-var parsePlatformSkillsFn = parsePlatformSkills
-var discoverPluginSkillsFn = discoverPluginSkills
+var (
+	parsePlatformSkillsFn  = parsePlatformSkills
+	discoverPluginSkillsFn = discoverPluginSkills
+)
 
 // parsePlatformSkillsWithScope loads configured search paths for a platform and
 // parses matching skills for the requested scopes.
