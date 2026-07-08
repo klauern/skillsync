@@ -1470,12 +1470,7 @@ func syncDeleteInteractive(cfg *syncConfig) error {
 			return nil
 		}
 
-		selectedSources := make([]model.Skill, 0, len(result.SelectedSkills))
-		for _, skill := range result.SelectedSkills {
-			if sourceSkill, exists := sourceByName[skill.Name]; exists {
-				selectedSources = append(selectedSources, sourceSkill)
-			}
-		}
+		selectedSources := selectSourceSkillsForDelete(cfg.sourceSkills, result.SelectedSkills)
 
 		if len(selectedSources) == 0 {
 			fmt.Println("No matching source skills selected for deletion.")
@@ -1491,70 +1486,6 @@ func syncDeleteInteractive(cfg *syncConfig) error {
 // syncDeleteMode handles the delete sync mode: removing skills from target that exist in source.
 func syncDeleteMode(cfg *syncConfig) error {
 	return executeDeleteWithConfirmation(cfg, cfg.sourceSkills, false)
-}
-
-func filterDeleteCandidates(sourceSkills, targetSkills []model.Skill) []model.Skill {
-	if len(sourceSkills) == 0 || len(targetSkills) == 0 {
-		return nil
-	}
-
-	sourceNames := make(map[string]bool)
-	for _, skill := range sourceSkills {
-		sourceNames[skill.Name] = true
-	}
-
-	candidates := make([]model.Skill, 0, len(targetSkills))
-	for _, skill := range targetSkills {
-		if sourceNames[skill.Name] {
-			candidates = append(candidates, skill)
-		}
-	}
-
-	return candidates
-}
-
-// findOrphanedSkills returns target skills whose names don't appear in the source list.
-// These are candidates for deletion when --delete is used with sync.
-func findOrphanedSkills(sourceSkills, targetSkills []model.Skill) []model.Skill {
-	if len(targetSkills) == 0 {
-		return nil
-	}
-
-	sourceNames := make(map[string]bool, len(sourceSkills))
-	for _, skill := range sourceSkills {
-		sourceNames[skill.Name] = true
-	}
-
-	var orphans []model.Skill
-	for _, skill := range targetSkills {
-		if !sourceNames[skill.Name] {
-			orphans = append(orphans, skill)
-		}
-	}
-
-	return orphans
-}
-
-func selectSourceSkillsForDelete(sourceSkills, selectedTargets []model.Skill) []model.Skill {
-	if len(sourceSkills) == 0 || len(selectedTargets) == 0 {
-		return nil
-	}
-
-	sourceByName := make(map[string]model.Skill)
-	for _, skill := range sourceSkills {
-		if _, exists := sourceByName[skill.Name]; !exists {
-			sourceByName[skill.Name] = skill
-		}
-	}
-
-	selected := make([]model.Skill, 0, len(selectedTargets))
-	for _, skill := range selectedTargets {
-		if sourceSkill, ok := sourceByName[skill.Name]; ok {
-			selected = append(selected, sourceSkill)
-		}
-	}
-
-	return selected
 }
 
 func executeDeleteWithConfirmation(cfg *syncConfig, skills []model.Skill, confirmed bool) error {
