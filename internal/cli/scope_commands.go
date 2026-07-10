@@ -421,6 +421,42 @@ func scopeMoveRank(scope model.SkillScope) int {
 	}
 }
 
+type scopedSkillRecord struct {
+	Platform model.Platform
+	Scope    model.SkillScope
+	Name     string
+	Path     string
+}
+
+func listScopedSkills(platforms []model.Platform) []scopedSkillRecord {
+	var allSkills []scopedSkillRecord
+
+	for _, platform := range platforms {
+		tieredParser, err := tiered.NewForPlatform(platform)
+		if err != nil {
+			continue
+		}
+
+		for _, scope := range model.AllScopes() {
+			skills, err := tieredParser.ParseFromScope(scope)
+			if err != nil {
+				continue
+			}
+
+			for _, skill := range skills {
+				allSkills = append(allSkills, scopedSkillRecord{
+					Platform: platform,
+					Scope:    scope,
+					Name:     skill.Name,
+					Path:     skill.Path,
+				})
+			}
+		}
+	}
+
+	return allSkills
+}
+
 // runScopeList shows all locations where a skill exists.
 func runScopeList(cmd *cli.Command, skillName string) error {
 	platformStr := cmd.String("platform")
@@ -446,30 +482,14 @@ func runScopeList(cmd *cli.Command, skillName string) error {
 
 	var locations []skillLocation
 
-	for _, platform := range platforms {
-		// Get all skills across all scopes
-		tieredParser, err := tiered.NewForPlatform(platform)
-		if err != nil {
-			continue
-		}
-
-		// Check each scope
-		for _, scope := range model.AllScopes() {
-			skills, err := tieredParser.ParseFromScope(scope)
-			if err != nil {
-				continue
-			}
-
-			for _, skill := range skills {
-				if skill.Name == skillName {
-					locations = append(locations, skillLocation{
-						Platform: platform,
-						Scope:    scope,
-						Path:     skill.Path,
-						Active:   false, // Will be updated below
-					})
-				}
-			}
+	for _, skill := range listScopedSkills(platforms) {
+		if skill.Name == skillName {
+			locations = append(locations, skillLocation{
+				Platform: skill.Platform,
+				Scope:    skill.Scope,
+				Path:     skill.Path,
+				Active:   false, // Will be updated below
+			})
 		}
 	}
 
@@ -555,37 +575,7 @@ func runScopeListAll(cmd *cli.Command) error {
 		platforms = model.AllPlatforms()
 	}
 
-	type scopedSkill struct {
-		Platform model.Platform   `json:"platform" yaml:"platform"`
-		Scope    model.SkillScope `json:"scope" yaml:"scope"`
-		Name     string           `json:"name" yaml:"name"`
-		Path     string           `json:"path" yaml:"path"`
-	}
-
-	var allSkills []scopedSkill
-
-	for _, platform := range platforms {
-		tieredParser, err := tiered.NewForPlatform(platform)
-		if err != nil {
-			continue
-		}
-
-		for _, scope := range model.AllScopes() {
-			skills, err := tieredParser.ParseFromScope(scope)
-			if err != nil {
-				continue
-			}
-
-			for _, skill := range skills {
-				allSkills = append(allSkills, scopedSkill{
-					Platform: platform,
-					Scope:    scope,
-					Name:     skill.Name,
-					Path:     skill.Path,
-				})
-			}
-		}
-	}
+	allSkills := listScopedSkills(platforms)
 
 	if len(allSkills) == 0 {
 		fmt.Println("No skills found.")
