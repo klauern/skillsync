@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/tiered"
 	"github.com/klauern/skillsync/internal/ui"
@@ -422,10 +424,10 @@ func scopeMoveRank(scope model.SkillScope) int {
 }
 
 type scopedSkillRecord struct {
-	Platform model.Platform
-	Scope    model.SkillScope
-	Name     string
-	Path     string
+	Platform model.Platform   `json:"platform" yaml:"platform"`
+	Scope    model.SkillScope `json:"scope" yaml:"scope"`
+	Name     string           `json:"name" yaml:"name"`
+	Path     string           `json:"path" yaml:"path"`
 }
 
 func listScopedSkills(platforms []model.Platform) []scopedSkillRecord {
@@ -434,12 +436,14 @@ func listScopedSkills(platforms []model.Platform) []scopedSkillRecord {
 	for _, platform := range platforms {
 		tieredParser, err := tiered.NewForPlatform(platform)
 		if err != nil {
+			logging.Warn("failed initialize tiered parser", logging.Err(err))
 			continue
 		}
 
 		for _, scope := range model.AllScopes() {
 			skills, err := tieredParser.ParseFromScope(scope)
 			if err != nil {
+				logging.Warn("failed parse scoped skills", logging.Err(err), logging.Platform(string(platform)), slog.String("scope", string(scope)))
 				continue
 			}
 
