@@ -167,8 +167,8 @@ Codex CLI’s current documented path is different:
 
 - Codex docs emphasize skills, `AGENTS.md`, configuration, and related
   surfaces.
-- This repo currently treats Codex prompt files as deprecated and does not
-  parse them.
+- This repo currently treats Codex prompt files as deprecated compatibility
+  context and does not parse them.
 - The shared model can store a prompt as `Type=prompt`, but that is only a
   transport marker, not a guarantee of equivalent behavior.
 
