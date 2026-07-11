@@ -11,7 +11,7 @@
 |---|---|---|
 | Claude Code | Implemented | First-class parser and sync target |
 | Cursor | Implemented | First-class parser and sync target |
-| Codex | Implemented | First-class parser and sync target; deprecated prompts remain compatibility-only |
+| Codex | Implemented | First-class parser and sync target for skills/instructions; deprecated prompts remain compatibility-only |
 | Copilot | Implemented | First-class parser and sync target |
 | Gemini CLI | Implemented | First-class parser and sync target |
 | Pi Agent | Implemented | First-class parser and sync target |
@@ -25,7 +25,7 @@ What each platform calls equivalent concepts:
 |---|---|---|---|---|---|---|
 | Always-on instructions | `CLAUDE.md` | `AGENTS.md` | `.github/copilot-instructions.md` | Rules (`alwaysApply: true`) | `GEMINI.md` | `AGENTS.md` (+ optional `SYSTEM.md` override layer) |
 | Reusable skills | `.claude/skills/*/SKILL.md` | `.codex/skills/*/SKILL.md` | `.github/agents/*.agent.md` | `.cursor/skills/*/SKILL.md` | `.gemini/skills/*/SKILL.md` | `.pi/skills/*/SKILL.md` |
-| Slash commands | `.claude/commands/*.md` | `~/.codex/prompts/*.md` (deprecated) | `.github/prompts/*.prompt.md` | `.cursor/commands/` + modes | `.gemini/commands/*.toml` | `.pi/prompts/*.md` |
+| Slash commands | `.claude/commands/*.md` | `~/.codex/prompts/*.md` (deprecated compatibility context only) | `.github/prompts/*.prompt.md` | `.cursor/commands/` + modes | `.gemini/commands/*.toml` | `.pi/prompts/*.md` |
 | Pattern-based rules | -- | -- | `*.instructions.md` (`applyTo`) | Rules (`globs`) | -- | -- |
 | Agent definitions | `.claude/agents/*.md` | -- | `.github/agents/*.agent.md` | Modes (`modes.json`) | `.gemini/agents/*.md` | -- |
 | MCP config | `.claude/settings.json` | `config.toml` (`mcp_servers`) | `.vscode/mcp.json` | Mode/settings | `settings.json` (`mcpServers`) | -- |
