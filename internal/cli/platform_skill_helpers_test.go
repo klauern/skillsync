@@ -146,3 +146,71 @@ func TestDiscoverSkillsAcrossPlatformsContinuesAfterParseError(t *testing.T) {
 		t.Fatalf("stderr = %q, want parse warning", buf.String())
 	}
 }
+
+func TestDiscoverSkillsForPlatformUsesAllPlatformsWhenEmpty(t *testing.T) {
+	original := parsePlatformSkillsFn
+	t.Cleanup(func() { parsePlatformSkillsFn = original })
+
+	parsePlatformSkillsFn = func(platform model.Platform) ([]model.Skill, error) {
+		return []model.Skill{{Name: string(platform), Platform: platform}}, nil
+	}
+
+	skills := discoverSkillsForPlatform("")
+	if len(skills) != len(model.AllPlatforms()) {
+		t.Fatalf("discoverSkillsForPlatform(\"\") returned %d skills, want %d", len(skills), len(model.AllPlatforms()))
+	}
+}
+
+func TestDiscoverSkillsForPlatformNameFiltersSinglePlatform(t *testing.T) {
+	original := parsePlatformSkillsFn
+	t.Cleanup(func() { parsePlatformSkillsFn = original })
+
+	parsePlatformSkillsFn = func(platform model.Platform) ([]model.Skill, error) {
+		return []model.Skill{{Name: string(platform), Platform: platform}}, nil
+	}
+
+	skills, err := discoverSkillsForPlatformName("cursor")
+	if err != nil {
+		t.Fatalf("discoverSkillsForPlatformName() error = %v", err)
+	}
+	if len(skills) != 1 {
+		t.Fatalf("discoverSkillsForPlatformName() returned %d skills, want 1", len(skills))
+	}
+	if skills[0].Platform != model.Cursor {
+		t.Fatalf("discoverSkillsForPlatformName() returned platform %q, want %q", skills[0].Platform, model.Cursor)
+	}
+}
+
+func TestDiscoverSkillsForPlatformNameRejectsInvalidPlatform(t *testing.T) {
+	_, err := discoverSkillsForPlatformName("not-a-platform")
+	if err == nil {
+		t.Fatal("discoverSkillsForPlatformName() error = nil, want invalid platform error")
+	}
+	if !strings.Contains(err.Error(), "invalid platform") {
+		t.Fatalf("discoverSkillsForPlatformName() error = %q, want invalid platform", err)
+	}
+}
+
+func TestDiscoverAllSkillsForTUIIncludesPlugins(t *testing.T) {
+	originalParse := parsePlatformSkillsFn
+	originalPlugins := discoverPluginSkillsFn
+	t.Cleanup(func() {
+		parsePlatformSkillsFn = originalParse
+		discoverPluginSkillsFn = originalPlugins
+	})
+
+	parsePlatformSkillsFn = func(platform model.Platform) ([]model.Skill, error) {
+		return []model.Skill{{Name: string(platform), Platform: platform}}, nil
+	}
+	discoverPluginSkillsFn = func(_ string, _ bool) ([]model.Skill, error) {
+		return []model.Skill{{Name: "plugin-skill", Platform: model.ClaudeCode}}, nil
+	}
+
+	skills := discoverAllSkillsForTUI(true)
+	if len(skills) != len(model.AllPlatforms())+1 {
+		t.Fatalf("discoverAllSkillsForTUI(true) returned %d skills, want %d", len(skills), len(model.AllPlatforms())+1)
+	}
+	if skills[len(skills)-1].Name != "plugin-skill" {
+		t.Fatalf("discoverAllSkillsForTUI(true) last skill = %q, want plugin-skill", skills[len(skills)-1].Name)
+	}
+}
