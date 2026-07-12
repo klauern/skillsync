@@ -202,18 +202,7 @@ func runCompare(cmd *cli.Command) error {
 
 // discoverSkillsForCompare discovers skills, optionally filtering by platform.
 func discoverSkillsForCompare(platform string) ([]model.Skill, error) {
-	var platforms []model.Platform
-	if platform != "" {
-		p, err := model.ParsePlatform(platform)
-		if err != nil {
-			return nil, fmt.Errorf("invalid platform: %w", err)
-		}
-		platforms = []model.Platform{p}
-	} else {
-		platforms = model.AllPlatforms()
-	}
-
-	return discoverSkillsAcrossPlatforms(platforms), nil
+	return discoverSkillsForPlatformName(platform)
 }
 
 // findSimilarSkills finds similar skill pairs based on configuration.

@@ -19,6 +19,31 @@ var (
 	discoverPluginSkillsFn = discoverPluginSkills
 )
 
+func discoverAllSkills() []model.Skill {
+	return discoverSkillsAcrossPlatforms(model.AllPlatforms())
+}
+
+func discoverSkillsForPlatform(platform model.Platform) []model.Skill {
+	if platform == "" {
+		return discoverAllSkills()
+	}
+
+	return discoverSkillsAcrossPlatforms([]model.Platform{platform})
+}
+
+func discoverSkillsForPlatformName(platform string) ([]model.Skill, error) {
+	if platform == "" {
+		return discoverAllSkills(), nil
+	}
+
+	parsedPlatform, err := model.ParsePlatform(platform)
+	if err != nil {
+		return nil, fmt.Errorf("invalid platform: %w", err)
+	}
+
+	return discoverSkillsForPlatform(parsedPlatform), nil
+}
+
 // parsePlatformSkillsWithScope loads configured search paths for a platform and
 // parses matching skills for the requested scopes.
 func parsePlatformSkillsWithScope(platform model.Platform, scopeFilter []model.SkillScope, includePlugins bool) ([]model.Skill, error) {
@@ -65,6 +90,10 @@ func discoverSkillsAcrossPlatformsForTUI(platforms []model.Platform, includePlug
 	}
 
 	return append(allSkills, pluginSkills...)
+}
+
+func discoverAllSkillsForTUI(includePlugins bool) []model.Skill {
+	return discoverSkillsAcrossPlatformsForTUI(model.AllPlatforms(), includePlugins)
 }
 
 var platformConfigGetters = map[model.Platform]func(*config.Config) *config.PlatformConfig{
