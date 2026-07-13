@@ -330,25 +330,13 @@ func discoverClaudePluginCacheSkills(existingSkills []model.Skill) ([]model.Skil
 	// Key: skill name + marketplace (to handle same skill in different marketplaces)
 	seen := make(map[string]bool)
 	for _, s := range existingSkills {
-		key := s.Name
-		if s.PluginInfo != nil && s.PluginInfo.Marketplace != "" {
-			key = s.Name + "@" + s.PluginInfo.Marketplace
-		} else if marketplace, ok := s.Metadata["marketplace"]; ok {
-			key = s.Name + "@" + marketplace
-		}
-		seen[key] = true
+		seen[pluginSkillDedupeKey(s)] = true
 	}
 
 	// Filter out duplicates from cache skills
 	var uniqueSkills []model.Skill
 	for _, s := range cacheSkills {
-		key := s.Name
-		if s.PluginInfo != nil && s.PluginInfo.Marketplace != "" {
-			key = s.Name + "@" + s.PluginInfo.Marketplace
-		} else if marketplace, ok := s.Metadata["marketplace"]; ok {
-			key = s.Name + "@" + marketplace
-		}
-
+		key := pluginSkillDedupeKey(s)
 		if !seen[key] {
 			seen[key] = true
 			uniqueSkills = append(uniqueSkills, s)
@@ -356,6 +344,17 @@ func discoverClaudePluginCacheSkills(existingSkills []model.Skill) ([]model.Skil
 	}
 
 	return uniqueSkills, nil
+}
+
+func pluginSkillDedupeKey(skill model.Skill) string {
+	if skill.PluginInfo != nil && skill.PluginInfo.Marketplace != "" {
+		return skill.Name + "@" + skill.PluginInfo.Marketplace
+	}
+	if marketplace, ok := skill.Metadata["marketplace"]; ok && marketplace != "" {
+		return skill.Name + "@" + marketplace
+	}
+
+	return skill.Name
 }
 
 // discoverSkillsInteractive runs the interactive TUI for skill discovery
