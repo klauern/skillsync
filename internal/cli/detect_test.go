@@ -1,10 +1,8 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,34 +91,5 @@ func TestRunDetectCommand_JSONOutput(t *testing.T) {
 	}
 	if !result.HasPlatform("copilot") {
 		t.Fatalf("expected copilot to be detected: %+v", result.Detected)
-	}
-}
-
-func captureStdout(t *testing.T, f func()) string {
-	t.Helper()
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	os.Stdout = w
-	defer func() { os.Stdout = old }()
-
-	f()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("close write end: %v", err)
-	}
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("read output: %v", err)
-	}
-	return buf.String()
-}
-
-func mustMkdirAll(t *testing.T, dir string) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		t.Fatalf("mkdir %s: %v", dir, err)
 	}
 }

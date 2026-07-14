@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,27 +52,10 @@ func TestConfigCommand(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			// Run command
-			ctx := context.Background()
-			err := Run(ctx, tt.args)
-
-			// Restore stdout
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close pipe writer: %v", err)
-			}
-			os.Stdout = old
-
-			// Read captured output
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, r); err != nil {
-				t.Fatalf("failed to read captured output: %v", err)
-			}
-			output := buf.String()
+			var err error
+			output := captureStdout(t, func() {
+				err = Run(context.Background(), tt.args)
+			})
 
 			// Check error expectation
 			if (err != nil) != tt.wantErr {
@@ -152,27 +133,10 @@ func TestConfigInitCommand(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_ = tt.setup(t)
 
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			// Run command
-			ctx := context.Background()
-			err := Run(ctx, tt.args)
-
-			// Restore stdout
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close pipe writer: %v", err)
-			}
-			os.Stdout = old
-
-			// Read captured output
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, r); err != nil {
-				t.Fatalf("failed to read captured output: %v", err)
-			}
-			output := buf.String()
+			var err error
+			output := captureStdout(t, func() {
+				err = Run(context.Background(), tt.args)
+			})
 
 			// Check error expectation
 			if (err != nil) != tt.wantErr {
@@ -232,27 +196,10 @@ func TestConfigEditCommand(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tt.setup(t)
 
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			// Run command
-			ctx := context.Background()
-			err := Run(ctx, tt.args)
-
-			// Restore stdout
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close pipe writer: %v", err)
-			}
-			os.Stdout = old
-
-			// Read captured output
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, r); err != nil {
-				t.Fatalf("failed to read captured output: %v", err)
-			}
-			output := buf.String()
+			var err error
+			output := captureStdout(t, func() {
+				err = Run(context.Background(), tt.args)
+			})
 
 			// Check error expectation
 			if (err != nil) != tt.wantErr {

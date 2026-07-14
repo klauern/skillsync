@@ -1,10 +1,7 @@
 package cli
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -30,27 +27,10 @@ func TestVersionCommand(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			// Run command
-			ctx := context.Background()
-			err := Run(ctx, tt.args)
-
-			// Restore stdout
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close pipe writer: %v", err)
-			}
-			os.Stdout = old
-
-			// Read captured output
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, r); err != nil {
-				t.Fatalf("failed to read captured output: %v", err)
-			}
-			output := buf.String()
+			var err error
+			output := captureStdout(t, func() {
+				err = Run(context.Background(), tt.args)
+			})
 
 			// Check error expectation
 			if (err != nil) != tt.wantErr {
@@ -71,27 +51,10 @@ func TestVersionCommand(t *testing.T) {
 }
 
 func TestVersionCommandOutputFormat(t *testing.T) {
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Run version command
-	ctx := context.Background()
-	err := Run(ctx, []string{"skillsync", "version"})
-
-	// Restore stdout
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close pipe writer: %v", err)
-	}
-	os.Stdout = old
-
-	// Read captured output
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("failed to read captured output: %v", err)
-	}
-	output := buf.String()
+	var err error
+	output := captureStdout(t, func() {
+		err = Run(context.Background(), []string{"skillsync", "version"})
+	})
 
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -125,27 +88,10 @@ func TestVersionCommandOutputFormat(t *testing.T) {
 }
 
 func TestVersionCommandIncludesVariables(t *testing.T) {
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Run version command
-	ctx := context.Background()
-	err := Run(ctx, []string{"skillsync", "version"})
-
-	// Restore stdout
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close pipe writer: %v", err)
-	}
-	os.Stdout = old
-
-	// Read captured output
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("failed to read captured output: %v", err)
-	}
-	output := buf.String()
+	var err error
+	output := captureStdout(t, func() {
+		err = Run(context.Background(), []string{"skillsync", "version"})
+	})
 
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -167,26 +113,10 @@ func TestVersionCommandIncludesVariables(t *testing.T) {
 }
 
 func TestVersionCommandReturnsNoError(t *testing.T) {
-	// Capture stdout to prevent output during test
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Run version command
-	ctx := context.Background()
-	err := Run(ctx, []string{"skillsync", "version"})
-
-	// Restore stdout
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close pipe writer: %v", err)
-	}
-	os.Stdout = old
-
-	// Drain pipe to prevent blocking
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("failed to read captured output: %v", err)
-	}
+	var err error
+	_ = captureStdout(t, func() {
+		err = Run(context.Background(), []string{"skillsync", "version"})
+	})
 
 	// Version command should never return an error
 	if err != nil {

@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"bytes"
-	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -85,25 +82,10 @@ func TestOutputSkills(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err := outputSkills(tt.skills, tt.format)
-
-			// Restore stdout
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close pipe writer: %v", err)
-			}
-			os.Stdout = old
-
-			// Read captured output
-			var buf bytes.Buffer
-			if _, err := io.Copy(&buf, r); err != nil {
-				t.Fatalf("failed to read captured output: %v", err)
-			}
-			output := buf.String()
+			var err error
+			output := captureStdout(t, func() {
+				err = outputSkills(tt.skills, tt.format)
+			})
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("outputSkills() error = %v, wantErr %v", err, tt.wantErr)
