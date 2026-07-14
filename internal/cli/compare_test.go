@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"bytes"
-	"os"
 	"strings"
 	"testing"
 
@@ -91,27 +89,17 @@ func TestOutputCompareResults(t *testing.T) {
 	// Test with empty results
 	var emptyResults []*similarity.ComparisonResult
 
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := outputCompareResults(emptyResults, "table")
-
-	if closeErr := w.Close(); closeErr != nil {
-		t.Fatalf("failed to close pipe writer: %v", closeErr)
-	}
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
+	var err error
+	output := captureStdout(t, func() {
+		err = outputCompareResults(emptyResults, "table")
+	})
 
 	if err != nil {
 		t.Errorf("outputCompareResults() error = %v", err)
 	}
 
-	if !strings.Contains(buf.String(), "No similar skills found") {
-		t.Errorf("expected 'No similar skills found' in output, got %q", buf.String())
+	if !strings.Contains(output, "No similar skills found") {
+		t.Errorf("expected 'No similar skills found' in output, got %q", output)
 	}
 }
 
@@ -137,26 +125,15 @@ func TestOutputFormats(t *testing.T) {
 
 	for _, format := range formats {
 		t.Run(format, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err := outputCompareResults(results, format)
-
-			if closeErr := w.Close(); closeErr != nil {
-				t.Fatalf("failed to close pipe writer: %v", closeErr)
-			}
-			os.Stdout = old
-
-			var buf bytes.Buffer
-			_, _ = buf.ReadFrom(r)
+			var err error
+			output := captureStdout(t, func() {
+				err = outputCompareResults(results, format)
+			})
 
 			if err != nil {
 				t.Errorf("outputCompareResults(%q) error = %v", format, err)
 			}
 
-			output := buf.String()
 			if output == "" {
 				t.Errorf("outputCompareResults(%q) produced empty output", format)
 			}
