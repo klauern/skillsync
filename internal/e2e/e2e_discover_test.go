@@ -134,7 +134,6 @@ func TestDiscoverMultiplePlatforms(t *testing.T) {
 // TestDiscoverPlatformFilterWithSkills verifies platform filter shows only matching skills.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverPlatformFilterWithSkills(t *testing.T) {
-	t.Skip("discover command uses hardcoded paths, not environment overrides - needs fix")
 
 	h := e2e.NewHarness(t)
 
@@ -156,7 +155,6 @@ func TestDiscoverPlatformFilterWithSkills(t *testing.T) {
 // TestDiscoverJSONFormatWithSkills verifies JSON output contains skill data.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverJSONFormatWithSkills(t *testing.T) {
-	t.Skip("discover command uses hardcoded paths, not environment overrides - needs fix")
 
 	h := e2e.NewHarness(t)
 
@@ -178,7 +176,6 @@ func TestDiscoverJSONFormatWithSkills(t *testing.T) {
 // TestDiscoverYAMLFormatWithSkills verifies YAML output contains skill data.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverYAMLFormatWithSkills(t *testing.T) {
-	t.Skip("discover command uses hardcoded paths, not environment overrides - needs fix")
 
 	h := e2e.NewHarness(t)
 
@@ -196,7 +193,6 @@ func TestDiscoverYAMLFormatWithSkills(t *testing.T) {
 // TestDiscoverTableFormatWithSkills verifies table output structure.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverTableFormatWithSkills(t *testing.T) {
-	t.Skip("discover command uses hardcoded paths, not environment overrides - needs fix")
 
 	h := e2e.NewHarness(t)
 
