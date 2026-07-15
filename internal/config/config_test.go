@@ -494,6 +494,83 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 	}
 }
 
+func TestEnvironmentOverridesLegacyPathAliases(t *testing.T) {
+	tests := []struct {
+		name     string
+		envKey   string
+		envValue string
+		check    func(*Config) bool
+	}{
+		{
+			name:     "claude code legacy path",
+			envKey:   "SKILLSYNC_CLAUDE_CODE_PATH",
+			envValue: "/legacy/claude",
+			check: func(c *Config) bool {
+				return len(c.Platforms.ClaudeCode.SkillsPaths) == 1 &&
+					c.Platforms.ClaudeCode.SkillsPaths[0] == "/legacy/claude"
+			},
+		},
+		{
+			name:     "cursor legacy path",
+			envKey:   "SKILLSYNC_CURSOR_PATH",
+			envValue: "/legacy/cursor",
+			check: func(c *Config) bool {
+				return len(c.Platforms.Cursor.SkillsPaths) == 1 &&
+					c.Platforms.Cursor.SkillsPaths[0] == "/legacy/cursor"
+			},
+		},
+		{
+			name:     "codex legacy path",
+			envKey:   "SKILLSYNC_CODEX_PATH",
+			envValue: "/legacy/codex",
+			check: func(c *Config) bool {
+				return len(c.Platforms.Codex.SkillsPaths) == 1 &&
+					c.Platforms.Codex.SkillsPaths[0] == "/legacy/codex"
+			},
+		},
+		{
+			name:     "pi.dev legacy alias path",
+			envKey:   "SKILLSYNC_PIDEV_PATH",
+			envValue: "/legacy/pidev",
+			check: func(c *Config) bool {
+				return len(c.Platforms.PiDev.SkillsPaths) == 1 &&
+					c.Platforms.PiDev.SkillsPaths[0] == "/legacy/pidev"
+			},
+		},
+		{
+			name:     "copilot legacy path",
+			envKey:   "SKILLSYNC_COPILOT_PATH",
+			envValue: "/legacy/copilot",
+			check: func(c *Config) bool {
+				return len(c.Platforms.Copilot.SkillsPaths) == 1 &&
+					c.Platforms.Copilot.SkillsPaths[0] == "/legacy/copilot"
+			},
+		},
+		{
+			name:     "gemini legacy path",
+			envKey:   "SKILLSYNC_GEMINI_PATH",
+			envValue: "/legacy/gemini",
+			check: func(c *Config) bool {
+				return len(c.Platforms.Gemini.SkillsPaths) == 1 &&
+					c.Platforms.Gemini.SkillsPaths[0] == "/legacy/gemini"
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.envKey, tt.envValue)
+
+			cfg := Default()
+			cfg.applyEnvironment()
+
+			if !tt.check(cfg) {
+				t.Errorf("legacy environment override %s did not apply correctly", tt.envKey)
+			}
+		})
+	}
+}
+
 func TestDefaultSkillsPaths(t *testing.T) {
 	cfg := Default()
 

@@ -262,26 +262,34 @@ func (c *Config) applyEnvironment() {
 		c.Output.Color = v
 	}
 
-	// Platform paths - new colon-separated format
-	if v := os.Getenv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS"); v != "" {
+	// Platform paths.
+	// Prefer the newer colon-separated *_SKILLS_PATHS variables, but continue
+	// to honor the legacy single-path *_PATH aliases used by older tests and
+	// sync/validation code paths.
+	if v := firstNonEmptyEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", "SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
 		c.Platforms.ClaudeCode.SkillsPaths = splitPaths(v)
 	}
-	if v := os.Getenv("SKILLSYNC_CURSOR_SKILLS_PATHS"); v != "" {
+	if v := firstNonEmptyEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", "SKILLSYNC_CURSOR_PATH"); v != "" {
 		c.Platforms.Cursor.SkillsPaths = splitPaths(v)
 	}
-	if v := os.Getenv("SKILLSYNC_CODEX_SKILLS_PATHS"); v != "" {
+	if v := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
-	if v := os.Getenv("SKILLSYNC_PI_AGENT_SKILLS_PATHS"); v != "" {
+	if v := firstNonEmptyEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); v != "" {
 		c.Platforms.PiAgent.SkillsPaths = splitPaths(v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_PI_DEV_SKILLS_PATHS", "SKILLSYNC_PIDEV_SKILLS_PATHS"); v != "" {
+	if v := firstNonEmptyEnv(
+		"SKILLSYNC_PI_DEV_SKILLS_PATHS",
+		"SKILLSYNC_PIDEV_SKILLS_PATHS",
+		"SKILLSYNC_PI_DEV_PATH",
+		"SKILLSYNC_PIDEV_PATH",
+	); v != "" {
 		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
 	}
-	if v := os.Getenv("SKILLSYNC_COPILOT_SKILLS_PATHS"); v != "" {
+	if v := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
 		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
 	}
-	if v := os.Getenv("SKILLSYNC_GEMINI_SKILLS_PATHS"); v != "" {
+	if v := firstNonEmptyEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", "SKILLSYNC_GEMINI_PATH"); v != "" {
 		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
 	}
 
