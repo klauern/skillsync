@@ -134,7 +134,6 @@ func TestDiscoverMultiplePlatforms(t *testing.T) {
 // TestDiscoverPlatformFilterWithSkills verifies platform filter shows only matching skills.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverPlatformFilterWithSkills(t *testing.T) {
-
 	h := e2e.NewHarness(t)
 
 	// Create skills in multiple platforms
@@ -155,7 +154,6 @@ func TestDiscoverPlatformFilterWithSkills(t *testing.T) {
 // TestDiscoverJSONFormatWithSkills verifies JSON output contains skill data.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverJSONFormatWithSkills(t *testing.T) {
-
 	h := e2e.NewHarness(t)
 
 	// Create a test skill
@@ -176,7 +174,6 @@ func TestDiscoverJSONFormatWithSkills(t *testing.T) {
 // TestDiscoverYAMLFormatWithSkills verifies YAML output contains skill data.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverYAMLFormatWithSkills(t *testing.T) {
-
 	h := e2e.NewHarness(t)
 
 	// Create a test skill
@@ -193,7 +190,6 @@ func TestDiscoverYAMLFormatWithSkills(t *testing.T) {
 // TestDiscoverTableFormatWithSkills verifies table output structure.
 // SKIP: discover doesn't use environment variable overrides for platform paths
 func TestDiscoverTableFormatWithSkills(t *testing.T) {
-
 	h := e2e.NewHarness(t)
 
 	// Create a test skill
