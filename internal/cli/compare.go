@@ -3,14 +3,12 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"sort"
 
 	"github.com/urfave/cli/v3"
-	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/model"
@@ -393,17 +391,10 @@ func toComparisonOutputs(results []*similarity.ComparisonResult) []comparisonOut
 
 func outputCompareJSON(results []*similarity.ComparisonResult) error {
 	outputs := toComparisonOutputs(results)
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(outputs)
+	return outputAnyJSON(outputs)
 }
 
 func outputCompareYAML(results []*similarity.ComparisonResult) error {
 	outputs := toComparisonOutputs(results)
-	data, err := yaml.Marshal(outputs)
-	if err != nil {
-		return fmt.Errorf("failed to marshal YAML: %w", err)
-	}
-	fmt.Print(string(data))
-	return nil
+	return outputAnyYAML(outputs)
 }
