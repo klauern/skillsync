@@ -167,7 +167,7 @@ func TestTransformer_TransformPath(t *testing.T) {
 	}
 }
 
-func TestPromptTargetPath(t *testing.T) {
+func TestNamedArtifactTargetPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		target   model.Platform
@@ -183,31 +183,8 @@ func TestPromptTargetPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := promptTargetPath("review", tt.target); got != tt.expected {
-				t.Fatalf("promptTargetPath() = %q, want %q", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestNameBasedSkillTargetPath(t *testing.T) {
-	tests := []struct {
-		name     string
-		target   model.Platform
-		expected string
-	}{
-		{name: "codex", target: model.Codex, expected: "review/SKILL.md"},
-		{name: "gemini", target: model.Gemini, expected: "review/SKILL.md"},
-		{name: "pidev", target: model.PiDev, expected: "review/SKILL.md"},
-		{name: "cursor", target: model.Cursor, expected: "review.md"},
-		{name: "claude", target: model.ClaudeCode, expected: "review.md"},
-		{name: "copilot unsupported", target: model.Copilot, expected: ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := nameBasedSkillTargetPath("review", tt.target); got != tt.expected {
-				t.Fatalf("nameBasedSkillTargetPath() = %q, want %q", got, tt.expected)
+			if got := namedArtifactTargetPath("review", tt.target); got != tt.expected {
+				t.Fatalf("namedArtifactTargetPath() = %q, want %q", got, tt.expected)
 			}
 		})
 	}

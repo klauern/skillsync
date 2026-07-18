@@ -22,24 +22,13 @@ func NewTransformer() *Transformer {
 	return &Transformer{}
 }
 
-func promptTargetPath(skillName string, target model.Platform) string {
+func namedArtifactTargetPath(skillName string, target model.Platform) string {
 	switch target {
 	case model.Codex, model.Gemini, model.PiDev:
-		// These platforms discover prompts as SKILL.md-based artifacts.
+		// These platforms discover named artifacts as SKILL.md-based directories.
 		return filepath.Join(skillName, "SKILL.md")
 	case model.Cursor, model.ClaudeCode:
-		// Cursor and Claude prompts stay in flat markdown files.
-		return skillName + ".md"
-	default:
-		return ""
-	}
-}
-
-func nameBasedSkillTargetPath(skillName string, target model.Platform) string {
-	switch target {
-	case model.Codex, model.Gemini, model.PiDev:
-		return filepath.Join(skillName, "SKILL.md")
-	case model.Cursor, model.ClaudeCode:
+		// Cursor and Claude keep named artifacts in flat markdown files.
 		return skillName + ".md"
 	default:
 		return ""
@@ -126,11 +115,11 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 			return "GEMINI.md"
 		}
 		if skill.Type == model.SkillTypePrompt {
-			return promptTargetPath(skill.Name, target)
+			return namedArtifactTargetPath(skill.Name, target)
 		}
 		baseName := filepath.Base(skill.Path)
 		if isSkillFile(baseName) && skill.Name != "" {
-			return nameBasedSkillTargetPath(skill.Name, target)
+			return namedArtifactTargetPath(skill.Name, target)
 		}
 		if baseName == "" {
 			return "SKILL.md"
@@ -139,14 +128,14 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 	}
 
 	if skill.Type == model.SkillTypePrompt {
-		if targetPath := promptTargetPath(skill.Name, target); targetPath != "" {
+		if targetPath := namedArtifactTargetPath(skill.Name, target); targetPath != "" {
 			return targetPath
 		}
 	}
 
 	baseName := filepath.Base(skill.Path)
 	if isSkillFile(baseName) && skill.Name != "" {
-		if targetPath := nameBasedSkillTargetPath(skill.Name, target); targetPath != "" {
+		if targetPath := namedArtifactTargetPath(skill.Name, target); targetPath != "" {
 			return targetPath
 		}
 		return baseName
