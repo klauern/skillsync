@@ -15,7 +15,6 @@ import (
 
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
-	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/backup"
 	"github.com/klauern/skillsync/internal/cache"
@@ -568,19 +567,12 @@ func outputSkills(skills []model.Skill, format string) error {
 
 // outputJSON prints skills as JSON
 func outputJSON(skills []model.Skill) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(skills)
+	return outputAnyJSON(skills)
 }
 
 // outputYAML prints skills as YAML
 func outputYAML(skills []model.Skill) error {
-	data, err := yaml.Marshal(skills)
-	if err != nil {
-		return fmt.Errorf("failed to marshal YAML: %w", err)
-	}
-	fmt.Print(string(data))
-	return nil
+	return outputAnyYAML(skills)
 }
 
 // columnWidths holds the calculated widths for each table column

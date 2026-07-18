@@ -1029,21 +1029,10 @@ func outputBackups(backups []backup.Metadata, format string) error {
 }
 
 // outputBackupsJSON prints backups as JSON
-func outputBackupsJSON(backups []backup.Metadata) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(backups)
-}
+func outputBackupsJSON(backups []backup.Metadata) error { return outputAnyJSON(backups) }
 
 // outputBackupsYAML prints backups as YAML
-func outputBackupsYAML(backups []backup.Metadata) error {
-	data, err := yaml.Marshal(backups)
-	if err != nil {
-		return fmt.Errorf("failed to marshal YAML: %w", err)
-	}
-	fmt.Print(string(data))
-	return nil
-}
+func outputBackupsYAML(backups []backup.Metadata) error { return outputAnyYAML(backups) }
 
 // outputBackupsTable prints backups in a table format with colored output
 func outputBackupsTable(backups []backup.Metadata) error {
