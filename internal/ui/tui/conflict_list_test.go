@@ -159,7 +159,7 @@ func TestConflictListModel_ConfirmFlow(t *testing.T) {
 }
 
 func TestFormatConflictContentWithLineNumbers(t *testing.T) {
-	result := formatConflictContentWithLineNumbers("line1\nline2", conflictStyles.Context)
+	result := formatContentWithLineNumbers("line1\nline2", conflictStyles.Context, conflictStyles.Context)
 	if !strings.Contains(result, "1 │") || !strings.Contains(result, "2 │") {
 		t.Errorf("expected line numbers in formatted output")
 	}

@@ -89,7 +89,7 @@ func TestSyncDiffModel_Update_SyncAction(t *testing.T) {
 }
 
 func TestFormatContentWithLineNumbers(t *testing.T) {
-	content := formatContentWithLineNumbers("line1\nline2", syncDiffStyles.Unchanged)
+	content := formatContentWithLineNumbers("line1\nline2", syncDiffStyles.Unchanged, syncDiffStyles.Unchanged)
 	if !strings.Contains(content, "1 │") || !strings.Contains(content, "2 │") {
 		t.Errorf("expected line numbers in formatted content")
 	}
