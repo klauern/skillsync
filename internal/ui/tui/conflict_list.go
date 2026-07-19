@@ -161,23 +161,6 @@ var conflictStyles = struct {
 	SectionTitle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Padding(1, 0),
 }
 
-// formatConflictContentWithLineNumbers formats content with line numbers for display.
-func formatConflictContentWithLineNumbers(content string, style lipgloss.Style) string {
-	lines := strings.Split(content, "\n")
-	var b strings.Builder
-
-	for i, line := range lines {
-		lineNum := fmt.Sprintf("%4d │ ", i+1)
-		b.WriteString(conflictStyles.Context.Render(lineNum))
-		b.WriteString(style.Render(line))
-		if i < len(lines)-1 {
-			b.WriteString("\n")
-		}
-	}
-
-	return b.String()
-}
-
 // NewConflictListModel creates a new conflict resolution model.
 func NewConflictListModel(conflicts []*sync.Conflict) ConflictListModel {
 	resolutions := make(map[string]sync.ResolutionChoice)
@@ -569,12 +552,12 @@ func (m ConflictListModel) buildDetailContent() string {
 		b.WriteString("\n")
 		b.WriteString(conflictStyles.SectionTitle.Render("Source Content"))
 		b.WriteString("\n")
-		b.WriteString(formatConflictContentWithLineNumbers(conflict.Source.Content, conflictStyles.Removed))
+		b.WriteString(formatContentWithLineNumbers(conflict.Source.Content, conflictStyles.Context, conflictStyles.Removed))
 		b.WriteString("\n\n")
 
 		b.WriteString(conflictStyles.SectionTitle.Render("Target Content"))
 		b.WriteString("\n")
-		b.WriteString(formatConflictContentWithLineNumbers(conflict.Target.Content, conflictStyles.Added))
+		b.WriteString(formatContentWithLineNumbers(conflict.Target.Content, conflictStyles.Context, conflictStyles.Added))
 	}
 
 	b.WriteString("\n\n")

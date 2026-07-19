@@ -216,7 +216,7 @@ func (m SyncDiffModel) buildDiffContent() string {
 		// Show source content
 		b.WriteString(syncDiffStyles.SectionHdr.Render(fmt.Sprintf("Source Content (%s)", m.sourcePlatform)))
 		b.WriteString("\n")
-		b.WriteString(formatContentWithLineNumbers(m.skill.Content, syncDiffStyles.Added))
+		b.WriteString(formatContentWithLineNumbers(m.skill.Content, syncDiffStyles.Unchanged, syncDiffStyles.Added))
 	} else {
 		// Show diff between source and target
 		b.WriteString(syncDiffStyles.Info.Render("  Skill exists in target - showing comparison"))
@@ -225,13 +225,13 @@ func (m SyncDiffModel) buildDiffContent() string {
 		// Source content
 		b.WriteString(syncDiffStyles.SectionHdr.Render(fmt.Sprintf("Source (%s)", m.sourcePlatform)))
 		b.WriteString("\n")
-		b.WriteString(formatContentWithLineNumbers(m.skill.Content, syncDiffStyles.Added))
+		b.WriteString(formatContentWithLineNumbers(m.skill.Content, syncDiffStyles.Unchanged, syncDiffStyles.Added))
 		b.WriteString("\n")
 
 		// Target content
 		b.WriteString(syncDiffStyles.SectionHdr.Render(fmt.Sprintf("Target (%s) - Current", m.targetPlatform)))
 		b.WriteString("\n")
-		b.WriteString(formatContentWithLineNumbers(m.targetSkill.Content, syncDiffStyles.Removed))
+		b.WriteString(formatContentWithLineNumbers(m.targetSkill.Content, syncDiffStyles.Unchanged, syncDiffStyles.Removed))
 
 		// Show simple diff summary
 		if m.skill.Content == m.targetSkill.Content {
@@ -248,14 +248,14 @@ func (m SyncDiffModel) buildDiffContent() string {
 	return b.String()
 }
 
-func formatContentWithLineNumbers(content string, style lipgloss.Style) string {
+func formatContentWithLineNumbers(content string, lineNumberStyle, contentStyle lipgloss.Style) string {
 	lines := strings.Split(content, "\n")
 	var b strings.Builder
 
 	for i, line := range lines {
 		lineNum := fmt.Sprintf("%4d │ ", i+1)
-		b.WriteString(syncDiffStyles.Unchanged.Render(lineNum))
-		b.WriteString(style.Render(line))
+		b.WriteString(lineNumberStyle.Render(lineNum))
+		b.WriteString(contentStyle.Render(line))
 		if i < len(lines)-1 {
 			b.WriteString("\n")
 		}
