@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,12 +12,14 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		_ = os.RemoveAll(tempHome)
-	}()
 
 	setEnvOrPanic := func(key, value string) {
 		if err := os.Setenv(key, value); err != nil {
+			panic(err)
+		}
+	}
+	mkdirAllOrPanic := func(path string) {
+		if err := os.MkdirAll(path, 0o750); err != nil {
 			panic(err)
 		}
 	}
@@ -27,9 +30,9 @@ func TestMain(m *testing.M) {
 	cursorPath := filepath.Join(tempHome, ".cursor", "skills")
 	codexPath := filepath.Join(tempHome, ".codex", "skills")
 
-	_ = os.MkdirAll(claudePath, 0o750)
-	_ = os.MkdirAll(cursorPath, 0o750)
-	_ = os.MkdirAll(codexPath, 0o750)
+	mkdirAllOrPanic(claudePath)
+	mkdirAllOrPanic(cursorPath)
+	mkdirAllOrPanic(codexPath)
 
 	setEnvOrPanic("SKILLSYNC_CLAUDE_CODE_PATH", claudePath)
 	setEnvOrPanic("SKILLSYNC_CURSOR_PATH", cursorPath)
@@ -39,5 +42,9 @@ func TestMain(m *testing.M) {
 	setEnvOrPanic("SKILLSYNC_CURSOR_SKILLS_PATHS", cursorPath)
 	setEnvOrPanic("SKILLSYNC_CODEX_SKILLS_PATHS", codexPath)
 
-	os.Exit(m.Run())
+	code := m.Run()
+	if err := os.RemoveAll(tempHome); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to clean up temp home: %v\n", err)
+	}
+	os.Exit(code)
 }
