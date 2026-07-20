@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,6 +43,8 @@ func TestMain(m *testing.M) {
 	setEnvOrPanic("SKILLSYNC_CODEX_SKILLS_PATHS", codexPath)
 
 	code := m.Run()
-	_ = os.RemoveAll(tempHome)
+	if err := os.RemoveAll(tempHome); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to clean up temp home: %v\n", err)
+	}
 	os.Exit(code)
 }
