@@ -631,7 +631,7 @@ func restoreBackup(backupID, targetPath string, force bool) error {
 	fmt.Println("\nBackup Details:")
 	fmt.Printf("  ID:       %s\n", metadata.ID)
 	fmt.Printf("  Platform: %s\n", metadata.Platform)
-	fmt.Printf("  Size:     %s\n", formatSize(metadata.Size))
+	fmt.Printf("  Size:     %s\n", ui.FormatSize(metadata.Size))
 	fmt.Printf("  Created:  %s\n", metadata.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("  Source:   %s\n", metadata.SourcePath)
 	fmt.Printf("  Target:   %s\n", targetPath)
@@ -866,7 +866,7 @@ func deleteBackupsByID(ids []string, force bool) error {
 	// Display what will be deleted
 	fmt.Printf("\nBackups to delete (%d):\n", len(backupsToDelete))
 	for _, b := range backupsToDelete {
-		fmt.Printf("  - %s (%s, %s)\n", b.ID, b.Platform, formatSize(b.Size))
+		fmt.Printf("  - %s (%s, %s)\n", b.ID, b.Platform, ui.FormatSize(b.Size))
 	}
 
 	// Confirm unless force flag is set
@@ -950,10 +950,10 @@ func deleteBackupsByPolicy(olderThan string, keepLatest int, platform string, fo
 	fmt.Printf("\nBackups to delete (%d):\n", len(toDelete))
 	for _, b := range toDelete {
 		fmt.Printf("  - %s (%s, %s, %s)\n",
-			b.ID, b.Platform, formatSize(b.Size), b.CreatedAt.Format("2006-01-02"))
+			b.ID, b.Platform, ui.FormatSize(b.Size), b.CreatedAt.Format("2006-01-02"))
 		totalSize += b.Size
 	}
-	fmt.Printf("\nTotal space to free: %s\n", formatSize(totalSize))
+	fmt.Printf("\nTotal space to free: %s\n", ui.FormatSize(totalSize))
 
 	// Show what will be kept
 	keptCount := len(backups) - len(toDelete)
@@ -981,7 +981,7 @@ func deleteBackupsByPolicy(olderThan string, keepLatest int, platform string, fo
 		deleted++
 	}
 
-	fmt.Printf("\n✓ Deleted %d backup(s), freed %s\n", deleted, formatSize(totalSize))
+	fmt.Printf("\n✓ Deleted %d backup(s), freed %s\n", deleted, ui.FormatSize(totalSize))
 	return nil
 }
 
@@ -1063,7 +1063,7 @@ func outputBackupsTable(backups []backup.Metadata) error {
 		}
 
 		// Format size
-		size := formatSize(b.Size)
+		size := ui.FormatSize(b.Size)
 
 		// Format creation time
 		created := b.CreatedAt.Format("2006-01-02 15:04:05")
@@ -1076,26 +1076,6 @@ func outputBackupsTable(backups []backup.Metadata) error {
 
 	fmt.Printf("\nTotal: %d backup(s)\n", len(backups))
 	return nil
-}
-
-// formatSize formats a byte size into a human-readable string
-func formatSize(bytes int64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-	)
-
-	switch {
-	case bytes >= GB:
-		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GB))
-	case bytes >= MB:
-		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
-	case bytes >= KB:
-		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
 }
 
 // tuiCommand returns the TUI dashboard command.

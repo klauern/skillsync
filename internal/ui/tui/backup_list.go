@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/klauern/skillsync/internal/backup"
+	"github.com/klauern/skillsync/internal/ui"
 )
 
 // BackupAction represents the action to perform on a selected backup.
@@ -155,28 +156,10 @@ func backupsToRows(backups []backup.Metadata) []table.Row {
 			truncateTableValue(b.Platform, 12),
 			truncateTableValueFromStart(b.SourcePath, 40),
 			b.CreatedAt.Format("2006-01-02 15:04"),
-			formatSize(b.Size),
+			ui.FormatSize(b.Size),
 		}
 	}
 	return rows
-}
-
-func formatSize(bytes int64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-	)
-	switch {
-	case bytes >= GB:
-		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GB))
-	case bytes >= MB:
-		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
-	case bytes >= KB:
-		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
 }
 
 // RunBackupList runs the interactive backup list and returns the result.
