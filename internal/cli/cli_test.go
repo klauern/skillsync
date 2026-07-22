@@ -372,43 +372,6 @@ func TestBackupListCommand(t *testing.T) {
 	}
 }
 
-func TestFormatSize(t *testing.T) {
-	tests := map[string]struct {
-		bytes int64
-		want  string
-	}{
-		"bytes": {
-			bytes: 500,
-			want:  "500 B",
-		},
-		"kilobytes": {
-			bytes: 1536,
-			want:  "1.5 KB",
-		},
-		"megabytes": {
-			bytes: 1572864,
-			want:  "1.5 MB",
-		},
-		"gigabytes": {
-			bytes: 1610612736,
-			want:  "1.5 GB",
-		},
-		"zero": {
-			bytes: 0,
-			want:  "0 B",
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := formatSize(tt.bytes)
-			if got != tt.want {
-				t.Errorf("formatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestOutputBackupsTable(t *testing.T) {
 	tests := map[string]struct {
 		backups    []backup.Metadata

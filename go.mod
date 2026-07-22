@@ -15,7 +15,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/mattn/go-runewidth v0.0.16
 	golang.org/x/term v0.39.0
-	golang.org/x/text v0.3.8
+	golang.org/x/text v0.39.0
 )
 
 require (
