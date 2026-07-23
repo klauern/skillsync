@@ -32,7 +32,7 @@ func newSkillSelectionImportModel(skills []model.Skill) ImportListModel {
 	m.state.sourcePath = "/tmp/source"
 	m.state.selected = make(map[string]bool, len(skills))
 	for _, skill := range skills {
-		m.state.selected[importSkillKey(skill)] = true
+		m.state.selected[scopedSkillKey(skill)] = true
 	}
 	m.ListModel = buildImportSkillListModel(m.state, skills)
 	m.ListModel.showHelp = m.state.showHelp
@@ -91,7 +91,7 @@ func TestImportListModel_SkillSelectionTogglesAndAdvance(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	im := updated.(ImportListModel)
-	if im.state.selected[importSkillKey(skills[0])] {
+	if im.state.selected[scopedSkillKey(skills[0])] {
 		t.Fatal("expected current skill to be toggled off")
 	}
 	if im.ListModel.table.Rows()[0][0] != "[ ]" {
@@ -101,7 +101,7 @@ func TestImportListModel_SkillSelectionTogglesAndAdvance(t *testing.T) {
 	updated, _ = im.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	im = updated.(ImportListModel)
 	for _, skill := range skills {
-		if !im.state.selected[importSkillKey(skill)] {
+		if !im.state.selected[scopedSkillKey(skill)] {
 			t.Fatalf("expected %s to be selected after toggle-all", skill.Name)
 		}
 	}
@@ -137,8 +137,8 @@ func TestImportListModel_DestinationAndConfirmFlow(t *testing.T) {
 	m := newSkillSelectionImportModel(skills)
 	m.state.phase = phaseDestination
 	m.state.selected = map[string]bool{
-		importSkillKey(skills[0]): true,
-		importSkillKey(skills[1]): true,
+		scopedSkillKey(skills[0]): true,
+		scopedSkillKey(skills[1]): true,
 	}
 	m.ListModel = buildImportSkillListModel(m.state, skills)
 
