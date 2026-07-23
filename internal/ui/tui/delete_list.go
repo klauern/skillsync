@@ -304,7 +304,7 @@ func deleteListColumns(totalWidth int, skills []model.Skill, hOffset int) ([]tab
 
 // deleteSkillKey creates a unique key for a skill (platform + scope + name combination).
 func deleteSkillKey(s model.Skill) string {
-	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
+	return scopedSkillKey(s)
 }
 
 // NewDeleteListModel creates a new delete list model.

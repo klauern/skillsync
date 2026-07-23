@@ -131,11 +131,6 @@ var importListStyles = struct {
 	Description: lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Padding(0, 1),
 }
 
-// importSkillKey creates a unique key for a skill.
-func importSkillKey(s model.Skill) string {
-	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
-}
-
 func defaultImportListColumnWidths() importListColumnWidths {
 	return importListColumnWidths{
 		name:  25,
@@ -240,7 +235,7 @@ func newImportListState() *importListState {
 func selectedImportSkills(state *importListState, skills []model.Skill) []model.Skill {
 	var selected []model.Skill
 	for _, skill := range skills {
-		if state != nil && state.selected[importSkillKey(skill)] {
+		if state != nil && state.selected[scopedSkillKey(skill)] {
 			selected = append(selected, skill)
 		}
 	}
@@ -250,7 +245,7 @@ func selectedImportSkills(state *importListState, skills []model.Skill) []model.
 func selectedImportSkillCount(state *importListState, skills []model.Skill) int {
 	count := 0
 	for _, skill := range skills {
-		if state != nil && state.selected[importSkillKey(skill)] {
+		if state != nil && state.selected[scopedSkillKey(skill)] {
 			count++
 		}
 	}
@@ -279,7 +274,7 @@ func buildImportSkillListModel(state *importListState, skills []model.Skill) Lis
 		rows := make([]table.Row, len(items))
 		for i, skill := range items {
 			checkbox := "[ ]"
-			if state.selected[importSkillKey(skill)] {
+			if state.selected[scopedSkillKey(skill)] {
 				checkbox = "[✓]"
 			}
 			rows[i] = table.Row{
@@ -333,7 +328,7 @@ func buildImportSkillListModel(state *importListState, skills []model.Skill) Lis
 			if len(m.filtered) > 0 {
 				skill := selectedImportSkillAtCursor(state, m)
 				if skill.Name != "" {
-					state.selected[importSkillKey(skill)] = !state.selected[importSkillKey(skill)]
+					state.selected[scopedSkillKey(skill)] = !state.selected[scopedSkillKey(skill)]
 					m.table.SetRows(m.cfg.ToRows(m.filtered))
 				}
 			}
@@ -341,13 +336,13 @@ func buildImportSkillListModel(state *importListState, skills []model.Skill) Lis
 		case key.Matches(msg, toggleAllKey):
 			selectedCount := 0
 			for _, skill := range m.filtered {
-				if state.selected[importSkillKey(skill)] {
+				if state.selected[scopedSkillKey(skill)] {
 					selectedCount++
 				}
 			}
 			selectAll := selectedCount < len(m.filtered)/2+1
 			for _, skill := range m.filtered {
-				state.selected[importSkillKey(skill)] = selectAll
+				state.selected[scopedSkillKey(skill)] = selectAll
 			}
 			m.table.SetRows(m.cfg.ToRows(m.filtered))
 			return true
@@ -498,7 +493,7 @@ func (m ImportListModel) updateFilePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state.phase = phaseSkillSelection
 			m.state.selected = make(map[string]bool)
 			for _, skill := range skills {
-				m.state.selected[importSkillKey(skill)] = true
+				m.state.selected[scopedSkillKey(skill)] = true
 			}
 			m.ListModel = buildImportSkillListModel(m.state, skills)
 			m.ListModel.showHelp = m.state.showHelp
@@ -514,7 +509,7 @@ func (m ImportListModel) updateFilePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state.phase = phaseSkillSelection
 			m.state.selected = make(map[string]bool)
 			for _, skill := range skills {
-				m.state.selected[importSkillKey(skill)] = true
+				m.state.selected[scopedSkillKey(skill)] = true
 			}
 			m.ListModel = buildImportSkillListModel(m.state, skills)
 			m.ListModel.showHelp = m.state.showHelp

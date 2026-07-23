@@ -173,7 +173,7 @@ var dedupeListStyles = struct {
 
 // dedupeSkillKey creates a unique key for a skill (platform + scope + name combination).
 func dedupeSkillKey(s model.Skill) string {
-	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
+	return scopedSkillKey(s)
 }
 
 // NewDedupeListModel creates a new dedupe list model from comparison results.

@@ -297,7 +297,7 @@ func promoteDemoteListColumns(totalWidth int, skills []model.Skill, hOffset int)
 
 // promoteDemoteSkillKey creates a unique key for a skill (platform + scope + name combination).
 func promoteDemoteSkillKey(s model.Skill) string {
-	return fmt.Sprintf("%s:%s:%s", s.Platform, s.Scope, s.Name)
+	return scopedSkillKey(s)
 }
 
 func newPromoteDemoteListState(skills []model.Skill) *promoteDemoteListState {
