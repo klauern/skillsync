@@ -347,13 +347,20 @@ func IsCommandFile(path string) bool {
 
 // IsInsideSkillDir reports whether filePath is nested within a known skill directory.
 func IsInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
-	for dir := filepath.Dir(filePath); dir != "." && dir != ""; dir = filepath.Dir(dir) {
+	if filePath == "" {
+		return false
+	}
+
+	for dir := filepath.Dir(filePath); ; {
 		if skillDirs[dir] {
 			return true
 		}
-		if parent := filepath.Dir(dir); parent == dir {
+
+		parent := filepath.Dir(dir)
+		if dir == "." || dir == "" || parent == dir {
 			break
 		}
+		dir = parent
 	}
 	return false
 }

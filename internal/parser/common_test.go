@@ -411,6 +411,11 @@ func TestIsInsideSkillDir(t *testing.T) {
 			dirs:     skillDirs,
 			want:     true,
 		},
+		"current directory skill": {
+			filePath: "legacy.md",
+			dirs:     map[string]bool{".": true},
+			want:     true,
+		},
 		"absolute descendant": {
 			filePath: filepath.Join(absoluteSkillDir, "references", "guide.md"),
 			dirs:     skillDirs,
