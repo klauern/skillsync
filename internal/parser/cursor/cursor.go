@@ -94,7 +94,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			continue
 		}
 		// Skip files inside skill directories
-		if isInsideSkillDir(f, skillDirs) {
+		if parser.IsInsideSkillDir(f, skillDirs) {
 			logging.Debug(
 				"skipping file inside skill directory",
 				logging.Path(f),
@@ -388,24 +388,6 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 // Platform returns the platform identifier for Cursor
 func (p *Parser) Platform() model.Platform {
 	return model.Cursor
-}
-
-// isInsideSkillDir checks if a file path is inside any of the skill directories.
-// This is used to filter out reference files (patterns/, references/, etc.) from legacy parsing.
-func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
-	dir := filepath.Dir(filePath)
-	// Walk up the directory tree to check if any parent is a skill directory
-	for dir != "." && dir != "" {
-		if skillDirs[dir] {
-			return true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return false
 }
 
 // DefaultPath returns the default path for Cursor skills

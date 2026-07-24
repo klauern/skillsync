@@ -367,7 +367,7 @@ func (p *Parser) parseFlatLegacyMdFiles(seenNames map[string]bool, skillDirs map
 			continue
 		}
 		// Skip files inside skill directories
-		if isInsideSkillDir(f, skillDirs) {
+		if parser.IsInsideSkillDir(f, skillDirs) {
 			logging.Debug(
 				"skipping flat .md inside skill directory",
 				logging.Path(f),
@@ -473,22 +473,6 @@ func (p *Parser) parseFlatMdFile(filePath string) (model.Skill, error) {
 		Content:     parser.NormalizeContent(result.Content),
 		ModifiedAt:  fileInfo.ModTime(),
 	}, nil
-}
-
-// isInsideSkillDir checks if a file path is inside any of the skill directories.
-func isInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
-	dir := filepath.Dir(filePath)
-	for dir != "." && dir != "" {
-		if skillDirs[dir] {
-			return true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return false
 }
 
 // Platform returns the platform identifier for Codex

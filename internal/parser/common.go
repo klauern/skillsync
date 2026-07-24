@@ -345,6 +345,26 @@ func IsCommandFile(path string) bool {
 	return false
 }
 
+// IsInsideSkillDir reports whether filePath is nested within a known skill directory.
+func IsInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
+	if filePath == "" {
+		return false
+	}
+
+	for dir := filepath.Dir(filePath); ; {
+		if skillDirs[dir] {
+			return true
+		}
+
+		parent := filepath.Dir(dir)
+		if dir == "." || dir == "" || parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
+}
+
 // NormalizeContent trims excessive whitespace from content.
 func NormalizeContent(content string) string {
 	// Trim leading/trailing whitespace
