@@ -387,3 +387,51 @@ func TestNormalizeContent(t *testing.T) {
 		})
 	}
 }
+
+func TestIsInsideSkillDir(t *testing.T) {
+	relativeSkillDir := filepath.Join("workspace", "skills", "review")
+	absoluteSkillDir := filepath.Join(string(filepath.Separator), "home", "user", "skills", "build")
+	skillDirs := map[string]bool{
+		relativeSkillDir: true,
+		absoluteSkillDir: true,
+	}
+
+	tests := map[string]struct {
+		filePath string
+		dirs     map[string]bool
+		want     bool
+	}{
+		"direct child": {
+			filePath: filepath.Join(relativeSkillDir, "SKILL.md"),
+			dirs:     skillDirs,
+			want:     true,
+		},
+		"nested descendant": {
+			filePath: filepath.Join(relativeSkillDir, "scripts", "setup.sh"),
+			dirs:     skillDirs,
+			want:     true,
+		},
+		"absolute descendant": {
+			filePath: filepath.Join(absoluteSkillDir, "references", "guide.md"),
+			dirs:     skillDirs,
+			want:     true,
+		},
+		"unrelated path": {
+			filePath: filepath.Join("workspace", "commands", "review.md"),
+			dirs:     skillDirs,
+			want:     false,
+		},
+		"empty known directories": {
+			filePath: filepath.Join(relativeSkillDir, "SKILL.md"),
+			want:     false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := IsInsideSkillDir(tt.filePath, tt.dirs); got != tt.want {
+				t.Errorf("IsInsideSkillDir(%q) = %v, want %v", tt.filePath, got, tt.want)
+			}
+		})
+	}
+}
