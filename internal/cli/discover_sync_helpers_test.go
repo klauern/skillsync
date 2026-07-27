@@ -61,3 +61,44 @@ func TestPluginSkillDedupeKey(t *testing.T) {
 		})
 	}
 }
+
+func TestParseScopeFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		input   string
+		want    []model.SkillScope
+		wantErr bool
+	}{
+		"empty disables filtering": {input: ""},
+		"all disables filtering":   {input: "all"},
+		"single scope":             {input: "user", want: []model.SkillScope{model.ScopeUser}},
+		"multiple scopes":          {input: "repo, plugin", want: []model.SkillScope{model.ScopeRepo, model.ScopePlugin}},
+		"invalid scope":            {input: "user,invalid", wantErr: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := parseScopeFilter(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("parseScopeFilter() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseScopeFilter() error = %v", err)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("parseScopeFilter() = %v, want %v", got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i] != tt.want[i] {
+					t.Fatalf("parseScopeFilter()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}

@@ -104,15 +104,9 @@ func discoveryCommand() *cli.Command {
 			}
 
 			// Parse scope filter
-			var scopeFilter []model.SkillScope
-			if scopeStr != "" && scopeStr != "all" {
-				for s := range strings.SplitSeq(scopeStr, ",") {
-					scope, err := model.ParseScope(strings.TrimSpace(s))
-					if err != nil {
-						return fmt.Errorf("invalid scope: %w", err)
-					}
-					scopeFilter = append(scopeFilter, scope)
-				}
+			scopeFilter, err := parseScopeFilter(scopeStr)
+			if err != nil {
+				return fmt.Errorf("invalid scope filter %q: %w", scopeStr, err)
 			}
 
 			// Determine which platforms to scan
