@@ -1759,7 +1759,7 @@ func findDuplicatesForTUI(skills []model.Skill, cfg *config.Config) ([]*similari
 	nameMatches := nameMatcher.FindSimilar(skills)
 
 	for _, match := range nameMatches {
-		pairKey := makeDupePairKey(match.Skill1, match.Skill2)
+		pairKey := makePairKey(match.Skill1, match.Skill2)
 		if comparedPairs[pairKey] {
 			continue
 		}
@@ -1788,7 +1788,7 @@ func findDuplicatesForTUI(skills []model.Skill, cfg *config.Config) ([]*similari
 	contentMatches := contentMatcher.FindSimilar(skills)
 
 	for _, match := range contentMatches {
-		pairKey := makeDupePairKey(match.Skill1, match.Skill2)
+		pairKey := makePairKey(match.Skill1, match.Skill2)
 		if comparedPairs[pairKey] {
 			continue
 		}
@@ -1808,16 +1808,6 @@ func findDuplicatesForTUI(skills []model.Skill, cfg *config.Config) ([]*similari
 	}
 
 	return results, nil
-}
-
-// makeDupePairKey creates a consistent key for a skill pair regardless of order.
-func makeDupePairKey(s1, s2 model.Skill) string {
-	key1 := fmt.Sprintf("%s:%s:%s", s1.Platform, s1.Scope, s1.Name)
-	key2 := fmt.Sprintf("%s:%s:%s", s2.Platform, s2.Scope, s2.Name)
-	if key1 < key2 {
-		return key1 + "|" + key2
-	}
-	return key2 + "|" + key1
 }
 
 // runPromoteDemoteTUI runs the promote/demote skills TUI view.
