@@ -255,7 +255,7 @@ func (cd *ConflictDetector) metadataDiffers(source, target model.Skill) bool {
 // This implements a simplified diff algorithm based on longest common subsequence.
 func (cd *ConflictDetector) computeDiff(source, target []string) []DiffHunk {
 	// Find the longest common subsequence to guide the diff
-	lcs := cd.longestCommonSubsequence(source, target)
+	lcs := longestCommonSubsequence(source, target)
 
 	var hunks []DiffHunk
 	var currentHunk *DiffHunk
@@ -321,47 +321,4 @@ func (cd *ConflictDetector) computeDiff(source, target []string) []DiffHunk {
 	}
 
 	return hunks
-}
-
-// longestCommonSubsequence finds the LCS of two string slices.
-func (cd *ConflictDetector) longestCommonSubsequence(source, target []string) []string {
-	m, n := len(source), len(target)
-	if m == 0 || n == 0 {
-		return nil
-	}
-
-	// Build LCS length table
-	dp := make([][]int, m+1)
-	for i := range dp {
-		dp[i] = make([]int, n+1)
-	}
-
-	for i := 1; i <= m; i++ {
-		for j := 1; j <= n; j++ {
-			if source[i-1] == target[j-1] {
-				dp[i][j] = dp[i-1][j-1] + 1
-			} else {
-				dp[i][j] = max(dp[i-1][j], dp[i][j-1])
-			}
-		}
-	}
-
-	// Backtrack to find the LCS
-	lcs := make([]string, dp[m][n])
-	i, j, idx := m, n, dp[m][n]-1
-
-	for i > 0 && j > 0 {
-		if source[i-1] == target[j-1] {
-			lcs[idx] = source[i-1]
-			i--
-			j--
-			idx--
-		} else if dp[i-1][j] > dp[i][j-1] {
-			i--
-		} else {
-			j--
-		}
-	}
-
-	return lcs
 }
