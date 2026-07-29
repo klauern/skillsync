@@ -162,8 +162,6 @@ func TestMerger_ResolveWithChoice(t *testing.T) {
 }
 
 func TestMerger_LongestCommonSubsequence(t *testing.T) {
-	m := NewMerger()
-
 	tests := []struct {
 		name     string
 		a        []string
@@ -198,7 +196,7 @@ func TestMerger_LongestCommonSubsequence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lcs := m.longestCommonSubsequence(tt.a, tt.b)
+			lcs := longestCommonSubsequence(tt.a, tt.b)
 			if len(lcs) != tt.expected {
 				t.Errorf("Expected LCS length %d, got %d", tt.expected, len(lcs))
 			}
