@@ -40,13 +40,7 @@ func CleanupBackups(opts CleanupOptions) ([]string, error) {
 	}
 
 	// Group backups by platform and source path
-	type backupGroup struct {
-		platform   string
-		sourcePath string
-		backups    []Metadata
-	}
-
-	groups := make(map[string]*backupGroup)
+	groups := make(map[string][]Metadata)
 
 	for _, backup := range index.Backups {
 		// Filter by platform if specified
@@ -55,35 +49,22 @@ func CleanupBackups(opts CleanupOptions) ([]string, error) {
 		}
 
 		key := backup.Platform + ":" + backup.SourcePath
-		if _, exists := groups[key]; !exists {
-			groups[key] = &backupGroup{
-				platform:   backup.Platform,
-				sourcePath: backup.SourcePath,
-				backups:    make([]Metadata, 0),
-			}
-		}
-		groups[key].backups = append(groups[key].backups, backup)
+		groups[key] = append(groups[key], backup)
 	}
 
 	// Sort backups in each group by creation time (newest first)
-	for _, group := range groups {
-		for i := 0; i < len(group.backups)-1; i++ {
-			for j := i + 1; j < len(group.backups); j++ {
-				if group.backups[i].CreatedAt.Before(group.backups[j].CreatedAt) {
-					group.backups[i], group.backups[j] = group.backups[j], group.backups[i]
-				}
-			}
-		}
+	for _, backups := range groups {
+		sortBackupsNewest(backups)
 	}
 
 	// Determine which backups to delete
 	var toDelete []string
 	now := time.Now()
 
-	for _, group := range groups {
+	for _, backups := range groups {
 		groupStart := len(toDelete) // track where this group's entries begin
 		keepCount := 0
-		for idx, backup := range group.backups {
+		for idx, backup := range backups {
 			shouldDelete := false
 
 			// Check age
