@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/klauern/skillsync/internal/util"
@@ -116,14 +117,13 @@ func (idx *Index) ListBackups() []Metadata {
 		backups = append(backups, backup)
 	}
 
-	// Sort by creation time (newest first)
-	for i := 0; i < len(backups)-1; i++ {
-		for j := i + 1; j < len(backups); j++ {
-			if backups[i].CreatedAt.Before(backups[j].CreatedAt) {
-				backups[i], backups[j] = backups[j], backups[i]
-			}
-		}
-	}
+	sortBackupsNewest(backups)
 
 	return backups
+}
+
+func sortBackupsNewest(backups []Metadata) {
+	slices.SortFunc(backups, func(a, b Metadata) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
+	})
 }
