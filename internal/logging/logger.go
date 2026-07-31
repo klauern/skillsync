@@ -2,7 +2,6 @@
 package logging
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -91,17 +90,6 @@ func With(args ...any) *slog.Logger {
 	return Default().With(args...)
 }
 
-// WithContext returns a logger with context-derived attributes.
-func WithContext(ctx context.Context) *slog.Logger {
-	if l := FromContext(ctx); l != nil {
-		return l
-	}
-	if defaultLogger != nil {
-		return defaultLogger
-	}
-	return Default()
-}
-
 // Debug logs at debug level using the default logger.
 func Debug(msg string, args ...any) {
 	Default().Debug(msg, args...)
@@ -120,22 +108,6 @@ func Warn(msg string, args ...any) {
 // Error logs at error level using the default logger.
 func Error(msg string, args ...any) {
 	Default().Error(msg, args...)
-}
-
-// Context key for logger storage.
-type loggerKey struct{}
-
-// NewContext returns a context with the logger attached.
-func NewContext(ctx context.Context, logger *slog.Logger) context.Context {
-	return context.WithValue(ctx, loggerKey{}, logger)
-}
-
-// FromContext retrieves the logger from context, or nil if not present.
-func FromContext(ctx context.Context) *slog.Logger {
-	if l, ok := ctx.Value(loggerKey{}).(*slog.Logger); ok {
-		return l
-	}
-	return nil
 }
 
 // Common attribute keys for consistent logging across the codebase.

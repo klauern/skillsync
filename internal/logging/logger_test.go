@@ -2,7 +2,6 @@ package logging_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"log/slog"
 	"strings"
@@ -107,53 +106,6 @@ func TestWith(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "component=test") {
 		t.Errorf("expected output to contain 'component=test', got: %s", output)
-	}
-}
-
-func TestContextLogger(t *testing.T) {
-	var buf bytes.Buffer
-	logger := logging.New(logging.Options{
-		Level:  logging.LevelInfo,
-		Output: &buf,
-	})
-
-	ctx := logging.NewContext(context.Background(), logger)
-	retrieved := logging.FromContext(ctx)
-
-	if retrieved == nil {
-		t.Fatal("expected logger from context, got nil")
-	}
-
-	retrieved.Info("context message")
-	if !strings.Contains(buf.String(), "context message") {
-		t.Error("expected logger from context to write to buffer")
-	}
-}
-
-func TestFromContext_Nil(t *testing.T) {
-	ctx := context.Background()
-	logger := logging.FromContext(ctx)
-
-	if logger != nil {
-		t.Error("expected nil logger from empty context")
-	}
-}
-
-func TestWithContext_FallbackToDefault(t *testing.T) {
-	var buf bytes.Buffer
-	defaultLogger := logging.New(logging.Options{
-		Level:  logging.LevelInfo,
-		Output: &buf,
-	})
-	logging.SetDefault(defaultLogger)
-
-	// Context without logger should fall back to default
-	ctx := context.Background()
-	logger := logging.WithContext(ctx)
-	logger.Info("fallback message")
-
-	if !strings.Contains(buf.String(), "fallback message") {
-		t.Error("expected WithContext to fall back to default logger")
 	}
 }
 
@@ -322,42 +274,6 @@ func TestDefault(t *testing.T) {
 	logger2 := logging.Default()
 	if logger != logger2 {
 		t.Error("expected Default() to return same logger on multiple calls")
-	}
-}
-
-func TestWithContext_UsesContextLogger(t *testing.T) {
-	var buf bytes.Buffer
-	contextLogger := logging.New(logging.Options{
-		Level:  logging.LevelInfo,
-		Output: &buf,
-	})
-
-	ctx := logging.NewContext(context.Background(), contextLogger)
-	logger := logging.WithContext(ctx)
-
-	logger.Info("context logger message")
-
-	if !strings.Contains(buf.String(), "context logger message") {
-		t.Error("expected WithContext to use logger from context")
-	}
-}
-
-func TestWithContext_FallsBackToDefault(t *testing.T) {
-	var buf bytes.Buffer
-	defaultLogger := logging.New(logging.Options{
-		Level:  logging.LevelInfo,
-		Output: &buf,
-	})
-	logging.SetDefault(defaultLogger)
-
-	// Empty context without logger
-	ctx := context.Background()
-	logger := logging.WithContext(ctx)
-
-	logger.Info("default fallback message")
-
-	if !strings.Contains(buf.String(), "default fallback message") {
-		t.Error("expected WithContext to fall back to default logger")
 	}
 }
 
