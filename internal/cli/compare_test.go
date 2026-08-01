@@ -172,14 +172,15 @@ func TestInvalidOutputFormat(t *testing.T) {
 func TestParseCompareConfigValidation(t *testing.T) {
 	// Test config parsing logic directly using mock command data
 	tests := []struct {
-		name             string
-		nameThreshold    float64
-		contentThreshold float64
-		nameOnly         bool
-		contentOnly      bool
-		format           string
-		algorithm        string
-		wantErr          bool
+		name                string
+		nameThreshold       float64
+		contentThreshold    float64
+		nameOnly            bool
+		contentOnly         bool
+		format              string
+		algorithm           string
+		algorithmFromConfig bool
+		wantErr             bool
 	}{
 		{
 			name:             "valid default config",
@@ -280,6 +281,15 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			wantErr:          true,
 		},
 		{
+			name:                "configured name algorithm valid when comparing both",
+			nameThreshold:       0.7,
+			contentThreshold:    0.6,
+			format:              "table",
+			algorithm:           "levenshtein",
+			algorithmFromConfig: true,
+			wantErr:             false,
+		},
+		{
 			name:             "content algorithm invalid for name-only",
 			nameThreshold:    0.7,
 			contentThreshold: 0.6,
@@ -293,12 +303,13 @@ func TestParseCompareConfigValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &compareConfig{
-				nameThreshold:    tt.nameThreshold,
-				contentThreshold: tt.contentThreshold,
-				nameOnly:         tt.nameOnly,
-				contentOnly:      tt.contentOnly,
-				format:           tt.format,
-				algorithm:        tt.algorithm,
+				nameThreshold:       tt.nameThreshold,
+				contentThreshold:    tt.contentThreshold,
+				nameOnly:            tt.nameOnly,
+				contentOnly:         tt.contentOnly,
+				format:              tt.format,
+				algorithm:           tt.algorithm,
+				algorithmFromConfig: tt.algorithmFromConfig,
 			}
 
 			err := validateCompareConfig(cfg)

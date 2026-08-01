@@ -104,6 +104,7 @@ type compareConfig struct {
 	nameOnly             bool
 	contentOnly          bool
 	algorithm            string
+	algorithmFromConfig  bool
 }
 
 func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
@@ -135,6 +136,7 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 	}
 	if cfg.algorithm == "" {
 		cfg.algorithm = appConfig.Similarity.Algorithm
+		cfg.algorithmFromConfig = true
 	}
 
 	return cfg, validateCompareConfig(cfg)
@@ -173,6 +175,13 @@ func validateCompareConfig(cfg *compareConfig) error {
 		validAlgorithms["lcs"] = true
 		validAlgorithms["jaccard"] = true
 		algorithmUsage = "combined, lcs, or jaccard with --content-only"
+	case cfg.algorithmFromConfig:
+		// Existing configuration accepted name-specific algorithms in the
+		// default mode. Content matching falls back to LCS for those values,
+		// so preserve that behavior while keeping the CLI flag unambiguous.
+		validAlgorithms["levenshtein"] = true
+		validAlgorithms["jaro-winkler"] = true
+		algorithmUsage = "combined, levenshtein, or jaro-winkler from configuration"
 	}
 	if !validAlgorithms[cfg.algorithm] {
 		return fmt.Errorf("invalid algorithm %q (use %s)", cfg.algorithm, algorithmUsage)
