@@ -104,6 +104,7 @@ type compareConfig struct {
 	nameOnly             bool
 	contentOnly          bool
 	algorithm            string
+	algorithmFromConfig  bool
 }
 
 func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
@@ -135,18 +136,23 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 	}
 	if cfg.algorithm == "" {
 		cfg.algorithm = appConfig.Similarity.Algorithm
+		cfg.algorithmFromConfig = true
 	}
 
+	return cfg, validateCompareConfig(cfg)
+}
+
+func validateCompareConfig(cfg *compareConfig) error {
 	// Validate thresholds (now after applying defaults)
 	if cfg.nameThreshold < 0 || cfg.nameThreshold > 1 {
-		return nil, errors.New("name-threshold must be between 0.0 and 1.0")
+		return errors.New("name-threshold must be between 0.0 and 1.0")
 	}
 	if cfg.contentThreshold < 0 || cfg.contentThreshold > 1 {
-		return nil, errors.New("content-threshold must be between 0.0 and 1.0")
+		return errors.New("content-threshold must be between 0.0 and 1.0")
 	}
 
 	if cfg.nameOnly && cfg.contentOnly {
-		return nil, errors.New("cannot use both --name-only and --content-only")
+		return errors.New("cannot use both --name-only and --content-only")
 	}
 
 	// Validate format
@@ -155,10 +161,33 @@ func parseCompareConfig(cmd *cli.Command) (*compareConfig, error) {
 		"summary": true, "json": true, "yaml": true,
 	}
 	if !validFormats[cfg.format] {
-		return nil, fmt.Errorf("invalid format: %s (use table, unified, side-by-side, summary, json, or yaml)", cfg.format)
+		return fmt.Errorf("invalid format: %s (use table, unified, side-by-side, summary, json, or yaml)", cfg.format)
 	}
 
-	return cfg, nil
+	validAlgorithms := map[string]bool{"combined": true}
+	algorithmUsage := "combined"
+	switch {
+	case cfg.nameOnly:
+		validAlgorithms["levenshtein"] = true
+		validAlgorithms["jaro-winkler"] = true
+		algorithmUsage = "combined, levenshtein, or jaro-winkler with --name-only"
+	case cfg.contentOnly:
+		validAlgorithms["lcs"] = true
+		validAlgorithms["jaccard"] = true
+		algorithmUsage = "combined, lcs, or jaccard with --content-only"
+	case cfg.algorithmFromConfig:
+		// Existing configuration accepted name-specific algorithms in the
+		// default mode. Content matching falls back to LCS for those values,
+		// so preserve that behavior while keeping the CLI flag unambiguous.
+		validAlgorithms["levenshtein"] = true
+		validAlgorithms["jaro-winkler"] = true
+		algorithmUsage = "combined, levenshtein, or jaro-winkler from configuration"
+	}
+	if !validAlgorithms[cfg.algorithm] {
+		return fmt.Errorf("invalid algorithm %q (use %s)", cfg.algorithm, algorithmUsage)
+	}
+
+	return nil
 }
 
 func runCompare(cmd *cli.Command) error {
