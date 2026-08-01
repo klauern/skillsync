@@ -178,6 +178,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 		nameOnly         bool
 		contentOnly      bool
 		format           string
+		algorithm        string
 		wantErr          bool
 	}{
 		{
@@ -185,6 +186,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    0.7,
 			contentThreshold: 0.6,
 			format:           "table",
+			algorithm:        "combined",
 			wantErr:          false,
 		},
 		{
@@ -192,6 +194,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    1.5,
 			contentThreshold: 0.6,
 			format:           "table",
+			algorithm:        "combined",
 			wantErr:          true,
 		},
 		{
@@ -199,6 +202,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    -0.1,
 			contentThreshold: 0.6,
 			format:           "table",
+			algorithm:        "combined",
 			wantErr:          true,
 		},
 		{
@@ -206,6 +210,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    0.7,
 			contentThreshold: 2.0,
 			format:           "table",
+			algorithm:        "combined",
 			wantErr:          true,
 		},
 		{
@@ -215,6 +220,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameOnly:         true,
 			contentOnly:      true,
 			format:           "table",
+			algorithm:        "combined",
 			wantErr:          true,
 		},
 		{
@@ -222,6 +228,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    0.7,
 			contentThreshold: 0.6,
 			format:           "invalid",
+			algorithm:        "combined",
 			wantErr:          true,
 		},
 		{
@@ -229,6 +236,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    0.7,
 			contentThreshold: 0.6,
 			format:           "unified",
+			algorithm:        "combined",
 			wantErr:          false,
 		},
 		{
@@ -236,7 +244,49 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			nameThreshold:    0.7,
 			contentThreshold: 0.6,
 			format:           "side-by-side",
+			algorithm:        "combined",
 			wantErr:          false,
+		},
+		{
+			name:             "valid name-only algorithm",
+			nameThreshold:    0.7,
+			contentThreshold: 0.6,
+			nameOnly:         true,
+			format:           "table",
+			algorithm:        "jaro-winkler",
+		},
+		{
+			name:             "valid content-only algorithm",
+			nameThreshold:    0.7,
+			contentThreshold: 0.6,
+			contentOnly:      true,
+			format:           "table",
+			algorithm:        "jaccard",
+		},
+		{
+			name:             "invalid unknown algorithm",
+			nameThreshold:    0.7,
+			contentThreshold: 0.6,
+			format:           "table",
+			algorithm:        "definitely-invalid",
+			wantErr:          true,
+		},
+		{
+			name:             "name algorithm invalid when comparing both",
+			nameThreshold:    0.7,
+			contentThreshold: 0.6,
+			format:           "table",
+			algorithm:        "levenshtein",
+			wantErr:          true,
+		},
+		{
+			name:             "content algorithm invalid for name-only",
+			nameThreshold:    0.7,
+			contentThreshold: 0.6,
+			nameOnly:         true,
+			format:           "table",
+			algorithm:        "lcs",
+			wantErr:          true,
 		},
 	}
 
@@ -248,6 +298,7 @@ func TestParseCompareConfigValidation(t *testing.T) {
 				nameOnly:         tt.nameOnly,
 				contentOnly:      tt.contentOnly,
 				format:           tt.format,
+				algorithm:        tt.algorithm,
 			}
 
 			err := validateCompareConfig(cfg)
@@ -256,49 +307,6 @@ func TestParseCompareConfigValidation(t *testing.T) {
 			}
 		})
 	}
-}
-
-// validateCompareConfig is a helper for testing config validation logic
-func validateCompareConfig(cfg *compareConfig) error {
-	// Validate thresholds
-	if cfg.nameThreshold < 0 || cfg.nameThreshold > 1 {
-		return errInvalidNameThreshold
-	}
-	if cfg.contentThreshold < 0 || cfg.contentThreshold > 1 {
-		return errInvalidContentThreshold
-	}
-
-	// Validate mutual exclusivity
-	if cfg.nameOnly && cfg.contentOnly {
-		return errConflictingFlags
-	}
-
-	// Validate format
-	validFormats := map[string]bool{
-		"table": true, "unified": true, "side-by-side": true,
-		"summary": true, "json": true, "yaml": true,
-	}
-	if !validFormats[cfg.format] {
-		return errInvalidFormat
-	}
-
-	return nil
-}
-
-// Error sentinel values for testing
-var (
-	errInvalidNameThreshold    = &configError{"name-threshold must be between 0.0 and 1.0"}
-	errInvalidContentThreshold = &configError{"content-threshold must be between 0.0 and 1.0"}
-	errConflictingFlags        = &configError{"cannot use both --name-only and --content-only"}
-	errInvalidFormat           = &configError{"invalid format"}
-)
-
-type configError struct {
-	msg string
-}
-
-func (e *configError) Error() string {
-	return e.msg
 }
 
 func TestFindSimilarSkillsCrossPlatformFilter(t *testing.T) {
@@ -380,6 +388,7 @@ func TestIncludeCrossPlatformConfigParsing(t *testing.T) {
 		nameThreshold:        0.7,
 		contentThreshold:     0.6,
 		format:               "table",
+		algorithm:            "combined",
 		includeCrossPlatform: true,
 	}
 
