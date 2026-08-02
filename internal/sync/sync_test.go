@@ -738,25 +738,12 @@ func TestResult_Summary(t *testing.T) {
 	if summary == "" {
 		t.Error("Summary should not be empty")
 	}
-	if !contains(summary, "Dry run") {
+	if !strings.Contains(summary, "Dry run") {
 		t.Error("Summary should indicate dry run")
 	}
-	if !contains(summary, "claude-code") {
+	if !strings.Contains(summary, "claude-code") {
 		t.Error("Summary should contain source platform")
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestSynchronizer_Sync_PiDevToClaudeCode(t *testing.T) {

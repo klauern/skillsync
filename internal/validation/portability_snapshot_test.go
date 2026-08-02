@@ -3,6 +3,7 @@ package validation
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,7 +32,7 @@ func TestValidatePortabilitySnapshot_MetadataDrift(t *testing.T) {
 	// The real repo snapshot should pass metadata checks.
 	for _, e := range result.Errors {
 		msg := e.Error()
-		if contains(msg, "snapshot version") || contains(msg, "snapshot narrative source") || contains(msg, "snapshot structured source") {
+		if strings.Contains(msg, "snapshot version") || strings.Contains(msg, "snapshot narrative source") || strings.Contains(msg, "snapshot structured source") {
 			t.Errorf("metadata drift: %v", e)
 		}
 	}
@@ -46,7 +47,7 @@ func TestValidatePortabilitySnapshot_PlatformSupport(t *testing.T) {
 
 	for _, e := range result.Errors {
 		msg := e.Error()
-		if contains(msg, "platform_support") {
+		if strings.Contains(msg, "platform_support") {
 			t.Errorf("platform support drift: %v", e)
 		}
 	}
@@ -61,7 +62,7 @@ func TestValidatePortabilitySnapshot_ArtifactPortability(t *testing.T) {
 
 	for _, e := range result.Errors {
 		msg := e.Error()
-		if contains(msg, "artifact_portability") {
+		if strings.Contains(msg, "artifact_portability") {
 			t.Errorf("artifact portability drift: %v", e)
 		}
 	}
@@ -76,7 +77,7 @@ func TestValidatePortabilitySnapshot_Precedence(t *testing.T) {
 
 	for _, e := range result.Errors {
 		msg := e.Error()
-		if contains(msg, "precedence") {
+		if strings.Contains(msg, "precedence") {
 			t.Errorf("precedence drift: %v", e)
 		}
 	}
@@ -91,7 +92,7 @@ func TestValidatePortabilitySnapshot_DocConsistency(t *testing.T) {
 
 	for _, e := range result.Errors {
 		msg := e.Error()
-		if contains(msg, "not reflected in the docs") || contains(msg, "must include") || contains(msg, "must state") || contains(msg, "must explain") || contains(msg, "must call out") || contains(msg, "must describe") {
+		if strings.Contains(msg, "not reflected in the docs") || strings.Contains(msg, "must include") || strings.Contains(msg, "must state") || strings.Contains(msg, "must explain") || strings.Contains(msg, "must call out") || strings.Contains(msg, "must describe") {
 			t.Errorf("doc consistency drift: %v", e)
 		}
 	}
@@ -129,17 +130,4 @@ func findRepoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
