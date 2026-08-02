@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -617,13 +618,13 @@ func TestMetadata_OmitemptyFields(t *testing.T) {
 	jsonStr := string(data)
 
 	// These fields should be omitted when empty
-	if contains(jsonStr, "description") {
+	if strings.Contains(jsonStr, "description") {
 		t.Error("description should be omitted when empty")
 	}
-	if contains(jsonStr, "metadata") {
+	if strings.Contains(jsonStr, "metadata") {
 		t.Error("metadata should be omitted when nil")
 	}
-	if contains(jsonStr, "tags") {
+	if strings.Contains(jsonStr, "tags") {
 		t.Error("tags should be omitted when nil")
 	}
 }
@@ -698,18 +699,4 @@ func TestIndex_EmptyBackupsRoundTrip(t *testing.T) {
 	if loaded.Backups == nil {
 		t.Error("expected non-nil Backups map after loading empty index")
 	}
-}
-
-// contains checks if s contains substr
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
