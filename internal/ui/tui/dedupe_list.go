@@ -389,17 +389,7 @@ func (s *dedupeListState) matches(skill model.Skill, lowerFilter string) bool {
 	if s == nil {
 		return true
 	}
-	if lowerFilter == "" {
-		return true
-	}
-	lowerName := strings.ToLower(skill.Name)
-	lowerDesc := strings.ToLower(skill.Description)
-	lowerScope := strings.ToLower(skill.DisplayScope())
-	lowerPlatform := strings.ToLower(string(skill.Platform))
-	return strings.Contains(lowerName, lowerFilter) ||
-		strings.Contains(lowerDesc, lowerFilter) ||
-		strings.Contains(lowerScope, lowerFilter) ||
-		strings.Contains(lowerPlatform, lowerFilter)
+	return skillMatchesFilter(skill, lowerFilter)
 }
 
 func (s *dedupeListState) shortHelp() string {
