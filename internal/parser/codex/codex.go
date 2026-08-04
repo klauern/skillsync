@@ -359,7 +359,7 @@ func (p *Parser) parseFlatLegacyMdFiles(seenNames map[string]bool, skillDirs map
 	for _, f := range files {
 		base := filepath.Base(f)
 		// Skip SKILL.md (case-insensitive)
-		if strings.EqualFold(base, "SKILL.md") {
+		if parser.IsSkillEntrypointName(base) {
 			continue
 		}
 		// Skip AGENTS.md (already parsed by parseAgentsFiles)

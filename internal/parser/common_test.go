@@ -440,3 +440,16 @@ func TestIsInsideSkillDir(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSkillEntrypointName(t *testing.T) {
+	for _, name := range []string{"SKILL.md", "skill.md", "Skill.md", "SkIlL.Md"} {
+		if !IsSkillEntrypointName(name) {
+			t.Errorf("IsSkillEntrypointName(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"SKILLS.md", "SKILL.txt", "my-SKILL.md"} {
+		if IsSkillEntrypointName(name) {
+			t.Errorf("IsSkillEntrypointName(%q) = true, want false", name)
+		}
+	}
+}

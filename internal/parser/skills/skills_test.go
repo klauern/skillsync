@@ -218,6 +218,26 @@ Lower content`), 0o600); err != nil {
 	}
 }
 
+func TestParser_Parse_DiscoversMixedCaseSkillEntrypoint(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "mixed-case")
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	entrypoint := filepath.Join(skillDir, "SkIlL.Md")
+	if err := os.WriteFile(entrypoint, []byte("---\nname: mixed-case\ndescription: Mixed case entrypoint\n---\nContent"), 0o600); err != nil {
+		t.Fatalf("failed to write mixed-case entrypoint: %v", err)
+	}
+
+	skills, err := New(tmpDir, model.ClaudeCode).Parse()
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(skills) != 1 || skills[0].Name != "mixed-case" {
+		t.Fatalf("Parse() = %#v, want one mixed-case skill", skills)
+	}
+}
+
 func TestParser_parseSkillFile_BasicFields(t *testing.T) {
 	tests := map[string]struct {
 		content     string
@@ -1180,6 +1200,25 @@ func TestListSkillDirectories(t *testing.T) {
 
 	if len(dirs) != 2 {
 		t.Errorf("ListSkillDirectories() returned %d dirs, want 2", len(dirs))
+	}
+}
+
+func TestListSkillDirectories_MixedCaseEntrypoint(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, "mixed-case")
+	if err := os.MkdirAll(skillDir, 0o750); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SkIlL.Md"), []byte("content"), 0o600); err != nil {
+		t.Fatalf("failed to write mixed-case entrypoint: %v", err)
+	}
+
+	dirs, err := ListSkillDirectories(tmpDir)
+	if err != nil {
+		t.Fatalf("ListSkillDirectories() error = %v", err)
+	}
+	if len(dirs) != 1 || dirs[0] != skillDir {
+		t.Fatalf("ListSkillDirectories() = %v, want [%s]", dirs, skillDir)
 	}
 }
 

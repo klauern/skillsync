@@ -187,6 +187,34 @@ func TestCreateBackup_SkillFileBacksUpDirectory(t *testing.T) {
 	}
 }
 
+func TestCreateBackup_MixedCaseSkillFileBacksUpDirectory(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "mixed-case-skill")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	entrypoint := filepath.Join(sourceDir, "SkIlL.Md")
+	if err := os.WriteFile(entrypoint, []byte("# Mixed case skill"), 0o644); err != nil {
+		t.Fatalf("failed to write mixed-case entrypoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "reference.txt"), []byte("reference"), 0o644); err != nil {
+		t.Fatalf("failed to write companion file: %v", err)
+	}
+
+	metadata, err := CreateBackup(entrypoint, Options{Platform: "codex"})
+	if err != nil {
+		t.Fatalf("CreateBackup for mixed-case entrypoint failed: %v", err)
+	}
+	if got := metadata.Metadata["backup_format"]; got != "dir-zip" {
+		t.Errorf("backup_format = %q, want dir-zip", got)
+	}
+	if metadata.SourcePath != sourceDir {
+		t.Errorf("SourcePath = %q, want %q", metadata.SourcePath, sourceDir)
+	}
+}
+
 func TestCreateBackup_SkipsBrokenSymlinkTargets(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)

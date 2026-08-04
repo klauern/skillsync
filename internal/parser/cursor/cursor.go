@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
@@ -90,7 +89,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	for _, f := range files {
 		// Skip SKILL.md files (case-insensitive)
 		base := filepath.Base(f)
-		if strings.EqualFold(base, "SKILL.md") {
+		if parser.IsSkillEntrypointName(base) {
 			continue
 		}
 		// Skip files inside skill directories

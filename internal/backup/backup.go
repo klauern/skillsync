@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -39,15 +40,6 @@ type Options struct {
 	Tags        []string          // Tags for categorization
 }
 
-// skillEntrypointNames are the recognized SKILL.md basenames (Agent Skills Standard).
-var skillEntrypointNames = map[string]bool{
-	"SKILL.md": true, "skill.md": true, "Skill.md": true,
-}
-
-func isSkillEntrypoint(name string) bool {
-	return skillEntrypointNames[name]
-}
-
 // resolveSourcePath returns the path to backup. When given a skill entrypoint
 // file (SKILL.md), resolves to its parent directory so the full skill folder is backed up.
 func resolveSourcePath(sourcePath string) (string, error) {
@@ -59,7 +51,7 @@ func resolveSourcePath(sourcePath string) (string, error) {
 		return sourcePath, nil
 	}
 	base := filepath.Base(sourcePath)
-	if isSkillEntrypoint(base) {
+	if parser.IsSkillEntrypointName(base) {
 		return filepath.Dir(sourcePath), nil
 	}
 	return sourcePath, nil
@@ -467,10 +459,12 @@ func isUnderSkillDirectory(filePath, rootPath string) bool {
 		if err != nil || strings.HasPrefix(rel, "..") {
 			break
 		}
-		for name := range skillEntrypointNames {
-			candidate := filepath.Join(dir, name)
-			if _, statErr := os.Stat(candidate); statErr == nil {
-				return true
+		entries, readErr := os.ReadDir(dir)
+		if readErr == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() && parser.IsSkillEntrypointName(entry.Name()) {
+					return true
+				}
 			}
 		}
 		parent := filepath.Dir(dir)
@@ -506,7 +500,7 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 		if absErr != nil {
 			return absErr
 		}
-		isEntrypoint := isSkillEntrypoint(filepath.Base(path))
+		isEntrypoint := parser.IsSkillEntrypointName(filepath.Base(path))
 		// Skip files under a skill directory that are not the entrypoint
 		if isUnderSkillDirectory(pathAbs, rootClean) && !isEntrypoint {
 			return nil

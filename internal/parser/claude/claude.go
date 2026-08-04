@@ -98,7 +98,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	for _, f := range files {
 		// Skip SKILL.md files (case-insensitive)
 		base := filepath.Base(f)
-		if strings.EqualFold(base, "SKILL.md") {
+		if parser.IsSkillEntrypointName(base) {
 			continue
 		}
 		// Skip files inside skill directories

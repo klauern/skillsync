@@ -345,6 +345,12 @@ func IsCommandFile(path string) bool {
 	return false
 }
 
+// IsSkillEntrypointName reports whether name is the Agent Skills Standard
+// entrypoint filename. Filesystems and tools may vary the filename's casing.
+func IsSkillEntrypointName(name string) bool {
+	return strings.EqualFold(name, "SKILL.md")
+}
+
 // IsInsideSkillDir reports whether filePath is nested within a known skill directory.
 func IsInsideSkillDir(filePath string, skillDirs map[string]bool) bool {
 	if filePath == "" {
