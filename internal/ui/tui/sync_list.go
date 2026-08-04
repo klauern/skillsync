@@ -334,15 +334,7 @@ func NewSyncListModel(skills []model.Skill, source, target model.Platform, initi
 			}
 			return rows
 		},
-		Matches: func(skill model.Skill, lowerFilter string) bool {
-			if lowerFilter == "" {
-				return true
-			}
-			return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.Description), lowerFilter)
-		},
+		Matches:       skillMatchesFilter,
 		ReservedLines: 15,
 		Actions: []ActionBinding[model.Skill]{
 			{

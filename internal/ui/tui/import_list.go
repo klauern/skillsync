@@ -292,16 +292,6 @@ func buildImportSkillListModel(state *importListState, skills []model.Skill) Lis
 	toggleAllKey := key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "toggle all"))
 	selectKey := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "destination"))
 
-	matches := func(skill model.Skill, lowerFilter string) bool {
-		if lowerFilter == "" {
-			return true
-		}
-		return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
-			strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
-			strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
-			strings.Contains(strings.ToLower(skill.Description), lowerFilter)
-	}
-
 	statusText := func(filtered, _ int, _ string) string {
 		selectedCount := selectedImportSkillCount(state, skills)
 		return fmt.Sprintf("%d skill(s) selected of %d visible", selectedCount, filtered)
@@ -422,7 +412,7 @@ General:
 			{Title: "Scope", Width: widths.scope},
 		},
 		ToRows:        toRows,
-		Matches:       matches,
+		Matches:       skillMatchesFilter,
 		StatusText:    statusText,
 		ReservedLines: 12,
 		Header:        header,

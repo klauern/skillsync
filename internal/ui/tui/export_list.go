@@ -167,13 +167,7 @@ func NewExportListModel(skills []model.Skill) ExportListModel {
 			if state.platformIndex >= 0 && skill.Platform != state.platformOptions[state.platformIndex] {
 				return false
 			}
-			if lowerFilter == "" {
-				return true
-			}
-			return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.Description), lowerFilter)
+			return skillMatchesFilter(skill, lowerFilter)
 		},
 		ReservedLines: 12,
 		StatusText: func(filtered, total int, filter string) string {

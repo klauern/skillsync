@@ -354,13 +354,7 @@ func newPromoteDemoteConfig(state *promoteDemoteListState) ListConfig[model.Skil
 					return false
 				}
 			}
-			if lowerFilter == "" {
-				return true
-			}
-			return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.Description), lowerFilter)
+			return skillMatchesFilter(skill, lowerFilter)
 		},
 		ReservedLines: 12,
 		Header: func() string {

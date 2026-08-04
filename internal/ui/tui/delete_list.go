@@ -525,17 +525,7 @@ func (s *deleteListState) matches(skill model.Skill, lowerFilter string) bool {
 			return false
 		}
 	}
-	if lowerFilter == "" {
-		return true
-	}
-	lowerName := strings.ToLower(skill.Name)
-	lowerDesc := strings.ToLower(skill.Description)
-	lowerScope := strings.ToLower(skill.DisplayScope())
-	lowerPlatform := strings.ToLower(string(skill.Platform))
-	return strings.Contains(lowerName, lowerFilter) ||
-		strings.Contains(lowerDesc, lowerFilter) ||
-		strings.Contains(lowerScope, lowerFilter) ||
-		strings.Contains(lowerPlatform, lowerFilter)
+	return skillMatchesFilter(skill, lowerFilter)
 }
 
 func (s *deleteListState) shortHelp() string {
@@ -895,10 +885,7 @@ func (m *DeleteListModel) applyFilter() {
 		var textFiltered []model.Skill
 		lowerFilter := strings.ToLower(m.filter)
 		for _, s := range filtered {
-			if strings.Contains(strings.ToLower(s.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(s.Description), lowerFilter) {
+			if skillMatchesFilter(s, lowerFilter) {
 				textFiltered = append(textFiltered, s)
 			}
 		}

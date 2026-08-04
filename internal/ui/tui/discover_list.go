@@ -397,13 +397,7 @@ func NewDiscoverListModel(skills []model.Skill) DiscoverListModel {
 					return false
 				}
 			}
-			if lowerFilter == "" {
-				return true
-			}
-			return strings.Contains(strings.ToLower(skill.Name), lowerFilter) ||
-				strings.Contains(strings.ToLower(string(skill.Platform)), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.DisplayScope()), lowerFilter) ||
-				strings.Contains(strings.ToLower(skill.Description), lowerFilter)
+			return skillMatchesFilter(skill, lowerFilter)
 		},
 		ReservedLines: 17,
 		Actions: []ActionBinding[model.Skill]{

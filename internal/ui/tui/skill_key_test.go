@@ -35,3 +35,36 @@ func TestScopedSkillKeyIncludesIdentityFields(t *testing.T) {
 		})
 	}
 }
+
+func TestSkillMatchesFilter(t *testing.T) {
+	t.Parallel()
+
+	skill := model.Skill{
+		Name:        "Code Review",
+		Platform:    model.ClaudeCode,
+		Scope:       model.ScopeSystem,
+		Description: "Checks pull requests",
+	}
+
+	tests := []struct {
+		name   string
+		filter string
+		want   bool
+	}{
+		{name: "empty", filter: "", want: true},
+		{name: "name", filter: "code", want: true},
+		{name: "platform", filter: "claude", want: true},
+		{name: "scope", filter: "system", want: true},
+		{name: "description", filter: "pull", want: true},
+		{name: "no match", filter: "cursor", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := skillMatchesFilter(skill, tt.filter); got != tt.want {
+				t.Fatalf("skillMatchesFilter() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

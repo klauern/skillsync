@@ -114,13 +114,7 @@ func NewScopeListModel(skills []model.Skill) ScopeListModel {
 			if scopeIndex >= 0 && s.Scope != scopeOptions[scopeIndex] {
 				return false
 			}
-			if lf == "" {
-				return true
-			}
-			return strings.Contains(strings.ToLower(s.Name), lf) ||
-				strings.Contains(strings.ToLower(string(s.Platform)), lf) ||
-				strings.Contains(strings.ToLower(s.DisplayScope()), lf) ||
-				strings.Contains(strings.ToLower(s.Description), lf)
+			return skillMatchesFilter(s, lf)
 		},
 		ReservedLines: 12,
 		Actions: []ActionBinding[model.Skill]{
