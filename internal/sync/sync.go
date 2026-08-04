@@ -516,7 +516,7 @@ func (s *Synchronizer) processSkill(
 	result.Message = message
 	result.Conflict = conflict
 	var extras []string
-	if shouldLinkClaudeDirectorySkill(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
+	if shouldLinkClaudeDirectorySkill(source, targetPlatform) && !needsCanonicalEntrypointCopy(source, targetPlatform) && action != ActionSkipped && action != ActionConflict {
 		extras = append(extras, "linked Claude skill directory")
 	}
 	if warning := mappingWarning(source, targetPlatform); warning != "" {
@@ -600,7 +600,7 @@ func (s *Synchronizer) processSkill(
 			)
 
 		case SourceTypeDirectory:
-			if shouldLinkClaudeDirectorySkill(source, targetPlatform) {
+			if shouldLinkClaudeDirectorySkill(source, targetPlatform) && !needsCanonicalEntrypointCopy(source, targetPlatform) {
 				if err := os.MkdirAll(filepath.Dir(targetEntryPath), 0o750); err != nil {
 					result.Action = ActionFailed
 					result.Error = fmt.Errorf("failed to create parent directories for symlink: %w", err)
@@ -629,6 +629,26 @@ func (s *Synchronizer) processSkill(
 					logging.Skill(source.Name),
 					logging.Path(targetEntryPath),
 					logging.Path(sourceRootPath),
+				)
+				break
+			}
+			if needsCanonicalEntrypointCopy(source, targetPlatform) {
+				if err := copySkillDir(sourceRootPath, targetEntryPath, source.Path); err != nil {
+					logging.Error(
+						"failed to copy directory with canonical entrypoint",
+						logging.Skill(source.Name),
+						logging.Path(targetEntryPath),
+						logging.Err(err),
+					)
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to copy directory with canonical entrypoint: %w", err)
+					return result
+				}
+
+				logging.Debug(
+					"copied directory with canonical entrypoint",
+					logging.Skill(source.Name),
+					logging.Path(targetEntryPath),
 				)
 				break
 			}

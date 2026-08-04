@@ -1,6 +1,10 @@
 package sync
 
-import "github.com/klauern/skillsync/internal/model"
+import (
+	"path/filepath"
+
+	"github.com/klauern/skillsync/internal/model"
+)
 
 // shouldLinkClaudeDirectorySkill reports whether a Claude-sourced directory skill
 // should be linked (symlinked or copied as a directory) into the target platform,
@@ -20,4 +24,10 @@ func shouldLinkClaudeDirectorySkill(skill model.Skill, target model.Platform) bo
 		return false
 	}
 	return target != model.ClaudeCode && target != model.Gemini
+}
+
+// needsCanonicalEntrypointCopy reports whether a directory skill has a
+// case-variant entrypoint that cannot safely be linked verbatim.
+func needsCanonicalEntrypointCopy(skill model.Skill, target model.Platform) bool {
+	return shouldLinkClaudeDirectorySkill(skill, target) && filepath.Base(skill.Path) != "SKILL.md"
 }

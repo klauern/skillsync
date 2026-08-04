@@ -44,7 +44,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	// Discover SKILL.md files (case-insensitive)
 	// The Agent Skills Standard uses SKILL.md, but some users create skill.md
-	patterns := []string{"SKILL.md", "**/SKILL.md", "skill.md", "**/skill.md", "Skill.md", "**/Skill.md"}
+	patterns := []string{"*", "**/*"}
 	files, err := parser.DiscoverFiles(p.basePath, patterns)
 	if err != nil {
 		logging.Error(
@@ -55,6 +55,9 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		)
 		return nil, fmt.Errorf("failed to discover SKILL.md files in %q: %w", p.basePath, err)
 	}
+	files = slices.DeleteFunc(files, func(path string) bool {
+		return !parser.IsSkillEntrypointName(filepath.Base(path))
+	})
 	files = deduplicateSkillEntrypoints(files)
 
 	logging.Debug(
@@ -593,12 +596,12 @@ func IsAgentSkillsFormat(content []byte) bool {
 // HasSkillDirectory checks if a path contains a valid skill directory structure.
 // A valid skill directory contains a SKILL.md file (case-insensitive check).
 func HasSkillDirectory(path string) bool {
-	// Check common case variations
-	variants := []string{"SKILL.md", "skill.md", "Skill.md"}
-	for _, variant := range variants {
-		skillFile := filepath.Join(path, variant)
-		info, err := os.Stat(skillFile)
-		if err == nil && !info.IsDir() {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && parser.IsSkillEntrypointName(entry.Name()) {
 			return true
 		}
 	}
@@ -607,15 +610,14 @@ func HasSkillDirectory(path string) bool {
 
 // ListSkillDirectories finds all directories containing SKILL.md files (case-insensitive).
 func ListSkillDirectories(basePath string) ([]string, error) {
-	patterns := []string{
-		"SKILL.md", "**/SKILL.md",
-		"skill.md", "**/skill.md",
-		"Skill.md", "**/Skill.md",
-	}
+	patterns := []string{"*", "**/*"}
 	files, err := parser.DiscoverFiles(basePath, patterns)
 	if err != nil {
 		return nil, fmt.Errorf("discover skill directories in %q: %w", basePath, err)
 	}
+	files = slices.DeleteFunc(files, func(path string) bool {
+		return !parser.IsSkillEntrypointName(filepath.Base(path))
+	})
 
 	// Deduplicate directories (in case multiple case variants exist)
 	seen := make(map[string]bool)
@@ -640,14 +642,20 @@ type SkillDirectoryContents struct {
 
 // GetSkillDirectoryContents returns the contents of a skill directory.
 func GetSkillDirectoryContents(skillDir string) (*SkillDirectoryContents, error) {
-	// Find SKILL.md with case-insensitive check
-	var skillFile string
-	for _, variant := range []string{"SKILL.md", "skill.md", "Skill.md"} {
-		candidate := filepath.Join(skillDir, variant)
-		if _, err := os.Stat(candidate); err == nil {
-			skillFile = candidate
-			break
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return nil, fmt.Errorf("read skill directory %q: %w", skillDir, err)
+	}
+	var candidates []string
+	for _, entry := range entries {
+		if !entry.IsDir() && parser.IsSkillEntrypointName(entry.Name()) {
+			candidates = append(candidates, filepath.Join(skillDir, entry.Name()))
 		}
+	}
+	candidates = deduplicateSkillEntrypoints(candidates)
+	var skillFile string
+	if len(candidates) > 0 {
+		skillFile = candidates[0]
 	}
 	if skillFile == "" {
 		return nil, fmt.Errorf("SKILL.md not found in %q", skillDir)
@@ -657,7 +665,6 @@ func GetSkillDirectoryContents(skillDir string) (*SkillDirectoryContents, error)
 		SkillFile: skillFile,
 	}
 
-	entries, err := os.ReadDir(skillDir)
 	if err == nil {
 		for _, entry := range entries {
 			if !entry.IsDir() {

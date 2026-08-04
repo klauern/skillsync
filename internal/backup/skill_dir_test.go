@@ -70,7 +70,7 @@ func TestIsUnderSkillDirectory(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := isUnderSkillDirectory(tt.filePath, rootClean)
+			got := isUnderSkillDirectory(tt.filePath, rootClean, make(skillDirectoryCache))
 			if got != tt.want {
 				t.Errorf("isUnderSkillDirectory(%q, %q) = %v, want %v",
 					tt.filePath, rootClean, got, tt.want)
@@ -93,7 +93,7 @@ func TestIsUnderSkillDirectory_SkillMdItself(t *testing.T) {
 	}
 
 	// SKILL.md itself: its parent dir contains SKILL.md (itself), so it should return true.
-	got := isUnderSkillDirectory(skillMd, filepath.Clean(root))
+	got := isUnderSkillDirectory(skillMd, filepath.Clean(root), make(skillDirectoryCache))
 	if !got {
 		t.Errorf("isUnderSkillDirectory(SKILL.md, root) = false, want true")
 	}
@@ -121,7 +121,7 @@ func TestIsUnderSkillDirectory_MultipleSkillVariants(t *testing.T) {
 	}
 
 	rootClean := filepath.Clean(root)
-	got := isUnderSkillDirectory(sibling, rootClean)
+	got := isUnderSkillDirectory(sibling, rootClean, make(skillDirectoryCache))
 	if !got {
 		t.Errorf("isUnderSkillDirectory with skill.md variant = false, want true")
 	}

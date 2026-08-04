@@ -187,6 +187,34 @@ func TestCreateBackup_SkillFileBacksUpDirectory(t *testing.T) {
 	}
 }
 
+func TestCreateBackup_MixedCaseSkillFileBacksUpDirectory(t *testing.T) {
+	tempHome := util.CreateTempDir(t)
+	t.Setenv("SKILLSYNC_HOME", tempHome)
+
+	sourceDir := filepath.Join(tempHome, "mixed-case-skill")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill directory: %v", err)
+	}
+	entrypoint := filepath.Join(sourceDir, "SkIlL.Md")
+	if err := os.WriteFile(entrypoint, []byte("# Mixed case skill"), 0o644); err != nil {
+		t.Fatalf("failed to write mixed-case entrypoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "reference.txt"), []byte("reference"), 0o644); err != nil {
+		t.Fatalf("failed to write companion file: %v", err)
+	}
+
+	metadata, err := CreateBackup(entrypoint, Options{Platform: "codex"})
+	if err != nil {
+		t.Fatalf("CreateBackup for mixed-case entrypoint failed: %v", err)
+	}
+	if got := metadata.Metadata["backup_format"]; got != "dir-zip" {
+		t.Errorf("backup_format = %q, want dir-zip", got)
+	}
+	if metadata.SourcePath != sourceDir {
+		t.Errorf("SourcePath = %q, want %q", metadata.SourcePath, sourceDir)
+	}
+}
+
 func TestCreateBackup_SkipsBrokenSymlinkTargets(t *testing.T) {
 	tempHome := util.CreateTempDir(t)
 	t.Setenv("SKILLSYNC_HOME", tempHome)
@@ -779,6 +807,29 @@ func TestDirectory_DeduplicatesSkillEntrypointVariants(t *testing.T) {
 	}
 	if filepath.Ext(backups[0].BackupPath) != ".zip" {
 		t.Fatalf("expected zip backup for skill directory, got %q", backups[0].BackupPath)
+	}
+}
+
+func TestIsUnderSkillDirectoryCachesDirectoryScans(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "orphan")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("failed to create orphan directory: %v", err)
+	}
+	file := filepath.Join(dir, "file.md")
+	if err := os.WriteFile(file, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("failed to write orphan file: %v", err)
+	}
+
+	cache := make(skillDirectoryCache)
+	if isUnderSkillDirectory(file, root, cache) {
+		t.Fatal("orphan file should not initially be under a skill directory")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("skill"), 0o600); err != nil {
+		t.Fatalf("failed to add entrypoint: %v", err)
+	}
+	if isUnderSkillDirectory(file, root, cache) {
+		t.Fatal("cached directory scan should not reread the same directory")
 	}
 }
 

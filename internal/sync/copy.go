@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/parser"
 )
 
 // SourceType indicates the type of skill source structure.
@@ -167,6 +168,71 @@ func copyDir(src, dst string) error {
 		logging.Path(src),
 	)
 
+	return nil
+}
+
+// copySkillDir copies a directory skill while normalizing its selected
+// entrypoint to the Agent Skills Standard filename. Other entrypoint casing
+// variants at the skill root are omitted so the destination has one
+// unambiguous entrypoint.
+func copySkillDir(src, dst, entrypointPath string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("failed to stat source %q: %w", src, err)
+	}
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("source %q is not a directory", src)
+	}
+
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to create destination directory %q: %w", dst, err)
+	}
+
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source directory %q: %w", src, err)
+	}
+
+	selectedEntrypoint := filepath.Base(entrypointPath)
+	for _, entry := range entries {
+		if parser.IsSkillEntrypointName(entry.Name()) && entry.Name() != selectedEntrypoint {
+			continue
+		}
+
+		srcPath := filepath.Join(src, entry.Name())
+		dstName := entry.Name()
+		if entry.Name() == selectedEntrypoint && parser.IsSkillEntrypointName(entry.Name()) {
+			dstName = "SKILL.md"
+		}
+		dstPath := filepath.Join(dst, dstName)
+
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+			continue
+		}
+
+		info, err := os.Lstat(srcPath)
+		if err != nil {
+			return fmt.Errorf("failed to lstat %q: %w", srcPath, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := os.Readlink(srcPath)
+			if err != nil {
+				return fmt.Errorf("failed to read symlink %q: %w", srcPath, err)
+			}
+			if err := os.Symlink(linkTarget, dstPath); err != nil {
+				return fmt.Errorf("failed to create symlink %q: %w", dstPath, err)
+			}
+			continue
+		}
+		if err := copyFile(srcPath, dstPath); err != nil {
+			return err
+		}
+	}
+
+	logging.Debug("copied directory skill with canonical entrypoint", logging.Path(src))
 	return nil
 }
 

@@ -81,6 +81,53 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillDryRun(t *testing.T) {
 	}
 }
 
+func TestSynchronizer_Sync_ClaudeDirectorySkillMixedCaseEntrypointCopiesCanonicalFile(t *testing.T) {
+	s := New()
+	sourceDir, skillDir := writeClaudeDirectorySkill(t, "mixed-case-linked")
+	if err := os.Rename(filepath.Join(skillDir, "SKILL.md"), filepath.Join(skillDir, "SkIlL.Md")); err != nil {
+		t.Fatalf("failed to rename entrypoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "reference.md"), []byte("reference"), 0o600); err != nil {
+		t.Fatalf("failed to write companion file: %v", err)
+	}
+	targetDir := t.TempDir()
+
+	result, err := s.Sync(model.ClaudeCode, model.Codex, Options{
+		DryRun:     false,
+		Strategy:   StrategyOverwrite,
+		SourcePath: sourceDir,
+		TargetPath: targetDir,
+	})
+	if err != nil {
+		t.Fatalf("Sync failed: %v", err)
+	}
+	if len(result.Skills) != 1 || result.Skills[0].Action != ActionCreated {
+		t.Fatalf("expected one created skill, got %#v", result.Skills)
+	}
+
+	targetSkillDir := filepath.Join(targetDir, "mixed-case-linked")
+	entrypoint := filepath.Join(targetSkillDir, "SKILL.md")
+	info, err := os.Lstat(entrypoint)
+	if err != nil {
+		t.Fatalf("failed to stat canonical entrypoint: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("expected canonical entrypoint to be copied, not linked")
+	}
+	entries, err := os.ReadDir(targetSkillDir)
+	if err != nil {
+		t.Fatalf("failed to read target skill directory: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "SkIlL.Md" {
+			t.Fatal("case-variant entrypoint should not be copied")
+		}
+	}
+	if _, err := os.Stat(filepath.Join(targetSkillDir, "reference.md")); err != nil {
+		t.Fatalf("expected companion file to be copied: %v", err)
+	}
+}
+
 func TestSynchronizer_Sync_ClaudeDirectorySkillOverwriteAndSkipExistingEntries(t *testing.T) {
 	s := New()
 

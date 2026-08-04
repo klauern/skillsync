@@ -12,6 +12,7 @@ import (
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/parser"
 )
 
 // Transformer handles skill transformation between platforms.
@@ -266,7 +267,7 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 }
 
 func isSkillFile(path string) bool {
-	return strings.EqualFold(filepath.Base(path), "SKILL.md")
+	return parser.IsSkillEntrypointName(filepath.Base(path))
 }
 
 func shouldIncludeFrontmatter(target model.Platform, targetPath string) bool {

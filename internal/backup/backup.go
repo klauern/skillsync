@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -39,15 +40,6 @@ type Options struct {
 	Tags        []string          // Tags for categorization
 }
 
-// skillEntrypointNames are the recognized SKILL.md basenames (Agent Skills Standard).
-var skillEntrypointNames = map[string]bool{
-	"SKILL.md": true, "skill.md": true, "Skill.md": true,
-}
-
-func isSkillEntrypoint(name string) bool {
-	return skillEntrypointNames[name]
-}
-
 // resolveSourcePath returns the path to backup. When given a skill entrypoint
 // file (SKILL.md), resolves to its parent directory so the full skill folder is backed up.
 func resolveSourcePath(sourcePath string) (string, error) {
@@ -59,7 +51,7 @@ func resolveSourcePath(sourcePath string) (string, error) {
 		return sourcePath, nil
 	}
 	base := filepath.Base(sourcePath)
-	if isSkillEntrypoint(base) {
+	if parser.IsSkillEntrypointName(base) {
 		return filepath.Dir(sourcePath), nil
 	}
 	return sourcePath, nil
@@ -456,9 +448,35 @@ func DeleteBackup(backupID string) error {
 	return nil
 }
 
+// skillDirectoryCache records whether each scanned directory has a skill
+// entrypoint. Directory() visits every file, so caching prevents a directory
+// with many files from being read once per file.
+type skillDirectoryCache map[string]bool
+
+func (c skillDirectoryCache) hasEntrypoint(dir string) bool {
+	dir = filepath.Clean(dir)
+	if containsEntrypoint, ok := c[dir]; ok {
+		return containsEntrypoint
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c[dir] = false
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && parser.IsSkillEntrypointName(entry.Name()) {
+			c[dir] = true
+			return true
+		}
+	}
+	c[dir] = false
+	return false
+}
+
 // isUnderSkillDirectory returns true if path is inside a directory that contains
 // a skill entrypoint (SKILL.md), so it would be included in a directory backup.
-func isUnderSkillDirectory(filePath, rootPath string) bool {
+func isUnderSkillDirectory(filePath, rootPath string, directories skillDirectoryCache) bool {
 	dir := filepath.Dir(filePath)
 	rootClean := filepath.Clean(rootPath)
 	for {
@@ -467,11 +485,8 @@ func isUnderSkillDirectory(filePath, rootPath string) bool {
 		if err != nil || strings.HasPrefix(rel, "..") {
 			break
 		}
-		for name := range skillEntrypointNames {
-			candidate := filepath.Join(dir, name)
-			if _, statErr := os.Stat(candidate); statErr == nil {
-				return true
-			}
+		if directories.hasEntrypoint(dirClean) {
+			return true
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -492,6 +507,7 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 		return nil, fmt.Errorf("failed to resolve source path: %w", err)
 	}
 	seenSkillRoots := make(map[string]bool)
+	skillDirectories := make(skillDirectoryCache)
 
 	err = filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -506,9 +522,9 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 		if absErr != nil {
 			return absErr
 		}
-		isEntrypoint := isSkillEntrypoint(filepath.Base(path))
+		isEntrypoint := parser.IsSkillEntrypointName(filepath.Base(path))
 		// Skip files under a skill directory that are not the entrypoint
-		if isUnderSkillDirectory(pathAbs, rootClean) && !isEntrypoint {
+		if isUnderSkillDirectory(pathAbs, rootClean, skillDirectories) && !isEntrypoint {
 			return nil
 		}
 		// On case-sensitive filesystems, a directory may contain multiple entrypoint
