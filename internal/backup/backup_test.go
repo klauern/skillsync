@@ -810,6 +810,29 @@ func TestDirectory_DeduplicatesSkillEntrypointVariants(t *testing.T) {
 	}
 }
 
+func TestIsUnderSkillDirectoryCachesDirectoryScans(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "orphan")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("failed to create orphan directory: %v", err)
+	}
+	file := filepath.Join(dir, "file.md")
+	if err := os.WriteFile(file, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("failed to write orphan file: %v", err)
+	}
+
+	cache := make(skillDirectoryCache)
+	if isUnderSkillDirectory(file, root, cache) {
+		t.Fatal("orphan file should not initially be under a skill directory")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("skill"), 0o600); err != nil {
+		t.Fatalf("failed to add entrypoint: %v", err)
+	}
+	if isUnderSkillDirectory(file, root, cache) {
+		t.Fatal("cached directory scan should not reread the same directory")
+	}
+}
+
 func TestRestoreBackup_FileWithZipExtension(t *testing.T) {
 	// Regression test: a plain file with a .zip extension must be restored as a
 	// single file, not treated as a directory archive.

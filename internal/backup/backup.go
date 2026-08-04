@@ -448,9 +448,35 @@ func DeleteBackup(backupID string) error {
 	return nil
 }
 
+// skillDirectoryCache records whether each scanned directory has a skill
+// entrypoint. Directory() visits every file, so caching prevents a directory
+// with many files from being read once per file.
+type skillDirectoryCache map[string]bool
+
+func (c skillDirectoryCache) hasEntrypoint(dir string) bool {
+	dir = filepath.Clean(dir)
+	if containsEntrypoint, ok := c[dir]; ok {
+		return containsEntrypoint
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c[dir] = false
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && parser.IsSkillEntrypointName(entry.Name()) {
+			c[dir] = true
+			return true
+		}
+	}
+	c[dir] = false
+	return false
+}
+
 // isUnderSkillDirectory returns true if path is inside a directory that contains
 // a skill entrypoint (SKILL.md), so it would be included in a directory backup.
-func isUnderSkillDirectory(filePath, rootPath string) bool {
+func isUnderSkillDirectory(filePath, rootPath string, directories skillDirectoryCache) bool {
 	dir := filepath.Dir(filePath)
 	rootClean := filepath.Clean(rootPath)
 	for {
@@ -459,13 +485,8 @@ func isUnderSkillDirectory(filePath, rootPath string) bool {
 		if err != nil || strings.HasPrefix(rel, "..") {
 			break
 		}
-		entries, readErr := os.ReadDir(dir)
-		if readErr == nil {
-			for _, entry := range entries {
-				if !entry.IsDir() && parser.IsSkillEntrypointName(entry.Name()) {
-					return true
-				}
-			}
+		if directories.hasEntrypoint(dirClean) {
+			return true
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -486,6 +507,7 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 		return nil, fmt.Errorf("failed to resolve source path: %w", err)
 	}
 	seenSkillRoots := make(map[string]bool)
+	skillDirectories := make(skillDirectoryCache)
 
 	err = filepath.Walk(sourcePath, func(path string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -502,7 +524,7 @@ func Directory(sourcePath string, opts Options) ([]Metadata, error) {
 		}
 		isEntrypoint := parser.IsSkillEntrypointName(filepath.Base(path))
 		// Skip files under a skill directory that are not the entrypoint
-		if isUnderSkillDirectory(pathAbs, rootClean) && !isEntrypoint {
+		if isUnderSkillDirectory(pathAbs, rootClean, skillDirectories) && !isEntrypoint {
 			return nil
 		}
 		// On case-sensitive filesystems, a directory may contain multiple entrypoint
