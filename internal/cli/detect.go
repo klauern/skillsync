@@ -3,9 +3,7 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -68,9 +66,7 @@ func outputDetectTable(result util.PlatformDetectionResult) error {
 }
 
 func outputDetectJSON(result util.PlatformDetectionResult) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(result)
+	return outputAnyJSON(result)
 }
 
 func detectStatusSymbol(status util.PlatformDetectionStatus) string {

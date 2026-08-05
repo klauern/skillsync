@@ -4,7 +4,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -540,9 +539,7 @@ func outputSyncResultJSON(result *sync.Result) error {
 		Skills:   skills,
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(out)
+	return outputAnyJSON(out)
 }
 
 // outputSkills formats and prints skills in the requested format
