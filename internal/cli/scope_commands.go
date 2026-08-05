@@ -3,7 +3,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,7 +10,6 @@ import (
 	"path/filepath"
 
 	"github.com/urfave/cli/v3"
-	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
@@ -796,21 +794,4 @@ func getSkillPathForScope(platform model.Platform, scope model.SkillScope, skill
 	}
 
 	return filepath.Join(basePath, skillName, "SKILL.md"), nil
-}
-
-// outputAnyJSON outputs any value as JSON.
-func outputAnyJSON(v any) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(v)
-}
-
-// outputAnyYAML outputs any value as YAML.
-func outputAnyYAML(v any) error {
-	data, err := yaml.Marshal(v)
-	if err != nil {
-		return fmt.Errorf("failed to marshal YAML: %w", err)
-	}
-	fmt.Print(string(data))
-	return nil
 }

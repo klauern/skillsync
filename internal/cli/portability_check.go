@@ -3,9 +3,7 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -126,9 +124,7 @@ func outputPortabilityCheckJSON(result *validation.Result) error {
 		out.Errors = append(out.Errors, e.Error())
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(out); err != nil {
+	if err := outputAnyJSON(out); err != nil {
 		return err
 	}
 

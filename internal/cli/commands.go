@@ -3,7 +3,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -131,9 +130,7 @@ func showConfigWithFormat(format string) error {
 
 	switch format {
 	case "json":
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(cfg)
+		return outputAnyJSON(cfg)
 	case "yaml":
 		data, err := yaml.Marshal(cfg)
 		if err != nil {
