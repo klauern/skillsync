@@ -129,28 +129,28 @@ func TestConfigListModel_CycleOptions(t *testing.T) {
 	}
 }
 
-func TestConfigListModel_UpdateFloatValue(t *testing.T) {
+func TestConfigListState_UpdateFloatValue(t *testing.T) {
 	cfg := config.Default()
-	m := NewConfigListModel(cfg)
+	state := configListState{cfg: cfg}
 
-	m.updateConfigValue("Similarity", "NameThreshold", "0.85")
+	state.updateConfigValue("Similarity", "NameThreshold", "0.85")
 
-	if m.cfg.Similarity.NameThreshold != 0.85 {
-		t.Errorf("expected NameThreshold to be 0.85, got %f", m.cfg.Similarity.NameThreshold)
+	if cfg.Similarity.NameThreshold != 0.85 {
+		t.Errorf("expected NameThreshold to be 0.85, got %f", cfg.Similarity.NameThreshold)
 	}
 }
 
-func TestConfigListModel_UpdateFloatValue_OutOfRange(t *testing.T) {
+func TestConfigListState_UpdateFloatValue_OutOfRange(t *testing.T) {
 	cfg := config.Default()
 	original := cfg.Similarity.NameThreshold
-	m := NewConfigListModel(cfg)
+	state := configListState{cfg: cfg}
 
 	// Try to set value > 1.0
-	m.updateConfigValue("Similarity", "NameThreshold", "1.5")
+	state.updateConfigValue("Similarity", "NameThreshold", "1.5")
 
 	// Should not change
-	if m.cfg.Similarity.NameThreshold != original {
-		t.Errorf("expected NameThreshold to remain %f, got %f", original, m.cfg.Similarity.NameThreshold)
+	if cfg.Similarity.NameThreshold != original {
+		t.Errorf("expected NameThreshold to remain %f, got %f", original, cfg.Similarity.NameThreshold)
 	}
 }
 
