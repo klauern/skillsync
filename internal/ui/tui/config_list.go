@@ -582,12 +582,6 @@ func (m *ConfigListModel) toggleOrCycleCurrentValue() {
 	m.modified = m.state.modified
 }
 
-// updateConfigValue is kept for test compatibility.
-func (m *ConfigListModel) updateConfigValue(section, key, value string) {
-	m.state.updateConfigValue(section, key, value)
-	m.modified = m.state.modified
-}
-
 // Result returns the typed result of the user interaction.
 func (m ConfigListModel) Result() ConfigListResult {
 	return m.result
