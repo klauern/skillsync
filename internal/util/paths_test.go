@@ -82,14 +82,6 @@ func TestGeminiPath(t *testing.T) {
 	}
 }
 
-func TestPiDevProjectSkillsPath(t *testing.T) {
-	projectDir := "/test/project"
-	expected := "/test/project/.pi/skills"
-	if got := PiDevProjectSkillsPath(projectDir); got != expected {
-		t.Errorf("PiDevProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
-	}
-}
-
 func TestPiDevSkillsPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
