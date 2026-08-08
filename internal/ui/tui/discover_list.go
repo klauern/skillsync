@@ -150,9 +150,6 @@ func (s *discoverListState) ensureViewport(width, height int) {
 type DiscoverListModel struct {
 	ListModel[model.Skill]
 	state *discoverListState
-	// Deprecated compatibility fields kept for existing tests and callers.
-	skills      []model.Skill
-	detailSkill model.Skill
 }
 
 // Update implements tea.Model.
@@ -225,10 +222,7 @@ func (m DiscoverListModel) viewDetail() string {
 	m.state.vp.SetContent(m.buildDetailContent(m.state.vp.Width))
 
 	var b strings.Builder
-	detailSkill := m.detailSkill
-	if detailSkill.Name == "" {
-		detailSkill = m.state.detailSkill
-	}
+	detailSkill := m.state.detailSkill
 	b.WriteString(listStyles.Title.Render(fmt.Sprintf("🔍 Skill Details: %s", detailSkill.Name)))
 	b.WriteString("\n\n")
 	b.WriteString(m.state.vp.View())
@@ -260,10 +254,7 @@ General:
 
 func (m DiscoverListModel) buildDetailContent(width int) string {
 	var b strings.Builder
-	skill := m.detailSkill
-	if skill.Name == "" {
-		skill = m.state.detailSkill
-	}
+	skill := m.state.detailSkill
 	if skill.Name == "" {
 		return "No skill selected."
 	}
@@ -297,11 +288,6 @@ func discoverSelectedSkill(m *ListModel[model.Skill]) model.Skill {
 		return m.filtered[cursor]
 	}
 	return model.Skill{}
-}
-
-// skillsToRows is kept for test compatibility.
-func (m DiscoverListModel) skillsToRows(skills []model.Skill) []table.Row {
-	return m.cfg.ToRows(skills)
 }
 
 func discoverListColumns(totalWidth int, skills []model.Skill) ([]table.Column, discoverListColumnWidths) {
@@ -530,7 +516,6 @@ General:
 	mdl := DiscoverListModel{
 		ListModel: NewListModel(skills, cfg),
 		state:     state,
-		skills:    skills,
 	}
 	state.refresh(&mdl.ListModel)
 	return mdl
