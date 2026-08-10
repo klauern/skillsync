@@ -832,26 +832,12 @@ func (m *PromoteDemoteListModel) applyFilter() {
 	m.syncStateFromBase()
 }
 
-func (m PromoteDemoteListModel) skillsToRows(skills []model.Skill) []table.Row {
-	return promoteDemoteListRows(m.state, skills)
-}
-
 func (m PromoteDemoteListModel) renderShortHelp() string {
 	return promoteDemoteShortHelp()
 }
 
 func (m PromoteDemoteListModel) renderFullHelp() string {
 	return promoteDemoteFullHelp()
-}
-
-// getPromotableSelectedSkills returns selected skills that can be promoted (repo -> user).
-func (m PromoteDemoteListModel) getPromotableSelectedSkills() []model.Skill {
-	return promoteDemotePromotableSelectedSkills(m.state)
-}
-
-// getDemotableSelectedSkills returns selected skills that can be demoted (user -> repo).
-func (m PromoteDemoteListModel) getDemotableSelectedSkills() []model.Skill {
-	return promoteDemoteDemotableSelectedSkills(m.state)
 }
 
 // Result returns the result of the user interaction.

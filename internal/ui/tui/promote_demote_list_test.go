@@ -309,7 +309,7 @@ func TestPromoteDemoteListModel_GetPromotableSelectedSkills(t *testing.T) {
 	m.selected[promoteDemoteSkillKey(skills[0])] = true
 	m.selected[promoteDemoteSkillKey(skills[1])] = true
 
-	promotable := m.getPromotableSelectedSkills()
+	promotable := promoteDemotePromotableSelectedSkills(m.state)
 	if len(promotable) != 1 {
 		t.Errorf("expected 1 promotable skill, got %d", len(promotable))
 	}
@@ -339,7 +339,7 @@ func TestPromoteDemoteListModel_GetDemotableSelectedSkills(t *testing.T) {
 	m.selected[promoteDemoteSkillKey(skills[0])] = true
 	m.selected[promoteDemoteSkillKey(skills[1])] = true
 
-	demotable := m.getDemotableSelectedSkills()
+	demotable := promoteDemoteDemotableSelectedSkills(m.state)
 	if len(demotable) != 1 {
 		t.Errorf("expected 1 demotable skill, got %d", len(demotable))
 	}
@@ -954,7 +954,7 @@ func TestPromoteDemoteListModel_SkillsToRows_ShowsTargetScope(t *testing.T) {
 	}
 
 	m := NewPromoteDemoteListModel(skills)
-	rows := m.skillsToRows(skills)
+	rows := promoteDemoteListRows(m.state, skills)
 
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
