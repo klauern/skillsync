@@ -401,13 +401,3 @@ func canonicalFileKey(path string) string {
 	}
 	return filepath.Clean(path) + "|" + info.Name()
 }
-
-// AllEntries returns all plugin entries from the index (useful for testing).
-func (p *CachePluginsParser) AllEntries() []*PluginIndexEntry {
-	index := LoadPluginIndex()
-	entries := make([]*PluginIndexEntry, 0, len(index.byInstallPath))
-	for _, entry := range index.byInstallPath {
-		entries = append(entries, entry)
-	}
-	return entries
-}
