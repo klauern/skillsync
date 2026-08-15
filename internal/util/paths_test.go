@@ -447,15 +447,6 @@ func TestCursorSkillsPath(t *testing.T) {
 	}
 }
 
-func TestCursorProjectSkillsPath(t *testing.T) {
-	projectDir := "/test/project"
-	expected := "/test/project/.cursor/skills"
-	got := CursorProjectSkillsPath(projectDir)
-	if got != expected {
-		t.Errorf("CursorProjectSkillsPath(%q) = %q, want %q", projectDir, got, expected)
-	}
-}
-
 func TestGetTieredPaths_NoLegacyPaths(t *testing.T) {
 	// Verify that all platforms only have skills paths (no legacy rules paths)
 	platforms := model.AllPlatforms()

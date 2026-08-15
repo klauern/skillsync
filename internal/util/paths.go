@@ -96,11 +96,6 @@ func CursorSkillsPath() string {
 	return filepath.Join(HomeDir(), ".cursor", "skills")
 }
 
-// CursorProjectSkillsPath returns the Cursor skills directory for a project
-func CursorProjectSkillsPath(projectDir string) string {
-	return filepath.Join(projectDir, ".cursor", "skills")
-}
-
 // CursorCommandsPath returns the global Cursor commands directory (~/.cursor/commands)
 func CursorCommandsPath() string {
 	return filepath.Join(HomeDir(), ".cursor", "commands")
