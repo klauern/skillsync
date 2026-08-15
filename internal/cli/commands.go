@@ -307,10 +307,7 @@ func runExport(cmd *cli.Command) error {
 	}
 
 	// Discover skills
-	skills, err := discoverSkillsForExport(platform)
-	if err != nil {
-		return fmt.Errorf("failed to discover skills: %w", err)
-	}
+	skills := discoverSkillsForPlatform(platform)
 
 	if len(skills) == 0 {
 		fmt.Fprintln(os.Stderr, "No skills found to export.")
@@ -348,11 +345,6 @@ func runExport(cmd *cli.Command) error {
 	}
 
 	return nil
-}
-
-// discoverSkillsForExport discovers skills optionally filtered by platform.
-func discoverSkillsForExport(platform model.Platform) ([]model.Skill, error) {
-	return discoverSkillsForPlatform(platform), nil
 }
 
 func backupCommand() *cli.Command {
@@ -1346,10 +1338,7 @@ func runConfigTUI() error {
 // runExportTUI runs the export TUI view.
 func runExportTUI() error {
 	// Discover skills from all platforms
-	skills, err := discoverSkillsForExport("")
-	if err != nil {
-		return fmt.Errorf("failed to discover skills: %w", err)
-	}
+	skills := discoverSkillsForPlatform("")
 
 	if len(skills) == 0 {
 		ui.Info("No skills found to export")
