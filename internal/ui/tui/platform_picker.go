@@ -311,18 +311,3 @@ General:
 func (m PlatformPickerModel) Result() PlatformPickerResult {
 	return m.result
 }
-
-// RunPlatformPicker runs the interactive platform picker and returns the result.
-func RunPlatformPicker() (PlatformPickerResult, error) {
-	model := NewPlatformPickerModel()
-	finalModel, err := tea.NewProgram(model, tea.WithAltScreen()).Run()
-	if err != nil {
-		return PlatformPickerResult{}, err
-	}
-
-	if m, ok := finalModel.(PlatformPickerModel); ok {
-		return m.Result(), nil
-	}
-
-	return PlatformPickerResult{}, nil
-}
