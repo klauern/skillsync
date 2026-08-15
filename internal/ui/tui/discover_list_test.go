@@ -32,8 +32,8 @@ func TestNewDiscoverListModel(t *testing.T) {
 
 	model := NewDiscoverListModel(skills)
 
-	if len(model.skills) != 2 {
-		t.Errorf("expected 2 skills, got %d", len(model.skills))
+	if len(model.allItems) != 2 {
+		t.Errorf("expected 2 skills, got %d", len(model.allItems))
 	}
 
 	if len(model.filtered) != 2 {
@@ -154,8 +154,8 @@ func TestDiscoverListModel_ClearFilter(t *testing.T) {
 func TestDiscoverListModel_EmptySkills(t *testing.T) {
 	m := NewDiscoverListModel([]model.Skill{})
 
-	if len(m.skills) != 0 {
-		t.Errorf("expected 0 skills, got %d", len(m.skills))
+	if len(m.allItems) != 0 {
+		t.Errorf("expected 0 skills, got %d", len(m.allItems))
 	}
 
 	// View should still work without panicking
@@ -324,7 +324,7 @@ func TestSkillsToRows(t *testing.T) {
 	}
 
 	m := NewDiscoverListModel(skills)
-	rows := m.skillsToRows(skills)
+	rows := m.cfg.ToRows(skills)
 
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
@@ -357,7 +357,7 @@ func TestSkillsToRows_LongValues(t *testing.T) {
 	}
 
 	m := NewDiscoverListModel(skills)
-	rows := m.skillsToRows(skills)
+	rows := m.cfg.ToRows(skills)
 	row := rows[0]
 
 	// Name should be truncated to the configured width
@@ -388,7 +388,7 @@ func TestDiscoverListModel_DetailDescriptionWraps(t *testing.T) {
 	}
 
 	m := NewDiscoverListModel(skills)
-	m.detailSkill = skills[0]
+	m.state.detailSkill = skills[0]
 
 	content := m.buildDetailContent(10)
 	if !strings.Contains(content, "alpha beta\ngamma") {
