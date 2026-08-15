@@ -92,23 +92,6 @@ func TestDefaultOptions(t *testing.T) {
 	}
 }
 
-func TestWith(t *testing.T) {
-	var buf bytes.Buffer
-	logger := logging.New(logging.Options{
-		Level:  logging.LevelInfo,
-		Output: &buf,
-	})
-	logging.SetDefault(logger)
-
-	childLogger := logging.With("component", "test")
-	childLogger.Info("child message")
-
-	output := buf.String()
-	if !strings.Contains(output, "component=test") {
-		t.Errorf("expected output to contain 'component=test', got: %s", output)
-	}
-}
-
 func TestAttributeHelpers(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -239,9 +222,8 @@ func TestPackageLevelLogging(t *testing.T) {
 	})
 	logging.SetDefault(testLogger)
 
-	// Test all package-level logging functions
+	// Test the package-level logging functions used by production callers.
 	logging.Debug("debug message", "key", "debug-val")
-	logging.Info("info message", "key", "info-val")
 	logging.Warn("warn message", "key", "warn-val")
 	logging.Error("error message", "key", "error-val")
 
@@ -249,9 +231,6 @@ func TestPackageLevelLogging(t *testing.T) {
 
 	if !strings.Contains(output, "debug message") {
 		t.Error("expected Debug() to write debug message")
-	}
-	if !strings.Contains(output, "info message") {
-		t.Error("expected Info() to write info message")
 	}
 	if !strings.Contains(output, "warn message") {
 		t.Error("expected Warn() to write warn message")
@@ -274,25 +253,5 @@ func TestDefault(t *testing.T) {
 	logger2 := logging.Default()
 	if logger != logger2 {
 		t.Error("expected Default() to return same logger on multiple calls")
-	}
-}
-
-func TestWith_UsesDefaultLogger(t *testing.T) {
-	var buf bytes.Buffer
-	defaultLogger := logging.New(logging.Options{
-		Level:  logging.LevelInfo,
-		Output: &buf,
-	})
-	logging.SetDefault(defaultLogger)
-
-	childLogger := logging.With("test-attr", "test-value")
-	childLogger.Info("with attrs message")
-
-	output := buf.String()
-	if !strings.Contains(output, "with attrs message") {
-		t.Error("expected With() to return working logger")
-	}
-	if !strings.Contains(output, "test-attr=test-value") {
-		t.Error("expected With() to include attributes")
 	}
 }

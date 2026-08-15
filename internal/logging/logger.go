@@ -82,22 +82,9 @@ func SetDefault(logger *slog.Logger) {
 	slog.SetDefault(logger)
 }
 
-// With returns a logger that includes the given attributes in every output.
-func With(args ...any) *slog.Logger {
-	if defaultLogger != nil {
-		return defaultLogger.With(args...)
-	}
-	return Default().With(args...)
-}
-
 // Debug logs at debug level using the default logger.
 func Debug(msg string, args ...any) {
 	Default().Debug(msg, args...)
-}
-
-// Info logs at info level using the default logger.
-func Info(msg string, args ...any) {
-	Default().Info(msg, args...)
 }
 
 // Warn logs at warn level using the default logger.
