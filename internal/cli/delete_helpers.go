@@ -2,26 +2,6 @@ package cli
 
 import "github.com/klauern/skillsync/internal/model"
 
-func filterDeleteCandidates(sourceSkills, targetSkills []model.Skill) []model.Skill {
-	if len(sourceSkills) == 0 || len(targetSkills) == 0 {
-		return nil
-	}
-
-	sourceNames := make(map[string]bool, len(sourceSkills))
-	for _, skill := range sourceSkills {
-		sourceNames[skill.Name] = true
-	}
-
-	candidates := make([]model.Skill, 0, len(targetSkills))
-	for _, skill := range targetSkills {
-		if sourceNames[skill.Name] {
-			candidates = append(candidates, skill)
-		}
-	}
-
-	return candidates
-}
-
 // findOrphanedSkills returns target skills whose names do not appear in source.
 func findOrphanedSkills(sourceSkills, targetSkills []model.Skill) []model.Skill {
 	if len(targetSkills) == 0 {
