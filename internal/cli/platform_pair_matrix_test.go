@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,7 +93,7 @@ func TestCompareAndDedupePlatformPairs(t *testing.T) {
 					t.Fatalf("findSimilarSkills() returned %d results, want 1", len(compareResults))
 				}
 
-				compareOutput := captureStdoutToString(t, func() {
+				compareOutput := captureStdout(t, func() {
 					if err := outputCompareResults(compareResults, "table"); err != nil {
 						t.Fatalf("outputCompareResults() error = %v", err)
 					}
@@ -114,34 +112,6 @@ func TestCompareAndDedupePlatformPairs(t *testing.T) {
 			})
 		}
 	}
-}
-
-func captureStdoutToString(t *testing.T, fn func()) string {
-	t.Helper()
-
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe() error = %v", err)
-	}
-	os.Stdout = w
-
-	defer func() {
-		os.Stdout = oldStdout
-	}()
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close stdout pipe: %v", err)
-	}
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("failed to read captured stdout: %v", err)
-	}
-
-	return buf.String()
 }
 
 func parseClaudeFixture(t *testing.T) model.Skill {
