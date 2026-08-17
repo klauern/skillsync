@@ -134,6 +134,15 @@ func ParseYAMLFrontmatter(frontmatter []byte) (map[string]any, error) {
 	return result, nil
 }
 
+// ExtractString returns a string value from a frontmatter map.
+func ExtractString(frontmatter map[string]any, key string) string {
+	value, ok := frontmatter[key].(string)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
 // DiscoverFiles finds all files matching the given patterns in a directory.
 // Patterns are glob patterns relative to the base directory.
 // Supports ** for recursive matching (custom implementation).
