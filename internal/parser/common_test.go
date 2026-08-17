@@ -175,6 +175,28 @@ func TestParseYAMLFrontmatter(t *testing.T) {
 	}
 }
 
+func TestExtractString(t *testing.T) {
+	tests := map[string]struct {
+		frontmatter map[string]any
+		key         string
+		want        string
+	}{
+		"string value":     {frontmatter: map[string]any{"name": "test-skill"}, key: "name", want: "test-skill"},
+		"empty string":     {frontmatter: map[string]any{"name": ""}, key: "name"},
+		"missing key":      {frontmatter: map[string]any{"name": "test-skill"}, key: "description"},
+		"non-string value": {frontmatter: map[string]any{"name": 42}, key: "name"},
+		"nil map":          {key: "name"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := ExtractString(tt.frontmatter, tt.key); got != tt.want {
+				t.Errorf("ExtractString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDiscoverFiles(t *testing.T) {
 	// Create temp directory with test files
 	tempDir := util.CreateTempDir(t)
