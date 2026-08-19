@@ -6,21 +6,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 // PortabilitySnapshot represents the machine-readable portability snapshot.
 type PortabilitySnapshot struct {
-	Version       int `yaml:"version"`
+	Version       int    `yaml:"version"`
+	VerifiedAt    string `yaml:"verified_at"`
 	GeneratedFrom struct {
 		Narrative  string `yaml:"narrative"`
 		Structured string `yaml:"structured"`
 	} `yaml:"generated_from"`
 	PlatformSupport map[string]struct {
-		Status           string   `yaml:"status"`
-		ArtifactSurfaces []string `yaml:"artifact_surfaces"`
-		Notes            []string `yaml:"notes"`
+		Status                     string   `yaml:"status"`
+		ImplementationStatus       string   `yaml:"implementation_status"`
+		VerifiedAt                 string   `yaml:"verified_at"`
+		OfficialSources            []string `yaml:"official_sources"`
+		ObservedVersion            string   `yaml:"observed_local_version"`
+		ArtifactSurfaces           []string `yaml:"artifact_surfaces"`
+		HarnessCapabilities        []string `yaml:"harness_capabilities"`
+		ImplementedCapabilities    []string `yaml:"implemented_capabilities"`
+		DocumentedOnlyCapabilities []string `yaml:"documented_only_capabilities"`
+		NativeOnlyCapabilities     []string `yaml:"native_only_capabilities"`
+		Notes                      []string `yaml:"notes"`
 	} `yaml:"platform_support"`
 	ArtifactPortability map[string]struct {
 		Portability        string   `yaml:"portability"`
@@ -45,7 +55,7 @@ var DefaultWantPlatformSupport = map[string]string{
 	"codex":   "implemented",
 	"copilot": "implemented",
 	"gemini":  "implemented",
-	"pidev":   "implemented",
+	"pi":      "implemented",
 }
 
 // DefaultWantPrecedence is the expected scope precedence per platform.
@@ -55,7 +65,17 @@ var DefaultWantPrecedence = map[string][]string{
 	"copilot": {"personal", "repository", "organization"},
 	"cursor":  {"project", "global"},
 	"gemini":  {"workspace", "user", "extension"},
-	"pidev":   {"user", "project"},
+	"pi":      {"project", "user"},
+}
+
+// DefaultWantSources maps each platform to its canonical documentation source.
+var DefaultWantSources = map[string]string{
+	"claude":  "https://code.claude.com/docs/en/skills",
+	"codex":   "https://developers.openai.com/codex/skills",
+	"cursor":  "https://cursor.com/docs/skills",
+	"copilot": "https://docs.github.com/en/copilot/concepts/agents/about-agent-skills",
+	"gemini":  "https://geminicli.com/docs/cli/skills/",
+	"pi":      "https://pi.dev/docs/latest/skills",
 }
 
 // DefaultWantArtifacts is the expected artifact portability entries.
@@ -86,12 +106,19 @@ func FindRepoRoot() (string, error) {
 // ValidatePortabilitySnapshot checks the portability snapshot against the
 // narrative and structured docs. It returns a Result with all drift findings.
 func ValidatePortabilitySnapshot(root string) (*Result, error) {
+	return ValidatePortabilitySnapshotAt(root, time.Now())
+}
+
+// ValidatePortabilitySnapshotAt validates a snapshot against a deterministic
+// reference time. Snapshot verification expires after 180 days.
+func ValidatePortabilitySnapshotAt(root string, now time.Time) (*Result, error) {
 	result := &Result{Valid: true}
 
 	snapshotPath := filepath.Join(root, "docs", "platforms", "portability-snapshot.yaml")
 	assessmentPath := filepath.Join(root, "docs", "platforms", "portability-assessment.md")
 	claudePath := filepath.Join(root, "docs", "platforms", "claude.md")
 	geminiPath := filepath.Join(root, "docs", "platforms", "gemini.md")
+	piPath := filepath.Join(root, "docs", "platforms", "pi.md")
 	mappingPath := filepath.Join(root, "docs", "platforms", "cross-platform-mapping.md")
 	schemaPath := filepath.Join(root, "docs", "platforms", "schema.yaml")
 
@@ -117,6 +144,11 @@ func ValidatePortabilitySnapshot(root string) (*Result, error) {
 		return nil, fmt.Errorf("read gemini platform doc: %w", err)
 	}
 	// #nosec G304 -- reads only repo-controlled documentation paths.
+	pi, err := os.ReadFile(piPath)
+	if err != nil {
+		return nil, fmt.Errorf("read pi platform doc: %w", err)
+	}
+	// #nosec G304 -- reads only repo-controlled documentation paths.
 	mapping, err := os.ReadFile(mappingPath)
 	if err != nil {
 		return nil, fmt.Errorf("read cross-platform mapping: %w", err)
@@ -132,18 +164,29 @@ func ValidatePortabilitySnapshot(root string) (*Result, error) {
 		return nil, fmt.Errorf("parse portability snapshot: %w", err)
 	}
 
-	verifySnapshotMetadata(result, snapshot)
-	verifyPlatformSupport(result, snapshot)
+	verifySnapshotMetadataAt(result, snapshot, now)
+	verifyPlatformSupport(result, snapshot, now)
 	verifyArtifactPortability(result, snapshot)
 	verifyPrecedence(result, snapshot)
-	verifyDocConsistency(result, snapshot, string(assessment), string(claude), string(gemini), string(mapping), string(schema))
+	verifyDocConsistency(result, snapshot, string(assessment), string(claude), string(gemini), string(pi), string(mapping), string(schema))
 
 	return result, nil
 }
 
-func verifySnapshotMetadata(result *Result, snapshot PortabilitySnapshot) {
-	if snapshot.Version != 1 {
-		result.AddError(fmt.Errorf("snapshot version = %d, want 1", snapshot.Version))
+func verifySnapshotMetadataAt(result *Result, snapshot PortabilitySnapshot, now time.Time) {
+	if snapshot.Version != 2 {
+		result.AddError(fmt.Errorf("snapshot version = %d, want 2", snapshot.Version))
+	}
+	verified, err := time.Parse("2006-01-02", snapshot.VerifiedAt)
+	if err != nil {
+		result.AddError(fmt.Errorf("snapshot verified_at %q is not YYYY-MM-DD", snapshot.VerifiedAt))
+		return
+	}
+	if verified.After(now.UTC()) {
+		result.AddError(fmt.Errorf("snapshot verified_at %q is in the future", snapshot.VerifiedAt))
+	}
+	if now.UTC().Sub(verified) > 180*24*time.Hour {
+		result.AddError(fmt.Errorf("snapshot verified_at %q is older than 180 days", snapshot.VerifiedAt))
 	}
 	if snapshot.GeneratedFrom.Narrative != "docs/platforms/portability-assessment.md" {
 		result.AddError(fmt.Errorf("snapshot narrative source = %q, want docs/platforms/portability-assessment.md", snapshot.GeneratedFrom.Narrative))
@@ -153,7 +196,7 @@ func verifySnapshotMetadata(result *Result, snapshot PortabilitySnapshot) {
 	}
 }
 
-func verifyPlatformSupport(result *Result, snapshot PortabilitySnapshot) {
+func verifyPlatformSupport(result *Result, snapshot PortabilitySnapshot, now time.Time) {
 	if len(snapshot.PlatformSupport) != len(DefaultWantPlatformSupport) {
 		result.AddError(fmt.Errorf("platform_support entries = %d, want %d", len(snapshot.PlatformSupport), len(DefaultWantPlatformSupport)))
 	}
@@ -166,8 +209,26 @@ func verifyPlatformSupport(result *Result, snapshot PortabilitySnapshot) {
 		if entry.Status != wantStatus {
 			result.AddError(fmt.Errorf("platform_support[%q].status = %q, want %q", platform, entry.Status, wantStatus))
 		}
+		if entry.ImplementationStatus != wantStatus {
+			result.AddError(fmt.Errorf("platform_support[%q].implementation_status = %q, want %q", platform, entry.ImplementationStatus, wantStatus))
+		}
+		entryDate, dateErr := time.Parse("2006-01-02", entry.VerifiedAt)
+		if dateErr != nil {
+			result.AddError(fmt.Errorf("platform_support[%q].verified_at %q is invalid", platform, entry.VerifiedAt))
+		} else if entryDate.After(now.UTC()) || now.UTC().Sub(entryDate) > 180*24*time.Hour {
+			result.AddError(fmt.Errorf("platform_support[%q].verified_at is stale or future", platform))
+		}
+		if len(entry.OfficialSources) == 0 || entry.OfficialSources[0] != DefaultWantSources[platform] {
+			result.AddError(fmt.Errorf("platform_support[%q].official_sources must include %q", platform, DefaultWantSources[platform]))
+		}
+		if platform == "claude" && entry.ObservedVersion != "2.1.234" || platform == "codex" && entry.ObservedVersion != "0.147.0" || platform == "pi" && entry.ObservedVersion != "0.84.2" {
+			result.AddError(fmt.Errorf("platform_support[%q].observed_local_version is stale or incorrect", platform))
+		}
 		if len(entry.ArtifactSurfaces) == 0 {
 			result.AddError(fmt.Errorf("platform_support[%q].artifact_surfaces is empty", platform))
+		}
+		if len(entry.HarnessCapabilities) == 0 || len(entry.ImplementedCapabilities) == 0 {
+			result.AddError(fmt.Errorf("platform_support[%q] must separate harness and implemented capabilities", platform))
 		}
 	}
 }
@@ -207,10 +268,11 @@ func verifyPrecedence(result *Result, snapshot PortabilitySnapshot) {
 	}
 }
 
-func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessment, claude, gemini, mapping, schema string) {
+func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessment, claude, gemini, pi, mapping, schema string) {
 	assessmentLower := strings.ToLower(assessment)
 	claudeLower := strings.ToLower(claude)
 	geminiLower := strings.ToLower(gemini)
+	piLower := strings.ToLower(pi)
 	mappingLower := strings.ToLower(mapping)
 	schemaLower := strings.ToLower(schema)
 
@@ -218,7 +280,13 @@ func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessme
 		result.AddError(fmt.Errorf("portability assessment does not reference docs/platforms/portability-snapshot.yaml"))
 	}
 
-	comparisonText := assessmentLower + "\n" + claudeLower + "\n" + geminiLower + "\n" + mappingLower
+	comparisonText := assessmentLower + "\n" + claudeLower + "\n" + geminiLower + "\n" + piLower + "\n" + mappingLower
+	if !strings.Contains(piLower, "pi.dev/docs/latest/skills") || !strings.Contains(piLower, "verified 2026-08-18") {
+		result.AddError(fmt.Errorf("pi platform doc must include verified date and official source"))
+	}
+	if strings.Contains(strings.ToLower(schema), "pidev:") {
+		result.AddError(fmt.Errorf("schema.yaml must use canonical pi identity, not pidev"))
+	}
 	for platform, support := range snapshot.PlatformSupport {
 		if !strings.Contains(comparisonText, platform) {
 			result.AddError(fmt.Errorf("platform_support platform %q is not reflected in the docs", platform))
@@ -228,7 +296,7 @@ func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessme
 		}
 	}
 	for _, behavior := range snapshot.NonportableBehaviors {
-		if !strings.Contains(comparisonText, strings.ToLower(behavior)) {
+		if !behaviorReflected(comparisonText, behavior) {
 			result.AddError(fmt.Errorf("nonportable behavior %q is not reflected in the docs", behavior))
 		}
 	}
@@ -259,4 +327,21 @@ func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessme
 	if !strings.Contains(schemaLower, "unsupported_runtime_surfaces:") {
 		result.AddError(fmt.Errorf("schema.yaml must describe unsupported Gemini runtime surfaces"))
 	}
+}
+
+// behaviorReflected tolerates prose differences while requiring two meaningful
+// terms from each snapshot claim to appear in the narrative/reference docs.
+func behaviorReflected(text, behavior string) bool {
+	terms := strings.Fields(strings.ToLower(behavior))
+	found := 0
+	for _, term := range terms {
+		term = strings.Trim(term, "`.,;:/()")
+		if len(term) < 4 || term == "and" || term == "with" {
+			continue
+		}
+		if strings.Contains(text, term) {
+			found++
+		}
+	}
+	return found >= 2
 }

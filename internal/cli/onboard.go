@@ -26,12 +26,12 @@ func onboardGuide() string {
 # SkillSync LLM Onboarding
 
 ## Purpose
-- Sync AI coding skills across Claude Code, Cursor, Codex, and Pi.dev.
+- Sync AI coding skills across Claude Code, Codex, Cursor, Copilot, Gemini CLI, and Pi.
 - Detect installed platforms before onboarding or syncing.
 - Keep skills consistent, deduplicate, and back up before changes.
 
 ## Key concepts
-- Platform: claude-code, cursor, codex, pi.dev.
+- Platform: claude-code, codex, cursor, copilot, gemini, pi.
 - Scope: repo, user, admin, system, builtin, plugin.
 - Writable scopes: repo and user.
 - Sync is one-way: source -> target.

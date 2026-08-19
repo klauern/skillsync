@@ -80,18 +80,38 @@ func getLossyFieldMap() map[string][]model.Platform {
 // portabilityWarningsForSkill returns the sorted list of metadata field names that will be
 // lossy or silently degraded when skill is written to target.
 func portabilityWarningsForSkill(skill model.Skill, target model.Platform) []string {
-	var warnings []string
+	warningSet := make(map[string]struct{})
 	for field, unsupported := range getLossyFieldMap() {
 		if _, ok := skill.Metadata[field]; !ok {
 			continue
 		}
 		for _, p := range unsupported {
 			if p == target {
-				warnings = append(warnings, field)
+				warningSet[field] = struct{}{}
 				break
 			}
 		}
 	}
+	if skill.Platform != target {
+		for field := range skill.RawFrontmatter {
+			if !portableFrontmatterField(field) {
+				warningSet[field] = struct{}{}
+			}
+		}
+	}
+	warnings := make([]string, 0, len(warningSet))
+	for field := range warningSet {
+		warnings = append(warnings, field)
+	}
 	sort.Strings(warnings)
 	return warnings
+}
+
+func portableFrontmatterField(field string) bool {
+	switch field {
+	case "name", "description", "license", "compatibility", "metadata", "type", "trigger", "tools":
+		return true
+	default:
+		return false
+	}
 }

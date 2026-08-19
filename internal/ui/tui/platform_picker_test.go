@@ -167,8 +167,8 @@ func TestPlatformPickerModel_View(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(view, string(model.PiDev)) {
-		t.Fatalf("expected view to include %q", model.PiDev)
+	if !strings.Contains(view, string(model.Pi)) {
+		t.Fatalf("expected view to include %q", model.Pi)
 	}
 }
 
@@ -222,11 +222,11 @@ func TestPlatformPickerModel_CannotSelectSamePlatform(t *testing.T) {
 	}
 }
 
-func TestPlatformPickerModel_PiDevSelectionFlow(t *testing.T) {
+func TestPlatformPickerModel_PiSelectionFlow(t *testing.T) {
 	m := NewPlatformPickerModel()
 
 	for i, platform := range m.platforms {
-		if platform == model.PiDev {
+		if platform == model.Pi {
 			m.cursor = i
 			break
 		}
@@ -234,15 +234,15 @@ func TestPlatformPickerModel_PiDevSelectionFlow(t *testing.T) {
 
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = newModel.(PlatformPickerModel)
-	if m.source != model.PiDev {
-		t.Fatalf("source = %q, want pi.dev", m.source)
+	if m.source != model.Pi {
+		t.Fatalf("source = %q, want pi", m.source)
 	}
 	if !strings.Contains(m.View(), "Source:") {
 		t.Fatal("expected target phase view to show the selected source")
 	}
 
 	for i, platform := range m.platforms {
-		if platform == model.PiDev {
+		if platform == model.Pi {
 			m.cursor = i
 			break
 		}

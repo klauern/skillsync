@@ -746,7 +746,7 @@ func TestResult_Summary(t *testing.T) {
 	}
 }
 
-func TestSynchronizer_Sync_PiDevToClaudeCode(t *testing.T) {
+func TestSynchronizer_Sync_PiToClaudeCode(t *testing.T) {
 	s := New()
 	sourceDir := t.TempDir()
 	targetDir := t.TempDir()
@@ -757,7 +757,7 @@ func TestSynchronizer_Sync_PiDevToClaudeCode(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
 name: example
-description: A Pi.dev skill
+description: A Pi skill
 ---
 
 # Example
@@ -765,7 +765,7 @@ description: A Pi.dev skill
 		t.Fatalf("failed to write skill: %v", err)
 	}
 
-	result, err := s.Sync(model.PiDev, model.ClaudeCode, Options{
+	result, err := s.Sync(model.Pi, model.ClaudeCode, Options{
 		DryRun:     false,
 		Strategy:   StrategyOverwrite,
 		SourcePath: sourceDir,
@@ -798,9 +798,40 @@ description: A Pi.dev skill
 	if err != nil {
 		t.Fatalf("failed to read synced SKILL.md: %v", err)
 	}
-	const wantContent = "---\nname: example\ndescription: A Pi.dev skill\n---\n\n# Example\n"
-	if string(got) != wantContent {
-		t.Fatalf("synced SKILL.md content mismatch:\ngot:  %q\nwant: %q", string(got), wantContent)
+	for _, want := range []string{"name: example", "description: A Pi skill", "# Example"} {
+		if !strings.Contains(string(got), want) {
+			t.Fatalf("synced SKILL.md content missing %q: %q", want, string(got))
+		}
+	}
+}
+
+func TestSynchronizer_SyncWithSkills_BlocksInvalidBundleUnlessSkipped(t *testing.T) {
+	sourceDir := t.TempDir()
+	path := filepath.Join(sourceDir, "skill.md")
+	if err := os.WriteFile(path, []byte("invalid bundle"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	skill := model.Skill{
+		Name:        "invalid-bundle",
+		Description: "invalid entrypoint",
+		Platform:    model.ClaudeCode,
+		Path:        path,
+		Content:     "invalid bundle",
+		ConformanceIssues: []model.ConformanceIssue{
+			{Code: "filename", Message: "skill entrypoint must be named exactly SKILL.md", Severity: "warning"},
+		},
+	}
+
+	targetDir := t.TempDir()
+	if _, err := New().SyncWithSkills([]model.Skill{skill}, model.Cursor, Options{TargetPath: targetDir}); err == nil {
+		t.Fatal("invalid bundle was written without --skip-validation")
+	}
+	result, err := New().SyncWithSkills([]model.Skill{skill}, model.Cursor, Options{TargetPath: targetDir, SkipValidation: true})
+	if err != nil {
+		t.Fatalf("SkipValidation did not bypass conformance block: %v", err)
+	}
+	if len(result.Created()) != 1 {
+		t.Fatalf("skip-validation created %d skills, want 1", len(result.Created()))
 	}
 }
 

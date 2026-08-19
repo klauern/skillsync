@@ -57,7 +57,7 @@ func TestRunDetectCommand_JSONOutput(t *testing.T) {
 
 	mustMkdirAll(t, filepath.Join(home, ".claude", "skills"))
 	mustMkdirAll(t, filepath.Join(home, ".codex", "skills"))
-	mustMkdirAll(t, filepath.Join(workdir, ".github"))
+	mustMkdirAll(t, filepath.Join(workdir, ".github", "skills"))
 
 	oldWD, err := os.Getwd()
 	if err != nil {

@@ -537,7 +537,7 @@ func TestGetPlatformPath_CodexDefaultsToUserSkills(t *testing.T) {
 		t.Fatalf("GetPlatformPath() error = %v", err)
 	}
 
-	expected := filepath.Join(home, ".codex", "skills")
+	expected := filepath.Join(home, ".agents", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(Codex) = %q, want %q", got, expected)
 	}
@@ -593,26 +593,26 @@ func TestGetPlatformPath_CopilotDefaultsToGitHubRoot(t *testing.T) {
 		t.Fatalf("GetPlatformPath() error = %v", err)
 	}
 
-	expected := filepath.Join(home, ".github")
+	expected := filepath.Join(home, ".copilot", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(Copilot) = %q, want %q", got, expected)
 	}
 }
 
-func TestGetPlatformPath_PiDevPrefersAgents(t *testing.T) {
+func TestGetPlatformPath_PiUsesCanonicalRootWhenSharedDiscoveryExists(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
 	if err := os.MkdirAll(filepath.Join(home, ".agents", "skills"), 0o750); err != nil {
 		t.Fatalf("failed to create .agents skills dir: %v", err)
 	}
-	expected := filepath.Join(home, ".agents", "skills")
-	got, err := GetPlatformPath(model.PiDev)
+	expected := filepath.Join(home, ".pi", "agent", "skills")
+	got, err := GetPlatformPath(model.Pi)
 	if err != nil {
 		t.Fatalf("GetPlatformPath() error = %v", err)
 	}
 	if got != expected {
-		t.Errorf("GetPlatformPath(PiDev) = %q, want %q", got, expected)
+		t.Errorf("GetPlatformPath(Pi) = %q, want %q", got, expected)
 	}
 }
 
@@ -626,7 +626,7 @@ func TestGetPlatformPath_GeminiDefaultsToConfigRoot(t *testing.T) {
 		t.Fatalf("GetPlatformPath() error = %v", err)
 	}
 
-	expected := filepath.Join(home, ".gemini")
+	expected := filepath.Join(home, ".gemini", "skills")
 	if got != expected {
 		t.Errorf("GetPlatformPath(Gemini) = %q, want %q", got, expected)
 	}
@@ -660,6 +660,21 @@ func TestGetPlatformPath_PiDevEnvOverrides(t *testing.T) {
 			t.Fatalf("GetPlatformPath(PiDev) = %q, want %q", got, override)
 		}
 	})
+}
+
+func TestGetPlatformPath_PiEnvironmentPrecedence(t *testing.T) {
+	t.Setenv("SKILLSYNC_PI_AGENT_PATH", "/agent")
+	t.Setenv("SKILLSYNC_PIDEV_PATH", "/pidev")
+	t.Setenv("SKILLSYNC_PI_PATH", "/pi")
+	t.Setenv("SKILLSYNC_PI_SKILLS_PATHS", "/canonical:/secondary")
+
+	got, err := GetPlatformPath(model.Pi)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+	if got != "/canonical" {
+		t.Fatalf("GetPlatformPath(Pi) = %q, want first canonical path", got)
+	}
 }
 
 func TestValidationError_Error(t *testing.T) {
@@ -838,7 +853,7 @@ func TestGetPlatformPathForScope(t *testing.T) {
 		}
 	})
 
-	t.Run("Pi.dev repo scope uses preferred project root", func(t *testing.T) {
+	t.Run("Pi repo scope uses canonical project root", func(t *testing.T) {
 		repoRoot := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
 			t.Fatalf("failed to create .git dir: %v", err)
@@ -860,7 +875,7 @@ func TestGetPlatformPathForScope(t *testing.T) {
 			t.Fatalf("failed to chdir: %v", err)
 		}
 
-		got, err := GetPlatformPathForScope(model.PiDev, model.ScopeRepo)
+		got, err := GetPlatformPathForScope(model.Pi, model.ScopeRepo)
 		if err != nil {
 			t.Fatalf("GetPlatformPathForScope() error = %v", err)
 		}
@@ -868,7 +883,7 @@ func TestGetPlatformPathForScope(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to resolve repo root: %v", err)
 		}
-		expected := filepath.Join(resolvedRoot, ".agents", "skills")
+		expected := filepath.Join(resolvedRoot, ".pi", "skills")
 		if filepath.Clean(got) != expected {
 			t.Errorf("expected %q, got %q", expected, got)
 		}

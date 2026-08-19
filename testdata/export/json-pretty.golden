@@ -14,9 +14,7 @@
     "trigger": "/alpha",
     "scope": "repo",
     "license": "MIT",
-    "compatibility": {
-      "claude-code": "\u003e=1.0.0"
-    },
+    "compatibility": "\u003e=1.0.0",
     "scripts": [
       "scripts/setup.sh"
     ],

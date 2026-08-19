@@ -412,3 +412,4 @@ Legacy format fixtures are in `testdata/skills/legacy/`:
 - `internal/parser/skills/skills.go` -- shared SKILL.md parser
 - `internal/parser/claude/pluginindex.go` -- plugin symlink detection
 - `internal/model/skill.go` -- unified skill model
+<!-- v2 reference: verified 2026-08-18; official source https://code.claude.com/docs/en/skills -->

@@ -1,7 +1,7 @@
-# Portability Assessment: All 7 Platforms and SkillSync
+# Portability Assessment: Six Platforms and SkillSync
 
 This note summarizes what is genuinely portable across Claude Code, Codex CLI,
-Cursor, Pi Agent, Copilot, Gemini CLI, and Pi.dev — what is only partially
+Cursor, Copilot, Gemini CLI, and Pi — what is only partially
 portable, and where this repository still leaves gaps.
 
 It is intentionally narrower than `docs/platforms/cross-platform-mapping.md`.
@@ -15,12 +15,29 @@ tradeoffs in prose; the schema carries the structured artifact inventory, and
 the snapshot carries the structured portability claims that should stay aligned
 with this assessment.
 
+## Current v2 identity and roots
+
+The implemented harness set is exactly Claude, Codex, Cursor, Copilot, Gemini,
+and Pi. `Pi Agent`, `Pi.dev`, and `pidev` are historical compatibility names
+for Pi, not separate harnesses. Canonical skill write roots are `.claude/skills`,
+`.agents/skills`, `.cursor/skills`, `.github/skills`, `.gemini/skills`, and
+`.pi/skills` (with user roots `~/.claude/skills`, `~/.agents/skills`,
+`~/.cursor/skills`, `~/.copilot/skills`, `~/.gemini/skills`, and
+`~/.pi/agent/skills`). Legacy and compatibility roots are discovery-only.
+
+Cursor uses `paths` as its current activation field; `globs` is a legacy
+fallback and active rule files are `.cursor/rules/*.mdc`. Copilot standard
+skills are distinct from `.github/agents/*.agent.md` custom-agent artifacts.
+Pi settings discovery reads `settings.json` `skills` entries and resolves them
+relative to the declaring settings file. Hooks, plugins, packages, and custom
+agents are documented/native-only and are not synchronized.
+
 ## Executive Summary
 
-- SkillSync has first-class parser/runtime support for all 7 platforms:
-  Claude Code, Cursor, Codex, Pi Agent, Copilot, Gemini CLI, and Pi.dev.
-- All 7 platforms are **implemented sync surfaces** in the current CLI.
-  Copilot, Gemini CLI, and Pi.dev support full round-trip sync alongside
+- SkillSync has first-class parser/runtime support for six platforms:
+  Claude Code, Cursor, Codex, Copilot, Gemini CLI, and Pi.
+- All six platforms are **implemented sync surfaces** in the current CLI.
+  Copilot, Gemini CLI, and Pi support round-trip sync alongside
   the original three.
 - `SKILL.md` skills are the most portable artifact type. The Agent Skills
   Standard is shared, and all three products use `name`, `description`,
@@ -32,21 +49,21 @@ with this assessment.
   slash-command files; Codex CLI’s documented surface is skills + `AGENTS.md`
   instructions, and this repo treats Codex prompt files as deprecated
   compatibility content rather than a behavior-preserving target.
-- Pi.dev adds a useful middle ground: prompt templates are first-class markdown
+- Pi adds a useful middle ground: prompt templates are first-class markdown
   artifacts, but their placeholder expansion and system-prompt layers are still
   not portable 1:1 to other CLIs.
 - Subagents/agents are not portable in a 1:1 way. Claude Code has explicit
   `.claude/agents/*.md` files; Codex CLI has `AGENTS.md` instruction chaining,
-  not a matching subagent file model; Pi.dev packages/extensions/themes are not
+  not a matching subagent file model; Pi packages/extensions/themes are not
   first-pass sync targets here.
 - The unified `model.Skill` type is intentionally transport-first.
   Command-like content can ride along as `Type=prompt`, but that does not
-  create a native Codex or Pi.dev runtime equivalent.
+  create a native Codex or Pi runtime equivalent.
 - Always-on instructions are conceptually similar but semantically different.
-  `CLAUDE.md`, `AGENTS.md`, and Pi.dev’s instruction + system-prompt layers can
+  `CLAUDE.md`, `AGENTS.md`, and Pi’s instruction + system-prompt layers can
   all carry persistent project guidance, but they load differently and should
   not be treated as interchangeable.
-- Claude plugin-installed skills and Pi.dev package-installed runtime features
+- Claude plugin-installed skills and Pi package-installed runtime features
   are provenance-heavy surfaces. Their content can be copied, but the install
   context does not transfer.
 - The structured portability snapshot records these claims explicitly so they
@@ -60,7 +77,7 @@ SkillSync uses three portability classes in the docs and transport model:
 |---|---|---|
 | Portable | The destination can usually keep both the content shape and the core author intent with limited adaptation. | `SKILL.md` skill body, shared skill directories |
 | Partially portable | The content can move, but runtime behavior, invocation, precedence, or interpolation semantics change. | Commands/prompts, `AGENTS.md`/`CLAUDE.md`, tool restrictions |
-| Non-portable | The source behavior depends on a platform-specific runtime surface that has no direct equivalent. | Claude subagents, plugin/package provenance, Pi.dev system-prompt replacement semantics |
+| Non-portable | The source behavior depends on a platform-specific runtime surface that has no direct equivalent. | Claude subagents, plugin/package provenance, Pi system-prompt replacement semantics |
 
 The rest of this note uses those labels deliberately:
 
@@ -72,24 +89,23 @@ The rest of this note uses those labels deliberately:
 
 ## Current Repo Support Status
 
-All 7 platforms have first-class parser, sync-source, and sync-target support.
+All six platforms have first-class parser, sync-source, and sync-target support.
 
 | Platform | Repo status | Current emphasis |
 |---|---|---|
 | Claude Code | Implemented | Parser + sync + portability baseline |
 | Cursor | Implemented | Parser + sync + Agent Skills/rules mapping |
 | Codex CLI | Implemented | Parser + sync for skills/instructions; deprecated prompts are compatibility metadata only |
-| Pi Agent | Implemented | Parser + sync; `.pi-agent/` and legacy search paths |
 | Copilot | Implemented | Parser + sync; copilot-instructions.md, prompts, instructions, agents |
 | Gemini CLI | Implemented | Parser + sync; GEMINI.md, skills, commands; extensions/hooks are non-portable |
-| Pi.dev | Implemented | Parser + sync; skills, prompts, instructions, SYSTEM.md layers |
+| Pi | Implemented | Parser + sync; `.pi/skills`, `~/.pi/agent/skills`, settings discovery, and instruction layers |
 
 The machine-readable source of truth for this status table is
 `docs/platforms/portability-snapshot.yaml`.
 
 ## Artifact Portability Matrix
 
-| Artifact | Claude Code | Codex CLI | Pi.dev | Portability |
+| Artifact | Claude Code | Codex CLI | Pi | Portability |
 |---|---|---|---|---|
 | `SKILL.md` skill | Native, first-class | Native, first-class | Native, first-class | High for core skill content; medium for advanced fields |
 | Slash command / prompt | Native `.claude/commands/*.md` | Not a first-class supported target in this repo; `~/.codex/prompts` is deprecated/unsupported here | Native `.pi/prompts/*.md` templates | Low to medium as content; low for behavior |
@@ -116,7 +132,7 @@ the repo.
 Practical implication:
 
 - A skill that stays inside the common Agent Skills subset can usually move
-  between Claude Code, Codex CLI, and Pi.dev with limited loss.
+  between Claude Code, Codex CLI, and Pi with limited loss.
 - Once a skill leans on platform-specific metadata, portability drops quickly.
 
 ### 2. High-value metadata that usually survives
@@ -144,12 +160,12 @@ The most important distinction in this assessment is the difference between:
 That distinction explains why a synced artifact can still be useful even when
 it is lossy:
 
-- Claude skill instructions can move to Codex or Pi.dev as skill content and
+- Claude skill instructions can move to Codex or Pi as skill content and
   remain actionable.
 - Claude-specific controls such as `disable-model-invocation` or
-  `user-invocable` do not become native Codex or Pi.dev skill controls.
+  `user-invocable` do not become native Codex or Pi skill controls.
 - Claude subagent routing via `context: fork` and `agent` can survive as
-  metadata, but it does not create a Codex or Pi.dev subagent runtime.
+  metadata, but it does not create a Codex or Pi subagent runtime.
 - Claude `hooks` and dynamic context injection remain Claude runtime features
   even if the raw text is preserved.
 - The shared model does not add a separate command or agent top-level type; it
@@ -172,12 +188,12 @@ Codex CLI’s current documented path is different:
 - The shared model can store a prompt as `Type=prompt`, but that is only a
   transport marker, not a guarantee of equivalent behavior.
 
-Pi.dev prompt templates improve the content story because they are first-class
+Pi prompt templates improve the content story because they are first-class
 markdown prompt files, but the runtime still differs:
 
 - filename-derived `/name` triggers are similar but not identical across CLIs
-- placeholder expansion in Pi.dev uses template-style `{{name}}` syntax
-- Pi.dev prompt behavior does not recreate Claude command frontmatter semantics
+- placeholder expansion in Pi uses template-style `{{name}}` syntax
+- Pi prompt behavior does not recreate Claude command frontmatter semantics
 - Codex prompt files remain deprecated compatibility content
 
 The big loss points are:
@@ -204,7 +220,7 @@ Differences that matter:
 - Codex also has `config.toml`-backed instruction channels that do not exist in
   Claude Code.
 
-Pi.dev adds a second instruction-like layer:
+Pi adds a second instruction-like layer:
 
 - `AGENTS.md` is concatenated from global scope plus parent directories to
   `cwd`
@@ -219,7 +235,7 @@ the behavior level, the files remain different:
 
 - `CLAUDE.md` participates in Claude's memory-loading rules.
 - `AGENTS.md` participates in Codex's root-to-cwd concatenation chain.
-- Pi.dev splits persistent instructions between `AGENTS.md` and a separate
+- Pi splits persistent instructions between `AGENTS.md` and a separate
   system-prompt layer.
 - Codex can also inject instructions from `config.toml`, which has no direct
   `CLAUDE.md` equivalent.
@@ -236,7 +252,7 @@ execution model differs:
   controls.
 - Codex CLI uses skill matching plus config/session behavior instead of
   Claude’s exact command/file model.
-- Pi.dev does not expose the same first-pass per-skill tool field in this repo
+- Pi does not expose the same first-pass per-skill tool field in this repo
   model.
 
 This makes tool lists portable as intent, not as identical enforcement.
@@ -253,13 +269,13 @@ but they are not portable behaviors:
 - `user-invocable`
 - `model`
 
-When content moves to Codex CLI or Pi.dev, these fields should be preserved as
+When content moves to Codex CLI or Pi, these fields should be preserved as
 metadata or re-authored as native instructions, not treated as equivalent
 runtime controls.
 
-### 5. Pi.dev system-prompt layers
+### 5. Pi system-prompt layers
 
-Pi.dev has useful, first-class instruction surfaces that other platforms do not
+Pi has useful, first-class instruction surfaces that other platforms do not
 match exactly:
 
 - `SYSTEM.md`
@@ -286,15 +302,15 @@ flattened into:
 - a command/prompt,
 - or plain instruction text.
 
-### 2. Claude plugin provenance, Gemini extension provenance, and Pi.dev package provenance
+### 2. Claude plugin provenance, Gemini extension provenance, and Pi package provenance
 
 Claude plugin skills are special because the skill content is installed from a
 plugin cache and carries provenance metadata.
 
-That provenance does not translate to Codex CLI or Pi.dev. At best, the skill
+That provenance does not translate to Codex CLI or Pi. At best, the skill
 body can be copied into a normal repo or user scope.
 
-Pi.dev packages, extensions, and themes have the same problem in reverse: they
+Pi packages, extensions, and themes have the same problem in reverse: they
 may bundle useful prompts or instructions, but the package/runtime layer itself
 is not a first-pass sync target in this repo.
 
@@ -328,7 +344,7 @@ These features are not safely portable:
 - Claude skill visibility and invocation gating
 - Claude per-skill hook lifecycle behavior
 - Claude per-skill model override behavior
-- Pi.dev `SYSTEM.md` replacement and `APPEND_SYSTEM.md` append semantics
+- Pi `SYSTEM.md` replacement and `APPEND_SYSTEM.md` append semantics
 
 ## Gaps In This Repository
 
@@ -346,12 +362,12 @@ product surfaces:
    - and what is only kept as compatibility metadata.
 3. `docs/platforms/claude.md` is strong on Claude-specific behavior, but the
    portability boundaries would be clearer if it called out which fields are
-   inherently non-portable to Codex CLI and Pi.dev.
+   inherently non-portable to Codex CLI and Pi.
 4. `docs/platforms/gemini.md` should keep the first-pass scope explicit:
    skills, commands, and context are the syncable subset, while extension
    runtime surfaces such as `mcpServers`, hooks, subagents, themes, and
    package/install provenance remain out of scope.
-5. `docs/platforms/pidev.md` should keep the first-pass scope explicit:
+5. `docs/platforms/pi.md` should keep the first-pass scope explicit:
    skills, prompt templates, `AGENTS.md`, and `SYSTEM.md` layers are
    documented, while packages, extensions, themes, and similar runtime features
    remain out of scope.
@@ -371,7 +387,7 @@ artifact layers like this:
 - Common subset: `name`, `description`, markdown body, and supporting
   directories. Claude-only runtime fields should be treated as metadata, not as
   parity guarantees.
-- **Commands/prompts**: portable only as content, not as behavior. Pi.dev
+- **Commands/prompts**: portable only as content, not as behavior. Pi
   prompt templates fit here too.
 - **Agents/subagents**: not directly portable; flatten or redesign them.
 - **Packages/extensions/themes**: out of scope for first-pass sync. Gemini
@@ -388,7 +404,7 @@ everywhere" story.
 ## Revalidation Workflow
 
 Run `just portability-check` after editing this assessment, the portability
-snapshot, or the Claude/Codex/Pi.dev platform reference docs. The check is
+snapshot, or the Claude/Codex/Pi platform reference docs. The check is
 intentionally narrow: it flags drift in the portable/non-portable claims, not
 every possible documentation typo.
 
@@ -401,9 +417,15 @@ every possible documentation typo.
 - [Claude Code memory](https://docs.anthropic.com/en/docs/claude-code/memory)
 - [OpenAI developers docs index](https://developers.openai.com/)
 - [openai/skills](https://github.com/openai/skills)
-- [Pi.dev packages index](https://pi.dev/packages)
+- [Pi packages index](https://pi.dev/packages)
 - [Pi Monorepo](https://github.com/badlogic/pi-mono)
 - [SkillSync cross-platform mapping](cross-platform-mapping.md)
 - [SkillSync Claude platform reference](claude.md)
 - [SkillSync Codex platform reference](codex.md)
-- [SkillSync Pi.dev platform reference](pidev.md)
+- [SkillSync Pi platform reference](pi.md)
+## v2 verification boundary (2026-08-18)
+
+The v2 snapshot records official sources, implementation status, and local
+versions. It distinguishes harness capabilities from SkillSync-implemented
+surfaces and native/documented-only behavior; it does not claim hooks, plugins,
+packages, or custom agents are synchronized.
