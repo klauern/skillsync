@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/trust"
 )
 
 // Action represents the action taken on a skill during sync.
@@ -56,6 +57,7 @@ type SkillResult struct {
 	// PortabilityWarnings lists metadata fields that will be lossy or silently
 	// degraded at the target platform (e.g. "hooks" when syncing to Codex).
 	PortabilityWarnings []string
+	TrustDecisions      []trust.Decision `json:"trust_decisions,omitempty"`
 }
 
 // Success returns true if the skill was successfully processed.

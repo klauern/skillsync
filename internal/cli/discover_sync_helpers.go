@@ -23,6 +23,7 @@ import (
 	"github.com/klauern/skillsync/internal/parser/claude"
 	"github.com/klauern/skillsync/internal/parser/plugin"
 	"github.com/klauern/skillsync/internal/sync"
+	"github.com/klauern/skillsync/internal/trust"
 	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/ui/tui"
 	"github.com/klauern/skillsync/internal/util"
@@ -472,6 +473,7 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 		DryRun:      cfg.dryRun,
 		Strategy:    cfg.strategy,
 		TargetScope: cfg.targetSpec.TargetScope(),
+		TrustPolicy: cfg.trustPolicy,
 	}
 
 	syncer := sync.New()
@@ -777,6 +779,10 @@ func syncFlags() []cli.Flag {
 			Usage: "Include skills from Claude Code plugins (excluded by default)",
 		},
 		&cli.StringFlag{
+			Name:  "trust",
+			Usage: "Allow trust categories: executable, external-reference, native-config",
+		},
+		&cli.StringFlag{
 			Name:    "type",
 			Aliases: []string{"t"},
 			Usage:   "Artifact types to sync/delete: skill, prompt, all. Comma-separated for multiple.",
@@ -991,6 +997,7 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 		DryRun:      cfg.dryRun,
 		Strategy:    cfg.strategy,
 		TargetScope: cfg.targetSpec.TargetScope(),
+		TrustPolicy: cfg.trustPolicy,
 	}
 
 	syncer := sync.New()
@@ -1133,6 +1140,7 @@ type syncConfig struct {
 	deleteMode     bool
 	deleteOrphans  bool
 	includePlugins bool
+	trustPolicy    trust.Policy
 	typeFilter     []model.SkillType
 	sourceSkills   []model.Skill
 	format         string
@@ -1172,6 +1180,10 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 	if err != nil {
 		return nil, fmt.Errorf("resolve sync type filter: %w", err)
 	}
+	trustPolicy, err := trust.ParseAllowed(cmd.String("trust"))
+	if err != nil {
+		return nil, fmt.Errorf("parse trust policy: %w", err)
+	}
 
 	strategyStr := cmd.String("strategy")
 	strategy := sync.Strategy(strategyStr)
@@ -1190,6 +1202,7 @@ func parseSyncConfig(cmd *cli.Command, commandName string, deleteMode bool) (*sy
 		deleteMode:     deleteMode,
 		deleteOrphans:  cmd.Bool("delete"),
 		includePlugins: cmd.Bool("include-plugins"),
+		trustPolicy:    trustPolicy,
 		typeFilter:     typeFilter,
 		sourceSkills:   make([]model.Skill, 0),
 		format:         cmd.String("format"),
@@ -1401,6 +1414,13 @@ func displaySyncResults(result *sync.Result) {
 			if len(sr.PortabilityWarnings) > 0 {
 				fmt.Printf("    ⚠ lossy fields for %s: %s\n",
 					result.Target, strings.Join(sr.PortabilityWarnings, ", "))
+			}
+			for _, decision := range sr.TrustDecisions {
+				verdict := "blocked"
+				if decision.Allowed {
+					verdict = "allowed"
+				}
+				fmt.Printf("    trust: %s %s (%s)\n", verdict, decision.Risk, decision.Reason)
 			}
 		}
 	}

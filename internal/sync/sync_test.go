@@ -217,6 +217,62 @@ func TestSynchronizer_SyncWithSkills_ToCopilotPaths(t *testing.T) {
 	}
 }
 
+func TestSynchronizer_BlocksExecutableBeforeTargetMutation(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	script := filepath.Join(sourceDir, "run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	targetDir := t.TempDir()
+	target := filepath.Join(targetDir, "unsafe")
+	if err := os.WriteFile(target, []byte("preserve"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.SyncWithSkills([]model.Skill{{Name: "unsafe", Path: sourceDir}}, model.Cursor, Options{
+		Strategy: StrategyOverwrite, TargetPath: targetDir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success() || len(result.Skills[0].TrustDecisions) != 1 {
+		t.Fatalf("expected an audited trust failure: %#v", result.Skills)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "preserve" {
+		t.Fatalf("target was modified: %q", content)
+	}
+}
+
+func TestSynchronizer_TrustPreflightDoesNotCreateTargetOrPartiallySync(t *testing.T) {
+	s := New()
+	safeFile := filepath.Join(t.TempDir(), "safe.md")
+	if err := os.WriteFile(safeFile, []byte("safe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unsafeDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(unsafeDir, "run.sh"), []byte("echo unsafe\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "absent-target")
+	result, err := s.SyncWithSkills([]model.Skill{
+		{Name: "safe", Path: safeFile},
+		{Name: "unsafe", Path: unsafeDir},
+	}, model.Cursor, Options{TargetPath: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success() {
+		t.Fatal("expected trust preflight failure")
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("target was created before trust preflight: %v", err)
+	}
+}
+
 func TestSynchronizer_Sync_SkipsNestedSkillDuplicates(t *testing.T) {
 	s := New()
 	sourceDir := t.TempDir()
