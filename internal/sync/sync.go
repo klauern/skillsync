@@ -17,12 +17,14 @@ import (
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/pidev"
+	"github.com/klauern/skillsync/internal/trust"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
 )
 
 // Options configures synchronization behavior.
 type Options struct {
+	TrustPolicy trust.Policy
 	// DryRun enables preview mode without making actual changes.
 	DryRun bool
 
@@ -175,6 +177,10 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 			PercentComplete: 100,
 			Message:         "All source skills were skipped as nested duplicates",
 		})
+		return result, nil
+	}
+	if blocked := preflightTrust(sourceSkills, opts.TrustPolicy); len(blocked) > 0 {
+		result.Skills = append(result.Skills, blocked...)
 		return result, nil
 	}
 
@@ -455,6 +461,21 @@ func (s *Synchronizer) processSkill(
 
 	// Detect source type and get source root path
 	sourceType, sourceRootPath := detectSourceType(source.Path)
+	decisions, err := opts.TrustPolicy.Evaluate(source, sourceRootPath)
+	if err != nil {
+		result.Action = ActionFailed
+		result.Error = fmt.Errorf("evaluate artifact trust: %w", err)
+		return result
+	}
+	result.TrustDecisions = decisions
+	for _, decision := range decisions {
+		if !decision.Allowed {
+			result.Action = ActionFailed
+			result.Error = fmt.Errorf("untrusted %s content blocked: %s", decision.Risk, decision.Reason)
+			result.Message = "blocked by runtime trust policy"
+			return result
+		}
+	}
 
 	logging.Debug(
 		"detected source type",
@@ -939,6 +960,10 @@ func (s *Synchronizer) SyncWithSkills(
 		})
 		return result, nil
 	}
+	if blocked := preflightTrust(skills, opts.TrustPolicy); len(blocked) > 0 {
+		result.Skills = append(result.Skills, blocked...)
+		return result, nil
+	}
 
 	if err := s.emitProgress(opts, ProgressEvent{
 		Type:        ProgressEventStart,
@@ -1054,6 +1079,30 @@ func (s *Synchronizer) SyncWithSkills(
 	})
 
 	return result, nil
+}
+
+func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
+	var blocked []SkillResult
+	for _, skill := range skills {
+		_, root := detectSourceType(skill.Path)
+		decisions, err := policy.Evaluate(skill, root)
+		if err != nil {
+			blocked = append(blocked, SkillResult{Skill: skill, Action: ActionFailed, Error: fmt.Errorf("evaluate artifact trust: %w", err)})
+			continue
+		}
+		for _, decision := range decisions {
+			if decision.Allowed {
+				continue
+			}
+			blocked = append(blocked, SkillResult{
+				Skill: skill, Action: ActionFailed, TrustDecisions: decisions,
+				Message: "blocked by runtime trust policy",
+				Error:   fmt.Errorf("untrusted %s content blocked: %s", decision.Risk, decision.Reason),
+			})
+			break
+		}
+	}
+	return blocked
 }
 
 // DeleteWithSkills deletes skills from target that match the source skills.

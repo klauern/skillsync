@@ -37,15 +37,15 @@ func TestSyncCommandArguments(t *testing.T) {
 			wantErr: true,
 		},
 		"valid source scope in spec": {
-			args:    []string{"skillsync", "sync", "--skip-validation", "--yes", "cursor:user", "codex"},
+			args:    []string{"skillsync", "sync", "--trust", "external-reference,executable,native-config", "--skip-validation", "--yes", "cursor:user", "codex"},
 			wantErr: false,
 		},
 		"valid target scope user in spec": {
-			args:    []string{"skillsync", "sync", "--skip-validation", "--yes", "cursor", "codex:user"},
+			args:    []string{"skillsync", "sync", "--trust", "external-reference,executable,native-config", "--skip-validation", "--yes", "cursor", "codex:user"},
 			wantErr: false,
 		},
 		"valid multiple source scopes in spec": {
-			args:    []string{"skillsync", "sync", "--skip-validation", "--yes", "cursor:user,repo", "codex"},
+			args:    []string{"skillsync", "sync", "--trust", "external-reference,executable,native-config", "--skip-validation", "--yes", "cursor:user,repo", "codex"},
 			wantErr: false,
 		},
 		"invalid multiple target scopes": {
