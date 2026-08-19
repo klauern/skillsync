@@ -13,7 +13,7 @@ Total: 1 skill(s)
 | Trigger | /markdown-skill |
 | Scope | repo |
 | License | MIT |
-| Compatibility | codex: >=1.0.0 |
+| Compatibility | >=1.0.0 |
 | Scripts | scripts/setup.sh |
 | References | references/guide.md |
 | Assets | assets/config.yaml |

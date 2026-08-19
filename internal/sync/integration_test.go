@@ -333,7 +333,7 @@ func TestIntegration_StrategyBehavior(t *testing.T) {
 			strategy:    StrategyOverwrite,
 			wantAction:  ActionUpdated,
 			wantMessage: "overwriting existing skill",
-			contains:    []string{"description: Source version", "name: test", "type: skill", "Source content."},
+			contains:    []string{"description: Source version", "name: test", "Source content."},
 			notContains: []string{"Target version", "Target content."},
 		},
 		{
@@ -358,7 +358,7 @@ func TestIntegration_StrategyBehavior(t *testing.T) {
 			strategy:    StrategyMerge,
 			wantAction:  ActionMerged,
 			wantMessage: "merging with existing content",
-			contains:    []string{"Target content.", "## Merged from: test", "description: Source version", "name: test", "type: skill", "Source content."},
+			contains:    []string{"Target content.", "## Merged from: test", "description: Source version", "name: test", "Source content."},
 		},
 	}
 
@@ -747,9 +747,10 @@ func TestIntegration_SyncWithSkills_PluginScope(t *testing.T) {
 	}
 
 	opts := Options{
-		DryRun:     false,
-		Strategy:   StrategyOverwrite,
-		TargetPath: targetDir,
+		DryRun:         false,
+		Strategy:       StrategyOverwrite,
+		TargetPath:     targetDir,
+		SkipValidation: true,
 	}
 
 	result, err := s.SyncWithSkills(pluginSkills, model.Cursor, opts)
@@ -810,9 +811,10 @@ func TestIntegration_SyncWithSkills_MixedScopes(t *testing.T) {
 	}
 
 	opts := Options{
-		DryRun:     false,
-		Strategy:   StrategyOverwrite,
-		TargetPath: targetDir,
+		DryRun:         false,
+		Strategy:       StrategyOverwrite,
+		TargetPath:     targetDir,
+		SkipValidation: true,
 	}
 
 	result, err := s.SyncWithSkills(mixedSkills, model.Cursor, opts)
@@ -856,9 +858,10 @@ func TestIntegration_SyncWithSkills_DevPluginSymlink(t *testing.T) {
 	}
 
 	opts := Options{
-		DryRun:     false,
-		Strategy:   StrategyOverwrite,
-		TargetPath: targetDir,
+		DryRun:         false,
+		Strategy:       StrategyOverwrite,
+		TargetPath:     targetDir,
+		SkipValidation: true,
 	}
 
 	result, err := s.SyncWithSkills(devPluginSkill, model.Cursor, opts)

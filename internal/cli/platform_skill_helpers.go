@@ -102,7 +102,7 @@ var platformConfigGetters = map[model.Platform]func(*config.Config) *config.Plat
 	model.Codex:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Codex },
 	model.Copilot:    func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Copilot },
 	model.Gemini:     func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Gemini },
-	model.PiDev:      func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.PiDev },
+	model.Pi:         func(cfg *config.Config) *config.PlatformConfig { return &cfg.Platforms.Pi },
 }
 
 func platformRawSkillsPaths(cfg *config.Config, platform model.Platform) ([]string, error) {
@@ -128,8 +128,8 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 		return nil, repoRoot, err
 	}
 
-	if platform == model.PiDev {
-		return platformSkillsPathsForPiDev(rawPaths, cwd, repoRoot), repoRoot, nil
+	if platform == model.Pi {
+		return platformSkillsPathsForPi(rawPaths, cwd, repoRoot), repoRoot, nil
 	}
 
 	paths := scopedPathsFromStrings(resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot)
@@ -140,11 +140,11 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	return paths, repoRoot, nil
 }
 
-func platformSkillsPathsForPiDev(rawPaths []string, cwd, repoRoot string) []util.ScopedPath {
+func platformSkillsPathsForPi(rawPaths []string, cwd, repoRoot string) []util.ScopedPath {
 	discoveredPaths := util.GetAllSearchPaths(util.TieredPathConfig{
 		WorkingDir: cwd,
 		RepoRoot:   repoRoot,
-		Platform:   model.PiDev,
+		Platform:   model.Pi,
 	})
 
 	paths := make([]util.ScopedPath, 0, len(discoveredPaths)+len(rawPaths))

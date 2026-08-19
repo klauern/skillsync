@@ -57,27 +57,21 @@ func NewHarness(t *testing.T) *Harness {
 	h.SetEnv("SKILLSYNC_HOME", homeDir)
 	h.SetEnv("HOME", homeDir)
 
-	// Set platform paths to use test directories
-	// Set BOTH old (deprecated) and new env vars for compatibility:
-	// - Old vars (SKILLSYNC_*_PATH) are used by validation.GetPlatformPath() and sync package
-	// - New vars (SKILLSYNC_*_SKILLS_PATHS) are used by config.applyEnvironment() and tiered parser
-	h.SetEnv("SKILLSYNC_CLAUDE_CODE_PATH", homeDir+"/.claude/commands")
-	h.SetEnv("SKILLSYNC_CURSOR_PATH", homeDir+"/.cursor/rules")
-	h.SetEnv("SKILLSYNC_CODEX_PATH", homeDir+"/.codex")
-	h.SetEnv("SKILLSYNC_PI_AGENT_PATH", homeDir+"/.agents/skills")
-	h.SetEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", homeDir+"/.claude/commands")
-	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
-	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
-	h.SetEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", homeDir+"/.agents/skills")
-	h.SetEnv("SKILLSYNC_COPILOT_PATH", homeDir+"/.github")
-	h.SetEnv("SKILLSYNC_GEMINI_PATH", homeDir+"/.gemini")
-	h.SetEnv("SKILLSYNC_PIDEV_PATH", homeDir+"/.pi/agent/skills")
-	h.SetEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", homeDir+"/.claude/commands")
-	h.SetEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", homeDir+"/.cursor/rules")
-	h.SetEnv("SKILLSYNC_CODEX_SKILLS_PATHS", homeDir+"/.codex")
-	h.SetEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", homeDir+"/.github")
-	h.SetEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", homeDir+"/.gemini")
-	h.SetEnv("SKILLSYNC_PIDEV_SKILLS_PATHS", homeDir+"/.pi/agent/skills")
+	// Keep standard-skill fixtures on each harness's canonical user write root.
+	// Both variable forms are set because validation still accepts the legacy
+	// single-path form while configuration prefers *_SKILLS_PATHS.
+	platformPaths := map[string]string{
+		"CLAUDE_CODE": homeDir + "/.claude/skills",
+		"CURSOR":      homeDir + "/.cursor/skills",
+		"CODEX":       homeDir + "/.agents/skills",
+		"COPILOT":     homeDir + "/.copilot/skills",
+		"GEMINI":      homeDir + "/.gemini/skills",
+		"PI":          homeDir + "/.pi/agent/skills",
+	}
+	for name, path := range platformPaths {
+		h.SetEnv("SKILLSYNC_"+name+"_PATH", path)
+		h.SetEnv("SKILLSYNC_"+name+"_SKILLS_PATHS", path)
+	}
 
 	return h
 }

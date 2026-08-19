@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -82,8 +83,9 @@ func New(basePath string) *Parser {
 // 1. Agent Skills Standard: SKILL.md files in subdirectories (takes precedence)
 // 2. Legacy formats: config.toml instructions, AGENTS.md files, and flat .md files
 func (p *Parser) Parse() ([]model.Skill, error) {
-	// Check if the base path exists
-	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
+	// Canonical skill roots can be absent even when sibling Codex configuration
+	// or repository instructions are present.
+	if !p.hasDiscoverableRoot() {
 		logging.Debug(
 			"config directory not found",
 			logging.Platform(string(p.Platform())),
@@ -153,15 +155,18 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	allSkills = append(allSkills, agentsSkills...)
 
 	// Parse flat legacy .md files (excluding SKILL.md, AGENTS.md, and files in skill directories)
-	flatSkills, err := p.parseFlatLegacyMdFiles(seenNames, skillDirs)
-	if err != nil {
-		logging.Error(
-			"failed to parse flat legacy .md files",
-			logging.Platform(string(p.Platform())),
-			logging.Path(p.basePath),
-			logging.Err(err),
-		)
-		return nil, fmt.Errorf("failed to parse flat legacy .md files: %w", err)
+	var flatSkills []model.Skill
+	if _, statErr := os.Stat(p.basePath); statErr == nil {
+		flatSkills, err = p.parseFlatLegacyMdFiles(seenNames, skillDirs)
+		if err != nil {
+			logging.Error(
+				"failed to parse flat legacy .md files",
+				logging.Platform(string(p.Platform())),
+				logging.Path(p.basePath),
+				logging.Err(err),
+			)
+			return nil, fmt.Errorf("failed to parse flat legacy .md files: %w", err)
+		}
 	}
 	allSkills = append(allSkills, flatSkills...)
 
@@ -174,15 +179,78 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	return allSkills, nil
 }
 
+func (p *Parser) hasDiscoverableRoot() bool {
+	if _, err := os.Stat(p.basePath); err == nil {
+		return true
+	}
+	for _, candidate := range p.configPaths() {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	files, err := parser.DiscoverFiles(
+		p.instructionRoot(),
+		[]string{"AGENTS.md", "**/AGENTS.md", "AGENTS.override.md", "**/AGENTS.override.md"},
+	)
+	return err == nil && len(files) > 0
+}
+
+func (p *Parser) configPaths() []string {
+	workspace, configRoot := p.discoveryRoots()
+	candidates := []string{filepath.Join(p.basePath, "config.toml")}
+	if configRoot != "" {
+		candidates = append(candidates, filepath.Join(configRoot, "config.toml"))
+	}
+	if workspace != "" && configRoot == "" {
+		candidates = append(candidates, filepath.Join(workspace, ".codex", "config.toml"))
+	}
+	return slices.Compact(candidates)
+}
+
+func (p *Parser) instructionRoot() string {
+	workspace, configRoot := p.discoveryRoots()
+	if filepath.Clean(workspace) == filepath.Clean(util.HomeDir()) && configRoot != "" {
+		return configRoot
+	}
+	return workspace
+}
+
+func (p *Parser) discoveryRoots() (workspace, configRoot string) {
+	base := filepath.Clean(p.basePath)
+	if filepath.Base(base) != "skills" {
+		return base, base
+	}
+
+	parent := filepath.Dir(base)
+	switch filepath.Base(parent) {
+	case ".agents":
+		workspace = filepath.Dir(parent)
+		return workspace, filepath.Join(workspace, ".codex")
+	case ".codex":
+		return filepath.Dir(parent), parent
+	case "codex":
+		return parent, parent
+	default:
+		return base, base
+	}
+}
+
 // parseConfigFile parses the config.toml file and extracts instructions as a skill
 func (p *Parser) parseConfigFile() (*model.Skill, error) {
-	configPath := filepath.Join(p.basePath, "config.toml")
+	configPath := ""
+	for _, candidate := range p.configPaths() {
+		if _, err := os.Stat(candidate); err == nil {
+			configPath = candidate
+			break
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to stat config file: %w", err)
+		}
+	}
 
-	// Check if config exists
-	fileInfo, err := os.Stat(configPath)
-	if os.IsNotExist(err) {
+	if configPath == "" {
 		return nil, nil // Not an error, just no config
 	}
+	fileInfo, err := os.Stat(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat config file: %w", err)
 	}
@@ -201,13 +269,13 @@ func (p *Parser) parseConfigFile() (*model.Skill, error) {
 	// Combine instructions
 	content := ""
 	if config.Instructions != "" {
-		content = config.Instructions
+		content = p.resolveInstructionValue(config.Instructions, filepath.Dir(configPath))
 	}
 	if config.DeveloperInstructions != "" {
 		if content != "" {
 			content += "\n\n"
 		}
-		content += config.DeveloperInstructions
+		content += p.resolveInstructionValue(config.DeveloperInstructions, filepath.Dir(configPath))
 	}
 
 	// Build metadata from config
@@ -238,29 +306,61 @@ func (p *Parser) parseConfigFile() (*model.Skill, error) {
 	return &skill, nil
 }
 
+func (p *Parser) resolveInstructionValue(value, baseDir string) string {
+	path := value
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(baseDir, path)
+	}
+	// #nosec G304 -- path is a configured instruction reference resolved from
+	// the trusted Codex config directory.
+	if data, err := os.ReadFile(path); err == nil {
+		return string(data)
+	}
+	return value
+}
+
 // parseAgentsFiles finds and parses AGENTS.md files
 // seenNames tracks skill names that have already been parsed (from SKILL.md or config.toml)
 func (p *Parser) parseAgentsFiles(seenNames map[string]bool) ([]model.Skill, error) {
+	root := p.instructionRoot()
 	// Discover AGENTS.md files
-	patterns := []string{"AGENTS.md", "**/AGENTS.md"}
-	files, err := parser.DiscoverFiles(p.basePath, patterns)
+	patterns := []string{"AGENTS.md", "**/AGENTS.md", "AGENTS.override.md", "**/AGENTS.override.md"}
+	files, err := parser.DiscoverFiles(root, patterns)
 	if err != nil {
 		logging.Error(
 			"failed to discover AGENTS.md files",
 			logging.Platform(string(p.Platform())),
-			logging.Path(p.basePath),
+			logging.Path(root),
 			logging.Err(err),
 		)
 		return nil, fmt.Errorf("failed to discover AGENTS.md files: %w", err)
 	}
-
 	// Filter out SKILL.md files (already parsed by skills parser)
-	var legacyFiles []string
+	// Codex activates at most one instruction file per directory. An override
+	// wins over AGENTS.md; sorting gives a stable root-to-leaf chain.
+	byDir := make(map[string]string)
 	for _, f := range files {
-		if !strings.HasSuffix(f, "SKILL.md") {
-			legacyFiles = append(legacyFiles, f)
+		base := filepath.Base(f)
+		if strings.EqualFold(base, "AGENTS.md") || strings.EqualFold(base, "AGENTS.override.md") {
+			dir := filepath.Dir(f)
+			if current, ok := byDir[dir]; !ok || strings.EqualFold(base, "AGENTS.override.md") {
+				byDir[dir] = f
+			} else if strings.EqualFold(filepath.Base(current), "AGENTS.md") {
+				byDir[dir] = f
+			}
 		}
 	}
+	legacyFiles := make([]string, 0, len(byDir))
+	for _, f := range byDir {
+		legacyFiles = append(legacyFiles, f)
+	}
+	slices.SortFunc(legacyFiles, func(a, b string) int {
+		da, db := strings.Count(filepath.ToSlash(filepath.Dir(a)), "/"), strings.Count(filepath.ToSlash(filepath.Dir(b)), "/")
+		if da != db {
+			return da - db
+		}
+		return strings.Compare(a, b)
+	})
 
 	logging.Debug(
 		"discovered AGENTS.md files",
@@ -314,7 +414,7 @@ func (p *Parser) parseAgentsFile(filePath string) (model.Skill, error) {
 	}
 
 	// Generate name from relative path
-	relPath, err := filepath.Rel(p.basePath, filePath)
+	relPath, err := filepath.Rel(p.instructionRoot(), filePath)
 	if err != nil {
 		relPath = filepath.Base(filePath)
 	}
@@ -364,6 +464,11 @@ func (p *Parser) parseFlatLegacyMdFiles(seenNames map[string]bool, skillDirs map
 		}
 		// Skip AGENTS.md (already parsed by parseAgentsFiles)
 		if strings.EqualFold(base, "AGENTS.md") {
+			continue
+		}
+		// `instructions` is a reserved Codex configuration surface, not a
+		// portable skill declaration.
+		if strings.EqualFold(base, "instructions.md") || strings.EqualFold(filepath.Base(filepath.Dir(f)), "instructions") {
 			continue
 		}
 		// Skip files inside skill directories

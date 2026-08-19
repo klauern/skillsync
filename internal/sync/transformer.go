@@ -108,7 +108,13 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 	}
 
 	if target == model.Copilot {
+		if skill.Type == model.SkillTypeSkill && skill.Name != "" {
+			return filepath.Join(skill.Name, "SKILL.md")
+		}
 		return transformCopilotPath(skill)
+	}
+	if skill.Type == model.SkillTypeSkill && skill.Name != "" && isSkillFile(filepath.Base(skill.Path)) {
+		return filepath.Join(skill.Name, "SKILL.md")
 	}
 
 	if target == model.Gemini {
@@ -201,6 +207,9 @@ func (t *Transformer) transformContent(skill model.Skill, target model.Platform,
 // buildFrontmatter creates platform-appropriate frontmatter.
 func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform) map[string]any {
 	fm := make(map[string]any)
+	if skill.Platform == target && len(skill.RawFrontmatter) > 0 {
+		fm = cloneFrontmatter(skill.RawFrontmatter)
+	}
 
 	// Always include name if present
 	if skill.Name != "" {
@@ -211,8 +220,17 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 	if skill.Description != "" {
 		fm["description"] = skill.Description
 	}
+	if skill.License != "" {
+		fm["license"] = skill.License
+	}
+	if skill.Compatibility != "" {
+		fm["compatibility"] = skill.Compatibility
+	}
+	if len(skill.StandardMetadata) > 0 {
+		fm["metadata"] = skill.StandardMetadata
+	}
 
-	if skill.Type != "" {
+	if skill.Type == model.SkillTypePrompt {
 		fm["type"] = skill.Type.String()
 	}
 	if skill.Trigger != "" {
@@ -227,15 +245,7 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 		}
 
 	case model.Cursor:
-		// Cursor has specific fields like globs and alwaysApply
-		if globs, ok := skill.Metadata["globs"]; ok {
-			fm["globs"] = globs
-		} else if applyTo, ok := skill.Metadata["applyTo"]; ok && applyTo != "" {
-			fm["globs"] = applyTo
-		}
-		if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
-			fm["alwaysApply"] = alwaysApply
-		}
+		addCursorFrontmatter(fm, skill, target)
 	case model.Copilot:
 		if len(skill.Tools) > 0 {
 			fm["tools"] = skill.Tools
@@ -244,8 +254,11 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 
 	// Include other metadata that's platform-agnostic
 	for key, val := range skill.Metadata {
+		if skill.Platform != target && !portableMetadataKey(key) {
+			continue
+		}
 		// Skip fields we've already handled
-		if key == "globs" || key == "alwaysApply" {
+		if key == "paths" || key == "globs" || key == "applyTo" || key == "alwaysApply" {
 			continue
 		}
 		if target == model.Copilot && key == model.MetadataKeyCopilotArtifact {
@@ -264,6 +277,44 @@ func (t *Transformer) buildFrontmatter(skill model.Skill, target model.Platform)
 	}
 
 	return fm
+}
+
+func addCursorFrontmatter(fm map[string]any, skill model.Skill, target model.Platform) {
+	// Cursor uses paths. Preserve an explicit legacy globs field only for a
+	// same-harness raw-frontmatter round trip.
+	if paths, ok := skill.Metadata["paths"]; ok && paths != "" {
+		fm["paths"] = paths
+	} else if globs, ok := skill.Metadata["globs"]; ok && globs != "" {
+		if skill.Platform == target && len(skill.RawFrontmatter) > 0 {
+			fm["globs"] = globs
+		} else {
+			fm["paths"] = globs
+		}
+	} else if applyTo, ok := skill.Metadata["applyTo"]; ok && applyTo != "" {
+		fm["paths"] = applyTo
+	}
+	if alwaysApply, ok := skill.Metadata["alwaysApply"]; ok {
+		fm["alwaysApply"] = alwaysApply
+	}
+}
+
+func portableMetadataKey(key string) bool {
+	switch key {
+	case "type", "trigger", "args", "paths", "globs", "alwaysApply", "applyTo", "model":
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneFrontmatter(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		if k != "RawFrontmatter" && k != "ConformanceIssues" {
+			dst[k] = v
+		}
+	}
+	return dst
 }
 
 func isSkillFile(path string) bool {
@@ -334,9 +385,16 @@ func (t *Transformer) transformMetadata(skill model.Skill, target model.Platform
 		warnLossyCopilotFields(skill, target, metadata)
 
 	case model.Cursor:
-		if applyTo, ok := metadata["applyTo"]; ok && applyTo != "" {
-			metadata["globs"] = applyTo
-			delete(metadata, "applyTo")
+		if _, ok := metadata["paths"]; !ok {
+			if applyTo, exists := metadata["applyTo"]; exists && applyTo != "" {
+				metadata["paths"] = applyTo
+			} else if globs, exists := metadata["globs"]; exists && globs != "" {
+				metadata["paths"] = globs
+			}
+		}
+		delete(metadata, "applyTo")
+		if skill.Platform != target {
+			delete(metadata, "globs")
 		}
 		warnLossyCopilotFields(skill, target, metadata)
 

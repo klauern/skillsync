@@ -3,10 +3,62 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/klauern/skillsync/internal/sync"
 )
+
+func TestPiConfigYAMLPrecedenceAndCanonicalMarshal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	data := []byte("platforms:\n  pi_agent: {skills_paths: [/agent]}\n  pidev: {skills_paths: [/dev]}\n  pi: {skills_paths: [/canonical]}\n")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Platforms.Pi.SkillsPaths; len(got) != 1 || got[0] != "/canonical" {
+		t.Fatalf("Pi precedence = %v", got)
+	}
+	out, err := yaml.Marshal(cfg.Platforms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(out)
+	if strings.Contains(text, "pi_agent:") || strings.Contains(text, "pidev:") || !strings.Contains(text, "pi:") {
+		t.Fatalf("non-canonical YAML: %s", text)
+	}
+}
+
+func TestPiConfigLegacyPrecedence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("platforms:\n  pi_agent: {skills_paths: [/agent]}\n  pidev: {skills_paths: [/dev]}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Platforms.Pi.SkillsPaths; len(got) != 1 || got[0] != "/dev" {
+		t.Fatalf("legacy precedence = %v", got)
+	}
+}
+
+func TestPiEnvironmentPrecedence(t *testing.T) {
+	cfg := Default()
+	t.Setenv("SKILLSYNC_PI_AGENT_PATH", "/agent")
+	t.Setenv("SKILLSYNC_PIDEV_PATH", "/dev")
+	t.Setenv("SKILLSYNC_PI_PATH", "/canonical")
+	cfg.applyEnvironment()
+	if got := cfg.Platforms.Pi.SkillsPaths; len(got) != 1 || got[0] != "/canonical" {
+		t.Fatalf("environment precedence = %v", got)
+	}
+}
 
 func TestDefault(t *testing.T) {
 	cfg := Default()
@@ -137,35 +189,18 @@ func TestEnvironmentOverrides(t *testing.T) {
 
 func TestDefault_PiAgentPaths(t *testing.T) {
 	cfg := Default()
-
-	if len(cfg.Platforms.PiAgent.SkillsPaths) != 2 {
-		t.Fatalf("PiAgent default paths = %v, want 2 paths", cfg.Platforms.PiAgent.SkillsPaths)
-	}
-	if cfg.Platforms.PiAgent.SkillsPaths[0] != ".agents/skills" {
-		t.Fatalf("PiAgent repo path = %q, want %q", cfg.Platforms.PiAgent.SkillsPaths[0], ".agents/skills")
-	}
-	if cfg.Platforms.PiAgent.SkillsPaths[1] != "~/.agents/skills" {
-		t.Fatalf("PiAgent user path = %q, want %q", cfg.Platforms.PiAgent.SkillsPaths[1], "~/.agents/skills")
+	want := []string{".pi/skills", "~/.pi/agent/skills"}
+	if !slices.Equal(cfg.Platforms.PiAgent.SkillsPaths, want) {
+		t.Fatalf("PiAgent compatibility paths = %v, want %v", cfg.Platforms.PiAgent.SkillsPaths, want)
 	}
 }
 
 func TestDefault_PiDevPaths(t *testing.T) {
 	cfg := Default()
 
-	if len(cfg.Platforms.PiDev.SkillsPaths) != 4 {
-		t.Fatalf("PiDev default paths = %v, want 4 paths", cfg.Platforms.PiDev.SkillsPaths)
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[0] != ".agents/skills" {
-		t.Fatalf("PiDev repo path = %q, want %q", cfg.Platforms.PiDev.SkillsPaths[0], ".agents/skills")
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[1] != ".pi/skills" {
-		t.Fatalf("PiDev repo fallback path = %q, want %q", cfg.Platforms.PiDev.SkillsPaths[1], ".pi/skills")
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[2] != "~/.agents/skills" {
-		t.Fatalf("PiDev user path = %q, want %q", cfg.Platforms.PiDev.SkillsPaths[2], "~/.agents/skills")
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[3] != "~/.pi/agent/skills" {
-		t.Fatalf("PiDev user fallback path = %q, want %q", cfg.Platforms.PiDev.SkillsPaths[3], "~/.pi/agent/skills")
+	want := []string{".pi/skills", "~/.pi/agent/skills"}
+	if !slices.Equal(cfg.Platforms.PiDev.SkillsPaths, want) {
+		t.Fatalf("PiDev compatibility paths = %v, want %v", cfg.Platforms.PiDev.SkillsPaths, want)
 	}
 }
 
@@ -574,91 +609,21 @@ func TestEnvironmentOverridesLegacyPathAliases(t *testing.T) {
 func TestDefaultSkillsPaths(t *testing.T) {
 	cfg := Default()
 
-	// Check Claude Code defaults
-	if len(cfg.Platforms.ClaudeCode.SkillsPaths) != 4 {
-		t.Errorf("expected 4 Claude Code skills paths, got %d", len(cfg.Platforms.ClaudeCode.SkillsPaths))
+	want := map[string]struct {
+		got  []string
+		want []string
+	}{
+		"claude":  {cfg.Platforms.ClaudeCode.SkillsPaths, []string{".claude/skills", "~/.claude/skills", ".claude/commands", "~/.claude/commands"}},
+		"codex":   {cfg.Platforms.Codex.SkillsPaths, []string{".agents/skills", "~/.agents/skills", ".codex/skills", "~/.codex/skills", "/etc/codex/skills"}},
+		"cursor":  {cfg.Platforms.Cursor.SkillsPaths, []string{".cursor/skills", "~/.cursor/skills", ".agents/skills", "~/.agents/skills", ".claude/skills", "~/.claude/skills", ".codex/skills", "~/.codex/skills", ".cursor/commands", "~/.cursor/commands"}},
+		"copilot": {cfg.Platforms.Copilot.SkillsPaths, []string{".github/skills", "~/.copilot/skills", ".agents/skills", ".claude/skills"}},
+		"gemini":  {cfg.Platforms.Gemini.SkillsPaths, []string{".agents/skills", "~/.agents/skills", ".gemini/skills", "~/.gemini/skills", ".gemini", "~/.gemini"}},
+		"pi":      {cfg.Platforms.Pi.SkillsPaths, []string{".pi/skills", "~/.pi/agent/skills", ".agents/skills", "~/.agents/skills"}},
 	}
-	if cfg.Platforms.ClaudeCode.SkillsPaths[0] != ".claude/commands" {
-		t.Errorf("expected first Claude Code path to be '.claude/commands', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[0])
-	}
-	if cfg.Platforms.ClaudeCode.SkillsPaths[1] != ".claude/skills" {
-		t.Errorf("expected second Claude Code path to be '.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[1])
-	}
-	if cfg.Platforms.ClaudeCode.SkillsPaths[2] != "~/.claude/commands" {
-		t.Errorf("expected third Claude Code path to be '~/.claude/commands', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[2])
-	}
-	if cfg.Platforms.ClaudeCode.SkillsPaths[3] != "~/.claude/skills" {
-		t.Errorf("expected fourth Claude Code path to be '~/.claude/skills', got %q", cfg.Platforms.ClaudeCode.SkillsPaths[3])
-	}
-
-	// Check Cursor defaults (include commands for discoverability)
-	if len(cfg.Platforms.Cursor.SkillsPaths) != 4 {
-		t.Errorf("expected 4 Cursor skills paths, got %d", len(cfg.Platforms.Cursor.SkillsPaths))
-	}
-	if cfg.Platforms.Cursor.SkillsPaths[0] != ".cursor/commands" {
-		t.Errorf("expected first Cursor path to be '.cursor/commands', got %q", cfg.Platforms.Cursor.SkillsPaths[0])
-	}
-	if cfg.Platforms.Cursor.SkillsPaths[1] != ".cursor/skills" {
-		t.Errorf("expected second Cursor path to be '.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[1])
-	}
-	if cfg.Platforms.Cursor.SkillsPaths[2] != "~/.cursor/commands" {
-		t.Errorf("expected third Cursor path to be '~/.cursor/commands', got %q", cfg.Platforms.Cursor.SkillsPaths[2])
-	}
-	if cfg.Platforms.Cursor.SkillsPaths[3] != "~/.cursor/skills" {
-		t.Errorf("expected fourth Cursor path to be '~/.cursor/skills', got %q", cfg.Platforms.Cursor.SkillsPaths[3])
-	}
-
-	// Check Codex defaults (4 paths: project, alternate user, user, admin)
-	if len(cfg.Platforms.Codex.SkillsPaths) != 4 {
-		t.Errorf("expected 4 Codex skills paths, got %d", len(cfg.Platforms.Codex.SkillsPaths))
-	}
-	if cfg.Platforms.Codex.SkillsPaths[0] != ".codex/skills" {
-		t.Errorf("expected first Codex path to be '.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[0])
-	}
-	if cfg.Platforms.Codex.SkillsPaths[1] != "~/.agents/skills" {
-		t.Errorf("expected second Codex path to be '~/.agents/skills', got %q", cfg.Platforms.Codex.SkillsPaths[1])
-	}
-	if cfg.Platforms.Codex.SkillsPaths[2] != "~/.codex/skills" {
-		t.Errorf("expected third Codex path to be '~/.codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[2])
-	}
-	if cfg.Platforms.Codex.SkillsPaths[3] != "/etc/codex/skills" {
-		t.Errorf("expected fourth Codex path to be '/etc/codex/skills', got %q", cfg.Platforms.Codex.SkillsPaths[3])
-	}
-
-	// Check Copilot defaults (repo root only)
-	if len(cfg.Platforms.Copilot.SkillsPaths) != 1 {
-		t.Errorf("expected 1 Copilot skills path, got %d", len(cfg.Platforms.Copilot.SkillsPaths))
-	}
-	if cfg.Platforms.Copilot.SkillsPaths[0] != ".github" {
-		t.Errorf("expected Copilot path to be '.github', got %q", cfg.Platforms.Copilot.SkillsPaths[0])
-	}
-
-	// Check Gemini defaults (2 config roots: project, user)
-	if len(cfg.Platforms.Gemini.SkillsPaths) != 2 {
-		t.Errorf("expected 2 Gemini paths, got %d", len(cfg.Platforms.Gemini.SkillsPaths))
-	}
-	if cfg.Platforms.Gemini.SkillsPaths[0] != ".gemini" {
-		t.Errorf("expected first Gemini path to be '.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[0])
-	}
-	if cfg.Platforms.Gemini.SkillsPaths[1] != "~/.gemini" {
-		t.Errorf("expected second Gemini path to be '~/.gemini', got %q", cfg.Platforms.Gemini.SkillsPaths[1])
-	}
-
-	// Check Pi.dev defaults (preferred .agents roots with .pi fallbacks)
-	if len(cfg.Platforms.PiDev.SkillsPaths) != 4 {
-		t.Errorf("expected 4 Pi.dev skills paths, got %d", len(cfg.Platforms.PiDev.SkillsPaths))
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[0] != ".agents/skills" {
-		t.Errorf("expected first Pi.dev path to be '.agents/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[0])
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[1] != ".pi/skills" {
-		t.Errorf("expected second Pi.dev path to be '.pi/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[1])
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[2] != "~/.agents/skills" {
-		t.Errorf("expected third Pi.dev path to be '~/.agents/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[2])
-	}
-	if cfg.Platforms.PiDev.SkillsPaths[3] != "~/.pi/agent/skills" {
-		t.Errorf("expected fourth Pi.dev path to be '~/.pi/agent/skills', got %q", cfg.Platforms.PiDev.SkillsPaths[3])
+	for name, tt := range want {
+		if !slices.Equal(tt.got, tt.want) {
+			t.Errorf("%s default paths = %v, want %v", name, tt.got, tt.want)
+		}
 	}
 }
 

@@ -6,15 +6,14 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 )
 
-// shouldLinkClaudeDirectorySkill reports whether a Claude-sourced directory skill
-// should be linked (symlinked or copied as a directory) into the target platform,
-// rather than being flat-transformed into a single file.
+// shouldLinkClaudeDirectorySkill reports whether a same-harness Claude
+// directory skill can be linked without bypassing cross-harness frontmatter
+// filtering.
 //
 // Returns true when:
 //   - the skill originates from ClaudeCode,
 //   - its path resolves to a directory (SourceTypeDirectory), and
-//   - the target is a platform that accepts directory-layout skills
-//     (i.e. not ClaudeCode itself and not Gemini, which uses flat files).
+//   - the target is Claude Code as well.
 func shouldLinkClaudeDirectorySkill(skill model.Skill, target model.Platform) bool {
 	if skill.Platform != model.ClaudeCode {
 		return false
@@ -23,7 +22,7 @@ func shouldLinkClaudeDirectorySkill(skill model.Skill, target model.Platform) bo
 	if sourceType != SourceTypeDirectory {
 		return false
 	}
-	return target != model.ClaudeCode && target != model.Gemini
+	return target == model.ClaudeCode
 }
 
 // needsCanonicalEntrypointCopy reports whether a directory skill has a

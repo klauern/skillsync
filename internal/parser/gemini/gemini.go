@@ -52,19 +52,17 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	var allSkills []model.Skill
 	seenNames := make(map[string]bool)
 
-	skillsParser := skills.New(skillsRoot, p.Platform())
-	agentSkills, err := skillsParser.Parse()
-	if err != nil {
-		logging.Warn(
-			"failed to parse Gemini skills",
-			logging.Platform(string(p.Platform())),
-			logging.Path(skillsRoot),
-			logging.Err(err),
-		)
-	} else {
+	for _, root := range p.skillRoots(configRoot, skillsRoot) {
+		agentSkills, err := skills.New(root, p.Platform()).Parse()
+		if err != nil {
+			logging.Warn("failed to parse Gemini skills", logging.Platform(string(p.Platform())), logging.Path(root), logging.Err(err))
+			continue
+		}
 		for _, skill := range agentSkills {
-			seenNames[skill.Name] = true
-			allSkills = append(allSkills, skill)
+			if !seenNames[skill.Name] {
+				seenNames[skill.Name] = true
+				allSkills = append(allSkills, skill)
+			}
 		}
 	}
 
@@ -112,6 +110,24 @@ func (p *Parser) resolveRoots() (configRoot, skillsRoot string) {
 		return filepath.Dir(cleaned), cleaned
 	}
 	return cleaned, filepath.Join(cleaned, "skills")
+}
+
+// skillRoots returns canonical Gemini skills first, followed by shared Agent
+// Skills compatibility roots. Existing files are only discovered; never moved.
+func (p *Parser) skillRoots(configRoot, skillsRoot string) []string {
+	roots := []string{skillsRoot}
+	parent := filepath.Dir(configRoot)
+	shared := filepath.Join(parent, ".agents", "skills")
+	if shared != skillsRoot {
+		roots = append(roots, shared)
+	}
+	if home := util.HomeDir(); filepath.Clean(configRoot) == filepath.Join(home, ".gemini") {
+		userShared := filepath.Join(home, ".agents", "skills")
+		if userShared != shared && userShared != skillsRoot {
+			roots = append(roots, userShared)
+		}
+	}
+	return roots
 }
 
 func (p *Parser) parseContextFile(filePath string) (*model.Skill, error) {

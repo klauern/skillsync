@@ -232,6 +232,16 @@ func validatePlatform(platform model.Platform, role string, isSource bool) error
 
 // validateSkill validates a single skill's format and content.
 func validateSkill(skill model.Skill, index int, opts Options) error {
+	// Parsed Agent Skills retain conformance defects so invalid shared bundles
+	// cannot be written accidentally. A caller may explicitly use the existing
+	// SkipValidation path to bypass this check.
+	if len(skill.ConformanceIssues) > 0 {
+		issues := make([]error, 0, len(skill.ConformanceIssues))
+		for _, issue := range skill.ConformanceIssues {
+			issues = append(issues, &Error{Field: fmt.Sprintf("skills[%d].%s", index, issue.Code), Message: issue.Message})
+		}
+		return Errors(issues)
+	}
 	// Validate skill name
 	if skill.Name == "" {
 		return &Error{
@@ -437,6 +447,13 @@ func ValidateSkillsFormat(skills []model.Skill, platform model.Platform) (*Resul
 				result.AddWarning(fmt.Sprintf("skill %q path not accessible: %v", skill.Name, err))
 			}
 		}
+		issues := skill.ConformanceIssues
+		if len(issues) == 0 && strings.EqualFold(filepath.Base(skill.Path), "SKILL.md") {
+			issues = ValidateSkillConformance(skill)
+		}
+		for _, issue := range issues {
+			result.AddError(&Error{Field: fmt.Sprintf("skills[%d].%s", i, issue.Code), Message: issue.Message})
+		}
 	}
 
 	return result, nil
@@ -496,23 +513,25 @@ type platformPathRule struct {
 }
 
 var platformPathRules = map[model.Platform]platformPathRule{
-	model.ClaudeCode: {envVars: []string{"SKILLSYNC_CLAUDE_CODE_PATH"}, defaultFn: util.ClaudeCodeSkillsPath},
-	model.Cursor:     {envVars: []string{"SKILLSYNC_CURSOR_PATH"}, defaultFn: util.CursorSkillsPath},
-	model.Codex:      {envVars: []string{"SKILLSYNC_CODEX_PATH"}, defaultFn: util.CodexSkillsPath},
-	model.Copilot:    {envVars: []string{"SKILLSYNC_COPILOT_PATH"}, defaultFn: util.CopilotSkillsPath},
-	model.Gemini:     {envVars: []string{"SKILLSYNC_GEMINI_PATH"}, defaultFn: util.GeminiPath},
-	model.PiDev:      {envVars: []string{"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH"}, defaultFn: util.PiDevSkillsPath},
+	model.ClaudeCode: {envVars: []string{"SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", "SKILLSYNC_CLAUDE_CODE_PATH"}, defaultFn: util.ClaudeCodeSkillsPath},
+	model.Cursor:     {envVars: []string{"SKILLSYNC_CURSOR_SKILLS_PATHS", "SKILLSYNC_CURSOR_PATH"}, defaultFn: util.CursorSkillsPath},
+	model.Codex:      {envVars: []string{"SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"}, defaultFn: util.CodexSkillsPath},
+	model.Copilot:    {envVars: []string{"SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"}, defaultFn: util.CopilotSkillsPath},
+	model.Gemini:     {envVars: []string{"SKILLSYNC_GEMINI_SKILLS_PATHS", "SKILLSYNC_GEMINI_PATH"}, defaultFn: util.GeminiSkillsPath},
+	model.Pi: {envVars: []string{
+		"SKILLSYNC_PI_SKILLS_PATHS", "SKILLSYNC_PI_PATH",
+		"SKILLSYNC_PI_DEV_SKILLS_PATHS", "SKILLSYNC_PIDEV_SKILLS_PATHS",
+		"SKILLSYNC_PI_DEV_PATH", "SKILLSYNC_PIDEV_PATH",
+		"SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH",
+	}, defaultFn: util.PiSkillsPath},
 }
 
 // GetPlatformPath returns the resolved skills path for the given platform.
 // It checks platform-specific environment variable overrides first, then falls
 // back to the default path function:
-//   - SKILLSYNC_CLAUDE_CODE_PATH for Claude Code
-//   - SKILLSYNC_CURSOR_PATH for Cursor
-//   - SKILLSYNC_CODEX_PATH for Codex
-//   - SKILLSYNC_GEMINI_PATH for Gemini CLI
-//   - SKILLSYNC_COPILOT_PATH for GitHub Copilot
-//   - SKILLSYNC_PI_DEV_PATH / SKILLSYNC_PIDEV_PATH for Pi.dev
+// The canonical *_SKILLS_PATHS form takes precedence over legacy *_PATH
+// variables. When a search-list variable contains multiple paths, its first
+// entry is the canonical write destination.
 func GetPlatformPath(platform model.Platform) (string, error) {
 	rule, ok := platformPathRules[platform]
 	if !ok {
@@ -520,7 +539,10 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 	}
 	for _, key := range rule.envVars {
 		if envPath := os.Getenv(key); envPath != "" {
-			return envPath, nil
+			paths := filepath.SplitList(envPath)
+			if len(paths) > 0 {
+				return paths[0], nil
+			}
 		}
 	}
 	return rule.defaultFn(), nil

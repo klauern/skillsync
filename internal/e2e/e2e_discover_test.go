@@ -19,7 +19,7 @@ func TestDiscoverCommand(t *testing.T) {
 
 // TestDiscoverWithPlatformFilter verifies discover with platform filter.
 func TestDiscoverWithPlatformFilter(t *testing.T) {
-	tests := []string{"claude-code", "cursor", "codex", "pi.dev"}
+	tests := []string{"claude-code", "cursor", "codex", "pi"}
 
 	for _, platform := range tests {
 		t.Run(platform, func(t *testing.T) {
@@ -90,8 +90,8 @@ func TestDiscoverWithSkills(t *testing.T) {
 
 	// Create test skills in Claude Code fixture
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("skill1.md", "test-skill-one", "First test skill", "# Test Skill One\n\nContent for skill one.")
-	claudeFixture.WriteSkill("skill2.md", "test-skill-two", "Second test skill", "# Test Skill Two\n\nContent for skill two.")
+	claudeFixture.WriteSkill("test-skill-one/SKILL.md", "test-skill-one", "First test skill", "# Test Skill One\n\nContent for skill one.")
+	claudeFixture.WriteSkill("test-skill-two/SKILL.md", "test-skill-two", "Second test skill", "# Test Skill Two\n\nContent for skill two.")
 
 	result := h.Run("discover")
 
@@ -111,13 +111,13 @@ func TestDiscoverMultiplePlatforms(t *testing.T) {
 
 	// Create skills in multiple platforms
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("claude-skill.md", "claude-skill", "Claude Code skill", "# Claude skill")
+	claudeFixture.WriteSkill("claude-skill/SKILL.md", "claude-skill", "Claude Code skill", "# Claude skill")
 
 	cursorFixture := h.CursorFixture()
 	cursorFixture.WriteSkill("cursor-skill.mdc", "cursor-skill", "Cursor skill", "# Cursor skill")
 
-	piDevFixture := h.PiDevFixture()
-	piDevFixture.WriteSkill("pi-skill/SKILL.md", "pi-skill", "Pi.dev skill", "# Pi skill")
+	piFixture := h.PiFixture()
+	piFixture.WriteSkill("pi-skill/SKILL.md", "pi-skill", "Pi skill", "# Pi skill")
 
 	// Run discover without platform filter
 	result := h.Run("discover")
@@ -128,7 +128,7 @@ func TestDiscoverMultiplePlatforms(t *testing.T) {
 	e2e.AssertOutputContains(t, result, "pi-skill")
 	e2e.AssertOutputContains(t, result, "claude-code")
 	e2e.AssertOutputContains(t, result, "cursor")
-	e2e.AssertOutputContains(t, result, "pi.dev")
+	e2e.AssertOutputContains(t, result, "pi")
 }
 
 // TestDiscoverPlatformFilterWithSkills verifies platform filter shows only matching skills.
@@ -138,7 +138,7 @@ func TestDiscoverPlatformFilterWithSkills(t *testing.T) {
 
 	// Create skills in multiple platforms
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("claude-skill.md", "claude-skill", "Claude Code skill", "# Claude skill")
+	claudeFixture.WriteSkill("claude-skill/SKILL.md", "claude-skill", "Claude Code skill", "# Claude skill")
 
 	cursorFixture := h.CursorFixture()
 	cursorFixture.WriteSkill("cursor-skill.mdc", "cursor-skill", "Cursor skill", "# Cursor skill")
@@ -158,7 +158,7 @@ func TestDiscoverJSONFormatWithSkills(t *testing.T) {
 
 	// Create a test skill
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("json-test.md", "json-test-skill", "Skill for JSON test", "# JSON Test Skill")
+	claudeFixture.WriteSkill("json-test-skill/SKILL.md", "json-test-skill", "Skill for JSON test", "# JSON Test Skill")
 
 	result := h.Run("discover", "--format", "json")
 
@@ -178,7 +178,7 @@ func TestDiscoverYAMLFormatWithSkills(t *testing.T) {
 
 	// Create a test skill
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("yaml-test.md", "yaml-test-skill", "Skill for YAML test", "# YAML Test Skill")
+	claudeFixture.WriteSkill("yaml-test-skill/SKILL.md", "yaml-test-skill", "Skill for YAML test", "# YAML Test Skill")
 
 	result := h.Run("discover", "--format", "yaml")
 
@@ -194,7 +194,7 @@ func TestDiscoverTableFormatWithSkills(t *testing.T) {
 
 	// Create a test skill
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("table-test.md", "table-test-skill", "Skill for table test", "# Table Test Skill")
+	claudeFixture.WriteSkill("table-test-skill/SKILL.md", "table-test-skill", "Skill for table test", "# Table Test Skill")
 
 	result := h.Run("discover", "--format", "table")
 
@@ -275,19 +275,18 @@ func TestDiscoverShortFlags(t *testing.T) {
 	}
 }
 
-// TestDiscoverPiDev verifies Pi.dev skills can be discovered directly.
-func TestDiscoverPiDev(t *testing.T) {
+// TestDiscoverPi verifies Pi skills can be discovered directly.
+func TestDiscoverPi(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiDevFixture()
+	piFixture := h.PiFixture()
 	piFixture.WriteSkill("discoverable/SKILL.md", "discoverable", "Pi discovery", "# Discoverable\n")
 
-	result := h.Run("discover", "--platform", "pi-dev", "--format", "json")
+	result := h.Run("discover", "--platform", "pi", "--format", "json")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertOutputContains(t, result, `"platform": "pi.dev"`)
+	e2e.AssertOutputContains(t, result, `"platform": "pi"`)
 	e2e.AssertOutputContains(t, result, `"name": "discoverable"`)
-	e2e.AssertOutputContains(t, result, `"name": "agents"`)
 }
 
 // TestDiscoverClaudeCommandArtifactsAsPrompts verifies command-style files are
@@ -295,7 +294,7 @@ func TestDiscoverPiDev(t *testing.T) {
 func TestDiscoverClaudeCommandArtifactsAsPrompts(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture := h.ClaudeCommandsFixture()
 	claudeFixture.WriteFile("review.md", `---
 description: review command
 allowed-tools: Bash, Read
@@ -315,7 +314,7 @@ Review this code.`)
 func TestDiscoverCopilot(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	copilotFixture := h.CopilotFixture()
+	copilotFixture := h.CopilotRepoFixture()
 	copilotFixture.WriteFile("copilot-instructions.md", "# Copilot Instructions\n\nWorkspace rules.")
 
 	result := h.Run("discover", "--platform", "copilot", "--format", "json")
@@ -329,10 +328,10 @@ func TestDiscoverGemini(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	geminiFixture := h.GeminiFixture()
-	if err := os.MkdirAll(geminiFixture.Path("skills/my-gemini"), 0o750); err != nil {
+	if err := os.MkdirAll(geminiFixture.Path("my-gemini"), 0o750); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
-	geminiFixture.WriteSkill("skills/my-gemini/SKILL.md", "my-gemini", "Gemini discovery", "# My Gemini Skill\n")
+	geminiFixture.WriteSkill("my-gemini/SKILL.md", "my-gemini", "Gemini discovery", "# My Gemini Skill\n")
 
 	result := h.Run("discover", "--platform", "gemini", "--format", "json")
 
@@ -345,7 +344,7 @@ func TestDiscoverGemini(t *testing.T) {
 func TestDiscoverGeminiTOMLCommands(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	geminiFixture := h.GeminiFixture()
+	geminiFixture := h.GeminiConfigFixture()
 	if err := os.MkdirAll(geminiFixture.Path("commands"), 0o750); err != nil {
 		t.Fatalf("failed to create commands dir: %v", err)
 	}
@@ -365,8 +364,8 @@ func TestCompareCommandBasic(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	src := h.ClaudeCodeFixture()
-	src.WriteSkill("a.md", "alpha", "", "# A")
-	src.WriteSkill("b.md", "alpha-copy", "", "# A")
+	src.WriteSkill("alpha/SKILL.md", "alpha", "", "# A")
+	src.WriteSkill("alpha-copy/SKILL.md", "alpha-copy", "", "# A")
 
 	result := h.Run("compare", "--platform", "claude-code", "--format", "summary")
 	e2e.AssertSuccess(t, result)

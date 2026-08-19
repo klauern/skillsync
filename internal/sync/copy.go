@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/klauern/skillsync/internal/logging"
+	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 )
 
@@ -234,6 +235,64 @@ func copySkillDir(src, dst, entrypointPath string) error {
 
 	logging.Debug("copied directory skill with canonical entrypoint", logging.Path(src))
 	return nil
+}
+
+// CopySkillBundle copies a standard directory bundle, including scripts,
+// references, assets, and other supporting files. Non-bundle artifacts retain
+// the historical single-file behavior.
+func CopySkillBundle(source model.Skill, targetPath string) error {
+	if sourceRoot, ok := standardSkillBundleRoot(source); ok {
+		targetRoot := filepath.Dir(targetPath)
+		if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
+			return fmt.Errorf("failed to copy skill bundle: %w", err)
+		}
+		if targetName := filepath.Base(targetRoot); targetName != source.Name {
+			renamed := source
+			renamed.Name = targetName
+			transformed, err := NewTransformer().Transform(renamed, source.Platform)
+			if err != nil {
+				return fmt.Errorf("failed to rename copied skill bundle: %w", err)
+			}
+			// #nosec G306 -- targetPath is a canonical skill entrypoint and the
+			// copied file already carries the source permissions.
+			if err := os.WriteFile(targetPath, []byte(transformed.Content), 0o644); err != nil {
+				return fmt.Errorf("failed to write renamed skill entrypoint: %w", err)
+			}
+		}
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o750); err != nil {
+		return fmt.Errorf("failed to create target skill directory: %w", err)
+	}
+	if err := copyFile(source.Path, targetPath); err != nil {
+		return fmt.Errorf("failed to copy skill file: %w", err)
+	}
+	return nil
+}
+
+// RemoveSkillBundle removes the whole standard directory bundle. For legacy
+// or malformed flat artifacts, it removes only the discovered file.
+func RemoveSkillBundle(source model.Skill) error {
+	path := source.Path
+	if sourceRoot, ok := standardSkillBundleRoot(source); ok {
+		path = sourceRoot
+	}
+	if err := removeExisting(path); err != nil {
+		return fmt.Errorf("failed to remove skill bundle: %w", err)
+	}
+	return nil
+}
+
+func standardSkillBundleRoot(skill model.Skill) (string, bool) {
+	if !parser.IsSkillEntrypointName(filepath.Base(skill.Path)) {
+		return "", false
+	}
+	root := filepath.Dir(skill.Path)
+	if skill.Name == "" || filepath.Base(root) != skill.Name {
+		return "", false
+	}
+	return root, true
 }
 
 // detectSourceType determines the type of source for a skill path.

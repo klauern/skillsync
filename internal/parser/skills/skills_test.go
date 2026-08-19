@@ -116,7 +116,7 @@ Nested content`,
 			},
 			want: 2,
 		},
-		"invalid skill name is skipped": {
+		"invalid skill name is retained": {
 			files: map[string]string{
 				"valid-skill/SKILL.md": `---
 name: valid-skill
@@ -129,7 +129,7 @@ description: Invalid
 ---
 Content`,
 			},
-			want: 1,
+			want: 2,
 		},
 	}
 
@@ -343,7 +343,9 @@ name: invalid name with spaces
 description: Test
 ---
 Content`,
-			wantErr: true,
+			wantName:    "invalid name with spaces",
+			wantDesc:    "Test",
+			wantContent: "Content",
 		},
 	}
 
@@ -431,8 +433,8 @@ Content`
 		t.Fatalf("parseSkillFile() error = %v", err)
 	}
 
-	if skill.Name != "agent-development" {
-		t.Fatalf("Name = %q, want %q", skill.Name, "agent-development")
+	if skill.Name != "Agent Development" {
+		t.Fatalf("Name = %q, want original frontmatter value", skill.Name)
 	}
 	if skill.Description != "Codex skill with a display name" {
 		t.Fatalf("Description = %q, want %q", skill.Description, "Codex skill with a display name")
@@ -445,7 +447,7 @@ func TestParser_parseSkillFile_AgentSkillsStandardFields(t *testing.T) {
 		wantScope                  model.SkillScope
 		wantDisableModelInvocation bool
 		wantLicense                string
-		wantCompatibility          map[string]string
+		wantCompatibility          string
 		wantScripts                []string
 		wantReferences             []string
 		wantAssets                 []string
@@ -457,9 +459,7 @@ description: Complete Agent Skills Standard example
 scope: user
 disable-model-invocation: true
 license: MIT
-compatibility:
-  claude-code: ">=1.0.0"
-  cursor: ">=0.5.0"
+compatibility: "claude-code >=1.0.0; cursor >=0.5.0"
 scripts:
   - setup.sh
   - validate.sh
@@ -474,13 +474,10 @@ Content here.`,
 			wantScope:                  model.ScopeUser,
 			wantDisableModelInvocation: true,
 			wantLicense:                "MIT",
-			wantCompatibility: map[string]string{
-				"claude-code": ">=1.0.0",
-				"cursor":      ">=0.5.0",
-			},
-			wantScripts:    []string{"setup.sh", "validate.sh"},
-			wantReferences: []string{"docs/guide.md", "https://example.com/docs"},
-			wantAssets:     []string{"templates/config.yaml", "data/schema.json"},
+			wantCompatibility:          "claude-code >=1.0.0; cursor >=0.5.0",
+			wantScripts:                []string{"setup.sh", "validate.sh"},
+			wantReferences:             []string{"docs/guide.md", "https://example.com/docs"},
+			wantAssets:                 []string{"templates/config.yaml", "data/schema.json"},
 		},
 		"scope repo": {
 			content: `---
@@ -561,12 +558,8 @@ Content`,
 				t.Errorf("License = %q, want %q", skill.License, tt.wantLicense)
 			}
 
-			if tt.wantCompatibility != nil {
-				for k, v := range tt.wantCompatibility {
-					if skill.Compatibility[k] != v {
-						t.Errorf("Compatibility[%q] = %q, want %q", k, skill.Compatibility[k], v)
-					}
-				}
+			if tt.wantCompatibility != "" && skill.Compatibility != tt.wantCompatibility {
+				t.Errorf("Compatibility = %q, want %q", skill.Compatibility, tt.wantCompatibility)
 			}
 
 			if !equalSlices(skill.Scripts, tt.wantScripts) {
@@ -1031,7 +1024,8 @@ description: No name
 Body`),
 			name:     "",
 			platform: model.ClaudeCode,
-			wantErr:  true,
+			wantName: "",
+			wantDesc: "No name",
 		},
 		"invalid name fails": {
 			content: []byte(`---
@@ -1041,7 +1035,8 @@ description: Test
 Body`),
 			name:     "fallback",
 			platform: model.ClaudeCode,
-			wantErr:  true,
+			wantName: "invalid name spaces",
+			wantDesc: "Test",
 		},
 		"codex falls back to provided canonical name": {
 			content: []byte(`---
@@ -1051,7 +1046,7 @@ description: Human-readable Codex display name
 Body`),
 			name:     "agent-development",
 			platform: model.Codex,
-			wantName: "agent-development",
+			wantName: "Agent Development",
 			wantDesc: "Human-readable Codex display name",
 		},
 	}

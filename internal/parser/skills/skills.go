@@ -12,6 +12,7 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/validation"
 )
 
 // Parser implements the parser.Parser interface for Agent Skills Standard SKILL.md files.
@@ -106,76 +107,78 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 	// Extract metadata from frontmatter
 	skill := model.Skill{
-		Platform: p.platform,
-		Path:     filePath,
-		Metadata: make(map[string]string),
-		Type:     model.SkillTypeSkill,
+		Platform:       p.platform,
+		Path:           filePath,
+		Metadata:       make(map[string]string),
+		RawFrontmatter: make(map[string]any),
+		Type:           model.SkillTypeSkill,
 	}
+	var parseIssues []model.ConformanceIssue
 
 	if result.HasFrontmatter {
-		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
-		if err != nil {
-			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
-		}
-
-		// Extract required fields
-		skill.Name = parser.ExtractString(fm, "name")
-		skill.Description = parser.ExtractString(fm, "description")
-
-		// Extract tool allowlist fields.
-		// SKILL.md content can use either `tools` or `allowed-tools`.
-		skill.Tools = extractTools(fm)
-
-		// Extract skill type (skill vs prompt/slash-command)
-		if typeStr := parser.ExtractString(fm, "type"); typeStr != "" {
-			skillType, err := model.ParseSkillType(typeStr)
-			if err != nil {
-				logging.Warn(
-					"invalid type in SKILL.md frontmatter",
-					logging.Path(filePath),
-					logging.Err(err),
-				)
-			} else {
-				skill.Type = skillType
+		fm, parseErr := parser.ParseYAMLFrontmatter(result.Frontmatter)
+		if parseErr != nil {
+			parseIssues = append(parseIssues, model.ConformanceIssue{
+				Code:     "frontmatter.parse",
+				Message:  fmt.Sprintf("frontmatter is not valid YAML: %v", parseErr),
+				Severity: "warning",
+			})
+			logging.Warn(
+				"invalid SKILL.md frontmatter retained for discovery",
+				logging.Path(filePath),
+				logging.Err(parseErr),
+			)
+		} else {
+			skill.RawFrontmatter = fm
+			if metadata, ok := fm["metadata"].(map[string]any); ok {
+				skill.StandardMetadata = metadata
 			}
-		}
-
-		// Extract trigger for prompts/slash-commands
-		skill.Trigger = parser.ExtractString(fm, "trigger")
-
-		// Extract Agent Skills Standard fields
-		if scopeStr := parser.ExtractString(fm, "scope"); scopeStr != "" {
-			scope, err := model.ParseScope(scopeStr)
-			if err != nil {
-				logging.Warn(
-					"invalid scope in SKILL.md frontmatter",
-					logging.Path(filePath),
-					logging.Err(err),
-				)
-			} else {
-				skill.Scope = scope
-			}
-		}
-
-		skill.DisableModelInvocation = extractBool(fm, "disable-model-invocation")
-		skill.License = parser.ExtractString(fm, "license")
-		skill.Compatibility = extractStringMap(fm, "compatibility")
-		skill.Scripts = extractStringSlice(fm, "scripts")
-		skill.References = extractStringSlice(fm, "references")
-		skill.Assets = extractStringSlice(fm, "assets")
-
-		// Store remaining frontmatter fields in metadata
-		knownFields := map[string]bool{
-			"name": true, "description": true, "tools": true, "allowed-tools": true, "type": true, "trigger": true,
-			"scope": true, "disable-model-invocation": true, "license": true,
-			"compatibility": true, "scripts": true, "references": true, "assets": true,
-		}
-		for key, val := range fm {
-			if !knownFields[key] {
-				if strVal, ok := val.(string); ok {
-					skill.Metadata[key] = strVal
+			skill.Name = parser.ExtractString(fm, "name")
+			skill.Description = parser.ExtractString(fm, "description")
+			skill.Tools = extractTools(fm)
+			if typeStr := parser.ExtractString(fm, "type"); typeStr != "" {
+				skillType, err := model.ParseSkillType(typeStr)
+				if err != nil {
+					logging.Warn(
+						"invalid type in SKILL.md frontmatter",
+						logging.Path(filePath),
+						logging.Err(err),
+					)
 				} else {
-					skill.Metadata[key] = fmt.Sprintf("%v", val)
+					skill.Type = skillType
+				}
+			}
+			skill.Trigger = parser.ExtractString(fm, "trigger")
+			if scopeStr := parser.ExtractString(fm, "scope"); scopeStr != "" {
+				scope, err := model.ParseScope(scopeStr)
+				if err != nil {
+					logging.Warn(
+						"invalid scope in SKILL.md frontmatter",
+						logging.Path(filePath),
+						logging.Err(err),
+					)
+				} else {
+					skill.Scope = scope
+				}
+			}
+			skill.DisableModelInvocation = extractBool(fm, "disable-model-invocation")
+			skill.License = parser.ExtractString(fm, "license")
+			skill.Compatibility = parser.ExtractString(fm, "compatibility")
+			skill.Scripts = extractStringSlice(fm, "scripts")
+			skill.References = extractStringSlice(fm, "references")
+			skill.Assets = extractStringSlice(fm, "assets")
+			knownFields := map[string]bool{
+				"name": true, "description": true, "tools": true, "allowed-tools": true, "type": true, "trigger": true,
+				"scope": true, "disable-model-invocation": true, "license": true, "compatibility": true,
+				"scripts": true, "references": true, "assets": true, "metadata": true,
+			}
+			for key, val := range fm {
+				if !knownFields[key] {
+					if strVal, ok := val.(string); ok {
+						skill.Metadata[key] = strVal
+					} else {
+						skill.Metadata[key] = fmt.Sprintf("%v", val)
+					}
 				}
 			}
 		}
@@ -186,11 +189,9 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		skill.Name = deriveNameFromPath(filePath)
 	}
 
-	// Validate skill name
+	// Codex commonly uses human-readable frontmatter names; fall back to the
+	// directory basename when it is the valid canonical identifier.
 	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		// Codex skills often use human-readable frontmatter names, but the
-		// directory basename is the canonical identifier for discovery/sync.
-		// Fall back to the directory name when it is valid so discover stays quiet.
 		if p.platform == model.Codex {
 			fallback := deriveNameFromPath(filePath)
 			if fallback != skill.Name {
@@ -221,6 +222,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 	if skill.Type == "" {
 		skill.Type = model.SkillTypeSkill
 	}
+	skill.ConformanceIssues = append(parseIssues, validation.ValidateSkillConformance(skill)...)
 
 	return skill, nil
 }
@@ -431,24 +433,6 @@ func extractToolsByKey(fm map[string]any, key string) []string {
 	}
 }
 
-// extractStringMap extracts a string map from a frontmatter map.
-func extractStringMap(fm map[string]any, key string) map[string]string {
-	if val, ok := fm[key]; ok {
-		if mapVal, ok := val.(map[string]any); ok {
-			result := make(map[string]string)
-			for k, v := range mapVal {
-				if strVal, ok := v.(string); ok {
-					result[k] = strVal
-				} else {
-					result[k] = fmt.Sprintf("%v", v)
-				}
-			}
-			return result
-		}
-	}
-	return nil
-}
-
 // Platform returns the platform this parser is associated with.
 func (p *Parser) Platform() model.Platform {
 	return p.platform
@@ -476,15 +460,20 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 	result := parser.SplitFrontmatter(content)
 
 	skill := model.Skill{
-		Name:     name,
-		Platform: platform,
-		Metadata: make(map[string]string),
+		Name:           name,
+		Platform:       platform,
+		Metadata:       make(map[string]string),
+		RawFrontmatter: make(map[string]any),
 	}
 
 	if result.HasFrontmatter {
 		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
 		if err != nil {
 			return model.Skill{}, fmt.Errorf("failed to parse frontmatter: %w", err)
+		}
+		skill.RawFrontmatter = fm
+		if metadata, ok := fm["metadata"].(map[string]any); ok {
+			skill.StandardMetadata = metadata
 		}
 
 		// Override name if provided in frontmatter
@@ -513,7 +502,7 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 
 		skill.DisableModelInvocation = extractBool(fm, "disable-model-invocation")
 		skill.License = parser.ExtractString(fm, "license")
-		skill.Compatibility = extractStringMap(fm, "compatibility")
+		skill.Compatibility = parser.ExtractString(fm, "compatibility")
 		skill.Scripts = extractStringSlice(fm, "scripts")
 		skill.References = extractStringSlice(fm, "references")
 		skill.Assets = extractStringSlice(fm, "assets")
@@ -522,7 +511,7 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 		knownFields := map[string]bool{
 			"name": true, "description": true, "tools": true, "allowed-tools": true, "type": true, "trigger": true,
 			"scope": true, "disable-model-invocation": true, "license": true,
-			"compatibility": true, "scripts": true, "references": true, "assets": true,
+			"compatibility": true, "scripts": true, "references": true, "assets": true, "metadata": true,
 		}
 		for key, val := range fm {
 			if !knownFields[key] {
@@ -534,31 +523,13 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 			}
 		}
 	}
-
-	// Validate skill name
-	if skill.Name == "" {
-		return model.Skill{}, fmt.Errorf("skill name is required")
-	}
-	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		// Keep Codex content parsing aligned with file-backed SKILL.md parsing:
-		// the provided name is the canonical identifier even when frontmatter
-		// carries a human-readable display name.
-		if platform == model.Codex && name != "" && name != skill.Name {
-			if fallbackErr := parser.ValidateSkillName(name); fallbackErr == nil {
-				skill.Name = name
-			}
-		}
-		if err := parser.ValidateSkillName(skill.Name); err != nil {
-			return model.Skill{}, fmt.Errorf("invalid skill name %q: %w", skill.Name, err)
-		}
-	}
-
 	// Normalize content
 	skill.Content = parser.NormalizeContent(result.Content)
 
 	if skill.Type == "" {
 		skill.Type = model.SkillTypeSkill
 	}
+	skill.ConformanceIssues = validation.ValidateSkillConformance(skill)
 
 	return skill, nil
 }

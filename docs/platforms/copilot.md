@@ -396,3 +396,9 @@ testdata/copilot/
 - [Copilot coding agent now supports AGENTS.md (GitHub Blog)](https://github.blog/changelog/2025-08-28-copilot-coding-agent-now-supports-agents-md-custom-instructions/) — retrieved 2026-02-22
 - [Your first prompt file (GitHub Docs)](https://docs.github.com/en/copilot/tutorials/customization-library/prompt-files/your-first-prompt-file) — retrieved 2026-02-22
 - [Support for Custom Attributes in .prompt.md YAML Front Matter (microsoft/vscode #284849)](https://github.com/microsoft/vscode/issues/284849) — retrieved 2026-02-22
+## v2 reference boundary (verified 2026-08-18)
+
+Official source: https://docs.github.com/en/copilot/concepts/agents/about-agent-skills.
+Canonical skill roots are `.github/skills/` and `~/.copilot/skills/`; `.agents/skills/`
+and `.claude/skills/` are discovery compatibility roots. Skills are distinct from
+agent artifacts; custom agents and handoffs are native/documented-only.

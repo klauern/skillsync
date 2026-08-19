@@ -39,6 +39,9 @@ type PlatformsConfig struct {
 	Copilot    PlatformConfig `yaml:"copilot"`
 	Gemini     PlatformConfig `yaml:"gemini"`
 	PiDev      PlatformConfig `yaml:"pidev"`
+	// Pi is the canonical Pi configuration. PiDev and PiAgent remain readable
+	// compatibility fields for callers and legacy files.
+	Pi PlatformConfig `yaml:"pi"`
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -80,52 +83,67 @@ func Default() *Config {
 		Platforms: PlatformsConfig{
 			ClaudeCode: PlatformConfig{
 				SkillsPaths: []string{
-					".claude/commands",   // Project slash commands/prompts (relative)
 					".claude/skills",     // Project skills (relative)
-					"~/.claude/commands", // User slash commands/prompts (absolute)
 					"~/.claude/skills",   // User skills (absolute)
+					".claude/commands",   // Project slash commands/prompts (discovery)
+					"~/.claude/commands", // User slash commands/prompts (discovery)
 				},
 			},
 			Cursor: PlatformConfig{
 				SkillsPaths: []string{
-					".cursor/commands",   // Project slash commands (relative)
 					".cursor/skills",     // Project skills (relative)
-					"~/.cursor/commands", // User slash commands (absolute)
 					"~/.cursor/skills",   // User skills (absolute)
+					".agents/skills",     // Shared project compatibility root
+					"~/.agents/skills",   // Shared user compatibility root
+					".claude/skills",     // Claude compatibility root
+					"~/.claude/skills",   // Claude user compatibility root
+					".codex/skills",      // Legacy Codex compatibility root
+					"~/.codex/skills",    // Legacy Codex user compatibility root
+					".cursor/commands",   // Project slash commands (discovery)
+					"~/.cursor/commands", // User slash commands (discovery)
 				},
 			},
 			Codex: PlatformConfig{
 				SkillsPaths: []string{
-					".codex/skills",     // Project (relative)
-					"~/.agents/skills",  // User alternate (preferred when present)
-					"~/.codex/skills",   // User (absolute)
-					"/etc/codex/skills", // Admin (system-wide)
+					".agents/skills",    // Canonical project root
+					"~/.agents/skills",  // Canonical user root
+					".codex/skills",     // Legacy project discovery root
+					"~/.codex/skills",   // Legacy user discovery root
+					"/etc/codex/skills", // Admin discovery root
 				},
 			},
 			PiAgent: PlatformConfig{
 				SkillsPaths: []string{
-					".agents/skills",   // Project (relative)
-					"~/.agents/skills", // User (absolute)
+					".pi/skills",
+					"~/.pi/agent/skills",
 				},
 			},
 			Copilot: PlatformConfig{
 				SkillsPaths: []string{
-					".github", // GitHub Copilot workspace root
+					".github/skills",
+					"~/.copilot/skills",
+					".agents/skills",
+					".claude/skills",
 				},
 			},
 			Gemini: PlatformConfig{
 				SkillsPaths: []string{
-					".gemini",   // Project config root (includes skills/ and GEMINI.md)
-					"~/.gemini", // User config root (includes skills/ and GEMINI.md)
+					".agents/skills",
+					"~/.agents/skills",
+					".gemini/skills",
+					"~/.gemini/skills",
+					".gemini",   // Context and commands discovery
+					"~/.gemini", // User context and commands discovery
 				},
 			},
 			PiDev: PlatformConfig{
 				SkillsPaths: []string{
-					".agents/skills",     // Project (preferred)
-					".pi/skills",         // Project fallback
-					"~/.agents/skills",   // User (preferred)
-					"~/.pi/agent/skills", // User fallback
+					".pi/skills",
+					"~/.pi/agent/skills",
 				},
+			},
+			Pi: PlatformConfig{
+				SkillsPaths: []string{".pi/skills", "~/.pi/agent/skills", ".agents/skills", "~/.agents/skills"},
 			},
 		},
 		Sync: SyncConfig{
@@ -173,6 +191,9 @@ func Load() (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", configPath, err)
 	}
+	if err := cfg.Platforms.normalizePiFromYAML(data); err != nil {
+		return nil, fmt.Errorf("parse config %q: %w", configPath, err)
+	}
 
 	// Apply environment variable overrides
 	cfg.applyEnvironment()
@@ -191,6 +212,9 @@ func LoadFromPath(path string) (*Config, error) {
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, fmt.Errorf("parse config %q: %w", path, err)
+	}
+	if err := cfg.Platforms.normalizePiFromYAML(data); err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
 
@@ -217,6 +241,65 @@ func (c *Config) Save() error {
 		return fmt.Errorf("write config %q: %w", configPath, err)
 	}
 	return nil
+}
+
+// MarshalYAML emits only the canonical pi key while retaining legacy fields
+// in memory for source compatibility.
+func (p PlatformsConfig) MarshalYAML() (any, error) {
+	return struct {
+		ClaudeCode PlatformConfig `yaml:"claude_code"`
+		Cursor     PlatformConfig `yaml:"cursor"`
+		Codex      PlatformConfig `yaml:"codex"`
+		Copilot    PlatformConfig `yaml:"copilot"`
+		Gemini     PlatformConfig `yaml:"gemini"`
+		Pi         PlatformConfig `yaml:"pi"`
+	}{p.ClaudeCode, p.Cursor, p.Codex, p.Copilot, p.Gemini, p.canonicalPi()}, nil
+}
+
+func (p *PlatformsConfig) normalizePi() {
+	if len(p.Pi.SkillsPaths) == 0 {
+		if len(p.PiDev.SkillsPaths) > 0 {
+			p.Pi = p.PiDev
+		} else if len(p.PiAgent.SkillsPaths) > 0 {
+			p.Pi = p.PiAgent
+		}
+	}
+	p.PiDev, p.PiAgent = p.Pi, p.Pi
+}
+
+func (p *PlatformsConfig) normalizePiFromYAML(data []byte) error {
+	var raw struct {
+		Platforms map[string]yaml.Node `yaml:"platforms"`
+	}
+	if err := yaml.Unmarshal(data, &raw); err == nil {
+		if _, ok := raw.Platforms["pi"]; !ok {
+			if node, ok := raw.Platforms["pidev"]; ok {
+				var legacy PlatformConfig
+				if err := node.Decode(&legacy); err != nil {
+					return fmt.Errorf("decode platforms.pidev: %w", err)
+				}
+				p.Pi = legacy
+			} else if node, ok := raw.Platforms["pi_agent"]; ok {
+				var legacy PlatformConfig
+				if err := node.Decode(&legacy); err != nil {
+					return fmt.Errorf("decode platforms.pi_agent: %w", err)
+				}
+				p.Pi = legacy
+			}
+		}
+	}
+	p.PiDev, p.PiAgent = p.Pi, p.Pi
+	return nil
+}
+
+func (p PlatformsConfig) canonicalPi() PlatformConfig {
+	if len(p.Pi.SkillsPaths) > 0 {
+		return p.Pi
+	}
+	if len(p.PiDev.SkillsPaths) > 0 {
+		return p.PiDev
+	}
+	return p.PiAgent
 }
 
 // SaveToPath writes the configuration to a specific path.
@@ -275,16 +358,16 @@ func (c *Config) applyEnvironment() {
 	if v := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); v != "" {
-		c.Platforms.PiAgent.SkillsPaths = splitPaths(v)
-	}
 	if v := firstNonEmptyEnv(
+		"SKILLSYNC_PI_SKILLS_PATHS", "SKILLSYNC_PI_PATH",
 		"SKILLSYNC_PI_DEV_SKILLS_PATHS",
 		"SKILLSYNC_PIDEV_SKILLS_PATHS",
 		"SKILLSYNC_PI_DEV_PATH",
 		"SKILLSYNC_PIDEV_PATH",
 	); v != "" {
-		c.Platforms.PiDev.SkillsPaths = splitPaths(v)
+		c.Platforms.Pi.SkillsPaths = splitPaths(v)
+	} else if v := firstNonEmptyEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); v != "" {
+		c.Platforms.Pi.SkillsPaths = splitPaths(v)
 	}
 	if v := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
 		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
@@ -307,6 +390,7 @@ func (c *Config) applyEnvironment() {
 	if v := os.Getenv("SKILLSYNC_SIMILARITY_ALGORITHM"); v != "" {
 		c.Similarity.Algorithm = v
 	}
+	c.Platforms.normalizePi()
 }
 
 // splitPaths splits a colon-separated path string into individual paths.

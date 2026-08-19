@@ -10,13 +10,13 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 )
 
-func TestSynchronizer_Sync_ClaudeDirectorySkillsLinkCompatibleTargets(t *testing.T) {
+func TestSynchronizer_Sync_ClaudeDirectorySkillsCopyCompatibleTargets(t *testing.T) {
 	s := New()
 
 	targets := []model.Platform{model.Codex, model.Cursor, model.PiDev}
 	for _, target := range targets {
 		t.Run(string(target), func(t *testing.T) {
-			sourceDir, skillDir := writeClaudeDirectorySkill(t, "linked-skill")
+			sourceDir, _ := writeClaudeDirectorySkill(t, "linked-skill")
 			targetDir := t.TempDir()
 
 			result, err := s.Sync(model.ClaudeCode, target, Options{
@@ -36,12 +36,12 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillsLinkCompatibleTargets(t *testing
 			if sr.Action != ActionCreated {
 				t.Fatalf("expected created action, got %s", sr.Action)
 			}
-			if !strings.Contains(sr.Message, "linked Claude skill directory") {
-				t.Fatalf("expected linked message, got %q", sr.Message)
+			if strings.Contains(sr.Message, "linked Claude skill directory") {
+				t.Fatalf("cross-harness copy should not report a link: %q", sr.Message)
 			}
 
 			targetSkillPath := filepath.Join(targetDir, "linked-skill")
-			assertSymlinkTarget(t, targetSkillPath, skillDir)
+			assertCopiedSkillDir(t, targetSkillPath)
 		})
 	}
 }
@@ -72,8 +72,8 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillDryRun(t *testing.T) {
 	if sr.Action != ActionCreated {
 		t.Fatalf("expected created action, got %s", sr.Action)
 	}
-	if !strings.Contains(sr.Message, "linked Claude skill directory") {
-		t.Fatalf("expected linked message, got %q", sr.Message)
+	if strings.Contains(sr.Message, "linked Claude skill directory") {
+		t.Fatalf("dry-run cross-harness copy should not report a link: %q", sr.Message)
 	}
 
 	if _, err := os.Lstat(filepath.Join(targetDir, "dry-run-linked")); !os.IsNotExist(err) {
@@ -93,10 +93,11 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillMixedCaseEntrypointCopiesCanonica
 	targetDir := t.TempDir()
 
 	result, err := s.Sync(model.ClaudeCode, model.Codex, Options{
-		DryRun:     false,
-		Strategy:   StrategyOverwrite,
-		SourcePath: sourceDir,
-		TargetPath: targetDir,
+		DryRun:         false,
+		Strategy:       StrategyOverwrite,
+		SourcePath:     sourceDir,
+		TargetPath:     targetDir,
+		SkipValidation: true,
 	})
 	if err != nil {
 		t.Fatalf("Sync failed: %v", err)
@@ -151,8 +152,8 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillOverwriteAndSkipExistingEntries(t
 				}
 				return ""
 			},
-			assert: func(t *testing.T, existingPath, sourceSkillDir, existingTarget string) {
-				assertSymlinkTarget(t, existingPath, sourceSkillDir)
+			assert: func(t *testing.T, existingPath, _, _ string) {
+				assertCopiedSkillDir(t, existingPath)
 			},
 		},
 		{
@@ -165,8 +166,8 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillOverwriteAndSkipExistingEntries(t
 				}
 				return ""
 			},
-			assert: func(t *testing.T, existingPath, sourceSkillDir, existingTarget string) {
-				assertSymlinkTarget(t, existingPath, sourceSkillDir)
+			assert: func(t *testing.T, existingPath, _, _ string) {
+				assertCopiedSkillDir(t, existingPath)
 			},
 		},
 		{
@@ -186,8 +187,8 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillOverwriteAndSkipExistingEntries(t
 				}
 				return externalDir
 			},
-			assert: func(t *testing.T, existingPath, sourceSkillDir, existingTarget string) {
-				assertSymlinkTarget(t, existingPath, sourceSkillDir)
+			assert: func(t *testing.T, existingPath, _, _ string) {
+				assertCopiedSkillDir(t, existingPath)
 			},
 		},
 		{
@@ -294,8 +295,8 @@ func TestSynchronizer_Sync_ClaudeDirectorySkillOverwriteAndSkipExistingEntries(t
 				if sr.Action != ActionUpdated {
 					t.Fatalf("expected updated action, got %s", sr.Action)
 				}
-				if !strings.Contains(sr.Message, "linked Claude skill directory") {
-					t.Fatalf("expected linked message, got %q", sr.Message)
+				if strings.Contains(sr.Message, "linked Claude skill directory") {
+					t.Fatalf("cross-harness overwrite should not report a link: %q", sr.Message)
 				}
 			}
 
@@ -433,5 +434,19 @@ func assertSymlinkTarget(t *testing.T, path, want string) {
 	}
 	if got != want {
 		t.Fatalf("symlink target = %q, want %q", got, want)
+	}
+}
+
+func assertCopiedSkillDir(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatalf("failed to lstat copied skill %s: %v", path, err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("expected %s to be a copied directory", path)
+	}
+	if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
+		t.Fatalf("copied skill missing canonical SKILL.md: %v", err)
 	}
 }

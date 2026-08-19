@@ -1,13 +1,14 @@
 # Quick Start Guide
 
-Welcome to SkillSync! This guide will help you get started with synchronizing AI coding skills across Claude Code, Cursor, and Codex platforms.
+Welcome to SkillSync! This guide will help you synchronize Agent Skills bundles
+across Claude Code, Codex, Cursor, Copilot, Gemini CLI, and Pi.
 
 ## What is SkillSync?
 
 SkillSync is a command-line tool that helps you manage and synchronize AI coding skills across different platforms. It prevents duplication, ensures consistency, and gives you a unified repository for all your AI coding assistant skills.
 
 **Key Features:**
-- Synchronize skills between Claude Code, Cursor, and Codex
+- Synchronize skills between six supported coding harnesses
 - Detect and resolve duplicate or similar skills
 - Manage skills across different scopes (repo, user, system)
 - Interactive TUI for visual skill management
@@ -18,13 +19,16 @@ SkillSync is a command-line tool that helps you manage and synchronize AI coding
 
 ### Prerequisites
 
-- Go 1.25.4 or later
+- Go 1.26.1 or later
 - Git (for cloning the repository)
 - `just` (https://just.systems) for task running
 - One or more supported AI coding platforms:
   - Claude Code
-  - Cursor
   - Codex
+  - Cursor
+  - Copilot
+  - Gemini CLI
+  - Pi
 
 ### Build from Source
 
@@ -544,8 +548,8 @@ skillsync dedupe rename old-name new-name --platform cursor --scope user
 Skills can exist at different scope levels (from highest to lowest priority):
 
 1. **plugin** - Claude Code plugin skills (`~/.claude/plugins/cache/*`) - *read-only*
-2. **repo** - Repository-level (`.claude/skills`, `.cursor/skills`, `.codex/skills`)
-3. **user** - User-level (`~/.claude/skills`, `~/.cursor/skills`, `~/.agents/skills`, `~/.codex/skills`)
+2. **repo** - Harness canonical roots such as `.claude/skills`, `.agents/skills`, `.cursor/skills`, `.github/skills`, `.gemini/skills`, and `.pi/skills`
+3. **user** - Harness canonical roots such as `~/.claude/skills`, `~/.agents/skills`, `~/.cursor/skills`, `~/.copilot/skills`, `~/.gemini/skills`, and `~/.pi/agent/skills`
 4. **admin** - Administrator-defined
 5. **system** - System-wide installations
 6. **builtin** - Built-in platform skills
@@ -830,10 +834,24 @@ platforms:
       - ~/.cursor/skills
   codex:
     skills_paths:
-      - .codex/skills
+      - .agents/skills
       - ~/.agents/skills
+      # Legacy discovery roots remain readable:
+      - .codex/skills
       - ~/.codex/skills
       - /etc/codex/skills
+  copilot:
+    skills_paths:
+      - .github/skills
+      - ~/.copilot/skills
+  gemini:
+    skills_paths:
+      - .gemini/skills
+      - ~/.gemini/skills
+  pi:
+    skills_paths:
+      - .pi/skills
+      - ~/.pi/agent/skills
 
 sync:
   # Default sync strategy (overwrite, skip, newer, merge, three-way, interactive)

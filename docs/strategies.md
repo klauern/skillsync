@@ -38,7 +38,7 @@ Prompt for each conflict, allowing manual resolution in the TUI.
 ## Claude Directory Linking
 
 When the source is Claude Code and the skill is a directory-based `SKILL.md`
-skill, SkillSync links the source directory into Codex, Cursor, and Pi.dev
+skill, SkillSync links the source directory into Codex, Cursor, and Pi
 targets instead of copying the directory contents.
 
 - `overwrite` replaces the target entry with the symlink
