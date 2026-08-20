@@ -89,7 +89,7 @@ func TestTransformer_TransformPath(t *testing.T) {
 			sourcePath: "/source/my-skill/SKILL.md",
 			skillName:  "my-skill",
 			target:     model.ClaudeCode,
-			expected:   "my-skill.md",
+			expected:   "my-skill/SKILL.md",
 		},
 		{
 			name:       "prompt to codex skill file",
@@ -120,6 +120,13 @@ func TestTransformer_TransformPath(t *testing.T) {
 			expected:   "agents/reviewer.agent.md",
 		},
 		{
+			name:       "standard skill to copilot skills directory",
+			sourcePath: "/source/skill/SKILL.md",
+			skillName:  "skill",
+			target:     model.Copilot,
+			expected:   "skill/SKILL.md",
+		},
+		{
 			name:       "instructions to copilot instructions file",
 			sourcePath: "/source/style.md",
 			skillName:  "go-style",
@@ -148,6 +155,9 @@ func TestTransformer_TransformPath(t *testing.T) {
 			if tt.name == "prompt to codex skill file" {
 				skill.Type = model.SkillTypePrompt
 				skill.Trigger = "/review"
+			}
+			if tt.name == "skill directory to claude" || tt.name == "standard skill to copilot skills directory" {
+				skill.Type = model.SkillTypeSkill
 			}
 			if tt.name == "prompt to copilot prompt file" {
 				skill.Type = model.SkillTypePrompt
@@ -369,11 +379,44 @@ func TestTransformer_BuildFrontmatter_Cursor(t *testing.T) {
 
 	fm := tr.buildFrontmatter(skill, model.Cursor)
 
-	if fm["globs"] != "*.ts" {
-		t.Error("Cursor frontmatter should contain globs")
+	if fm["paths"] != "*.ts" {
+		t.Error("Cursor frontmatter should map legacy globs to paths")
+	}
+	if _, ok := fm["globs"]; ok {
+		t.Error("cross-harness Cursor frontmatter should not emit legacy globs")
 	}
 	if fm["alwaysApply"] != "true" {
 		t.Error("Cursor frontmatter should contain alwaysApply")
+	}
+}
+
+func TestTransformer_CursorSameHarnessPreservesRawLegacyGlobs(t *testing.T) {
+	tr := NewTransformer()
+	skill := model.Skill{
+		Name:        "legacy",
+		Description: "Legacy rule",
+		Platform:    model.Cursor,
+		Path:        "legacy.mdc",
+		Content:     "Body",
+		Metadata:    map[string]string{"globs": "[*.go]"},
+		RawFrontmatter: map[string]any{
+			"globs": []any{"*.go"},
+		},
+	}
+	transformed, err := tr.Transform(skill, model.Cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := parser.SplitFrontmatter([]byte(transformed.Content))
+	fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fm["globs"] == nil {
+		t.Fatalf("same-harness legacy globs were not preserved: %#v", fm)
+	}
+	if _, ok := fm["paths"]; ok {
+		t.Fatalf("same-harness legacy round trip unexpectedly added paths: %#v", fm)
 	}
 }
 
@@ -506,10 +549,13 @@ func TestTransformer_Transform_CopilotInstructionToCursor(t *testing.T) {
 		t.Fatalf("Path = %q, want react.instructions.md", transformed.Path)
 	}
 	if _, ok := transformed.Metadata["applyTo"]; ok {
-		t.Fatal("Cursor metadata should not retain applyTo after mapping to globs")
+		t.Fatal("Cursor metadata should not retain applyTo after mapping to paths")
 	}
-	if transformed.Metadata["globs"] != "**/*.tsx" {
-		t.Fatalf("globs metadata = %q, want **/*.tsx", transformed.Metadata["globs"])
+	if transformed.Metadata["paths"] != "**/*.tsx" {
+		t.Fatalf("paths metadata = %q, want **/*.tsx", transformed.Metadata["paths"])
+	}
+	if _, ok := transformed.Metadata["globs"]; ok {
+		t.Fatal("cross-harness Cursor metadata should not retain legacy globs")
 	}
 	if transformed.Metadata["model"] != "GPT-4o" {
 		t.Fatalf("model metadata = %q, want GPT-4o", transformed.Metadata["model"])
@@ -523,8 +569,8 @@ func TestTransformer_Transform_CopilotInstructionToCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse frontmatter: %v", err)
 	}
-	if got := fm["globs"]; got != "**/*.tsx" {
-		t.Fatalf("frontmatter globs = %v, want **/*.tsx", got)
+	if got := fm["paths"]; got != "**/*.tsx" {
+		t.Fatalf("frontmatter paths = %v, want **/*.tsx", got)
 	}
 	if got := fm["model"]; got != "GPT-4o" {
 		t.Fatalf("frontmatter model = %v, want GPT-4o", got)

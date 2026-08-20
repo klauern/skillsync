@@ -234,9 +234,9 @@ func TestParser_DefaultPath(t *testing.T) {
 	}{
 		{model.ClaudeCode, filepath.Join(home, ".claude", "skills")},
 		{model.Cursor, filepath.Join(home, ".cursor", "skills")},
-		{model.Codex, filepath.Join(home, ".codex", "skills")},
-		{model.Copilot, filepath.Join(home, ".github")},
-		{model.Gemini, filepath.Join(home, ".gemini")},
+		{model.Codex, filepath.Join(home, ".agents", "skills")},
+		{model.Copilot, filepath.Join(home, ".copilot", "skills")},
+		{model.Gemini, filepath.Join(home, ".gemini", "skills")},
 		{model.PiDev, filepath.Join(home, ".pi", "agent", "skills")},
 	}
 
@@ -821,5 +821,50 @@ func TestParser_GetExistingSearchPaths(t *testing.T) {
 		if _, err := os.Stat(sp.Path); os.IsNotExist(err) {
 			t.Errorf("GetExistingSearchPaths() returned non-existent path: %s", sp.Path)
 		}
+	}
+}
+
+func TestTieredDiscoveryFindsNativeArtifactsWithoutSkillsDirectory(t *testing.T) {
+	tests := []struct {
+		name     string
+		platform model.Platform
+		path     string
+		content  string
+		wantName string
+	}{
+		{"copilot", model.Copilot, filepath.Join(".github", "agents", "reviewer.agent.md"), "---\nname: reviewer\ndescription: Review\n---\nBody", "reviewer"},
+		{"codex", model.Codex, "AGENTS.md", "Repository guidance", "agents"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(repo, tt.path)
+			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(tt.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			p, err := NewForPlatformWithDir(tt.platform, repo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sk, err := p.ParseFromScope(model.ScopeRepo)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, skill := range sk {
+				if skill.Name == tt.wantName {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("missing native artifact %q: %#v", tt.wantName, sk)
+			}
+		})
 	}
 }

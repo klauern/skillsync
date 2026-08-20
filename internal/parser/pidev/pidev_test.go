@@ -150,7 +150,7 @@ Prompt body.
 	if agents.Metadata["type"] != "agents" {
 		t.Fatalf("root AGENTS metadata type = %q, want agents", agents.Metadata["type"])
 	}
-	if agents.Description != "Pi.dev AGENTS.md instructions" {
+	if agents.Description != "Pi AGENTS.md instructions" {
 		t.Fatalf("root AGENTS description = %q", agents.Description)
 	}
 
@@ -193,5 +193,56 @@ func TestParser_Parse_NonexistentDirectory(t *testing.T) {
 	}
 	if len(skills) != 0 {
 		t.Fatalf("Parse() on nonexistent directory returned %d skills, want 0", len(skills))
+	}
+}
+
+func TestParser_SettingsSkillsAndInstructionVariants(t *testing.T) {
+	root := t.TempDir()
+	config := filepath.Join(root, ".pi")
+	configured := filepath.Join(root, "configured-skills", "extra")
+	if err := os.MkdirAll(configured, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(config, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, "settings.json"), []byte(`{"skills":["../configured-skills/extra"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configured, "SKILL.md"), []byte("---\nname: configured\ndescription: configured\n---\nbody\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("claude instructions\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.override.md"), []byte("override instructions\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := New(filepath.Join(config, "skills"))
+	got, err := p.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configuredFound, claudeFound, overrideFound bool
+	for _, skill := range got {
+		configuredFound = configuredFound || skill.Name == "configured"
+		claudeFound = claudeFound || skill.Name == "agents-claude"
+		overrideFound = overrideFound || skill.Name == "agents-agents-override"
+	}
+	if !configuredFound {
+		t.Fatal("settings skills entry was not discovered")
+	}
+	if claudeFound || !overrideFound {
+		names := make([]string, 0, len(got))
+		for _, skill := range got {
+			names = append(names, skill.Name)
+		}
+		t.Fatalf("instruction variants not discovered: claude=%v override=%v names=%v", claudeFound, overrideFound, names)
+	}
+	if got := []string{got[0].Name, got[1].Name, got[2].Name}; got[0] != "configured" || got[1] != "agents-agents-override" || got[2] != "agents" {
+		t.Fatalf("unexpected precedence order: %v", got)
 	}
 }

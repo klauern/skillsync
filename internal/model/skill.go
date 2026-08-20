@@ -37,6 +37,15 @@ type PluginInfo struct {
 	InstallScope string `json:"install_scope,omitempty"`
 }
 
+// ConformanceIssue describes a violation (or advisory) found while reading an
+// Agent Skills Standard artifact. Issues are retained on the skill so tools can
+// report invalid artifacts without silently dropping them.
+type ConformanceIssue struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Severity string `json:"severity"`
+}
+
 // Skill represents a unified agent skill across platforms
 type Skill struct {
 	Name        string            `json:"name"`
@@ -58,13 +67,20 @@ type Skill struct {
 	Trigger string `json:"trigger,omitempty"`
 
 	// Agent Skills Standard fields
-	Scope                  SkillScope        `json:"scope,omitempty"`
-	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty"`
-	License                string            `json:"license,omitempty"`
-	Compatibility          map[string]string `json:"compatibility,omitempty"`
-	Scripts                []string          `json:"scripts,omitempty"`
-	References             []string          `json:"references,omitempty"`
-	Assets                 []string          `json:"assets,omitempty"`
+	Scope                  SkillScope `json:"scope,omitempty"`
+	DisableModelInvocation bool       `json:"disable_model_invocation,omitempty"`
+	License                string     `json:"license,omitempty"`
+	Compatibility          string     `json:"compatibility,omitempty"`
+	// StandardMetadata contains the standard's nested metadata object without
+	// coercing values to strings. Metadata remains transport metadata.
+	StandardMetadata map[string]any `json:"standard_metadata,omitempty"`
+	// RawFrontmatter preserves every parsed frontmatter value, including
+	// extensions and nested values, for same-harness round trips.
+	RawFrontmatter    map[string]any     `json:"raw_frontmatter,omitempty"`
+	ConformanceIssues []ConformanceIssue `json:"conformance_issues,omitempty"`
+	Scripts           []string           `json:"scripts,omitempty"`
+	References        []string           `json:"references,omitempty"`
+	Assets            []string           `json:"assets,omitempty"`
 
 	// PluginInfo contains metadata if this skill was installed via a plugin symlink
 	PluginInfo *PluginInfo `json:"plugin_info,omitempty"`
@@ -85,9 +101,19 @@ func (s Skill) DisplayScope() string {
 	platformDir := s.Platform.ConfigDir()
 	base := "~/." + platformDir + "/skills"
 	repoBase := "." + platformDir + "/skills"
-	if s.Platform == Gemini {
-		base = "~/.gemini"
-		repoBase = ".gemini"
+	switch s.Platform {
+	case Codex:
+		base = "~/.agents/skills"
+		repoBase = ".agents/skills"
+	case Copilot:
+		base = "~/.copilot/skills"
+		repoBase = ".github/skills"
+	case Gemini:
+		base = "~/.gemini/skills"
+		repoBase = ".gemini/skills"
+	case Pi:
+		base = "~/.pi/agent/skills"
+		repoBase = ".pi/skills"
 	}
 
 	// Check for plugin info from symlink detection

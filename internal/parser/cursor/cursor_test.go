@@ -34,6 +34,84 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestRulesDirectoryIgnoresPlainMarkdown(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "rules")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "inactive.md"), []byte("---\ndescription: docs\n---\nplain\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "active.mdc"), []byte("---\ndescription: active\n---\nrule\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := New(root).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, skill := range got {
+		if skill.Name == "inactive" {
+			t.Fatal("plain .md under rules was treated as active")
+		}
+	}
+}
+
+func TestParserDiscoversProjectAndNestedAgents(t *testing.T) {
+	repo := t.TempDir()
+	base := filepath.Join(repo, ".cursor", "skills")
+	for path, content := range map[string]string{
+		filepath.Join(repo, "AGENTS.md"):             "root instructions",
+		filepath.Join(repo, "internal", "AGENTS.md"): "nested instructions",
+		filepath.Join(repo, ".git", "AGENTS.md"):     "ignored instructions",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := New(base).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := make(map[string]model.Skill, len(got))
+	for _, skill := range got {
+		byName[skill.Name] = skill
+	}
+	if byName[filepath.Base(repo)+"-agents"].Content != "root instructions" {
+		t.Fatalf("root AGENTS.md missing from %v", byName)
+	}
+	if byName["internal-agents"].Content != "nested instructions" {
+		t.Fatalf("nested AGENTS.md missing from %v", byName)
+	}
+	if len(byName) != 2 {
+		t.Fatalf("discovered %d instructions, want 2: %v", len(byName), byName)
+	}
+}
+
+func TestParserCustomPathDoesNotImportAncestorAgents(t *testing.T) {
+	root := t.TempDir()
+	base := filepath.Join(root, "custom-skills")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("unrelated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := New(base).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("custom path imported ancestor instructions: %v", got)
+	}
+}
+
 func TestParser_Platform(t *testing.T) {
 	p := New("")
 	if got := p.Platform(); got != model.Cursor {
@@ -411,6 +489,20 @@ Complex patterns.`,
 				t.Errorf("ModifiedAt seems too old: %v", skill.ModifiedAt)
 			}
 		})
+	}
+}
+
+func TestParserRetainsRawCursorFrontmatter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.mdc")
+	if err := os.WriteFile(path, []byte("---\nglobs: ['*.go']\nalwaysApply: true\n---\nBody"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	skill, err := New(filepath.Dir(path)).parseSkillFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skill.RawFrontmatter["globs"] == nil {
+		t.Fatalf("raw Cursor frontmatter was not retained: %#v", skill.RawFrontmatter)
 	}
 }
 

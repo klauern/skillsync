@@ -3,8 +3,10 @@ package util
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/klauern/skillsync/internal/harness"
 	"github.com/klauern/skillsync/internal/model"
 )
 
@@ -61,7 +63,7 @@ func DetectInstalledPlatformsWithConfig(cfg TieredPathConfig) PlatformDetectionR
 		platformCfg := cfg
 		platformCfg.Platform = platform
 
-		checked := GetAllSearchPaths(platformCfg)
+		checked := platformDetectionPaths(platformCfg)
 		present := FilterExistingPaths(checked)
 		missing := missingScopedPaths(checked, present)
 
@@ -96,6 +98,44 @@ func DetectInstalledPlatformsWithConfig(cfg TieredPathConfig) PlatformDetectionR
 		result.Details = append(result.Details, detail)
 	}
 
+	return result
+}
+
+func platformDetectionPaths(cfg TieredPathConfig) []ScopedPath {
+	definition, ok := harness.Lookup(cfg.Platform)
+	if !ok {
+		return nil
+	}
+
+	paths := make(map[model.SkillScope][]string)
+	for _, root := range definition.RepoRoots {
+		for _, repoRoot := range repoSearchRoots(cfg) {
+			appendUniquePath(paths, model.ScopeRepo, filepath.Join(repoRoot, root))
+		}
+	}
+	for _, root := range definition.UserRoots {
+		if strings.HasPrefix(root, "~/") {
+			appendUniquePath(paths, model.ScopeUser, filepath.Join(HomeDir(), root[2:]))
+		}
+	}
+
+	// A legacy Codex installation remains positive evidence for Codex, while
+	// compatibility roots owned by other harnesses do not imply those harnesses
+	// are installed.
+	if cfg.Platform == model.Codex {
+		for _, repoRoot := range repoSearchRoots(cfg) {
+			appendUniquePath(paths, model.ScopeRepo, filepath.Join(repoRoot, ".codex", "skills"))
+		}
+		appendUniquePath(paths, model.ScopeUser, filepath.Join(HomeDir(), ".codex", "skills"))
+		appendUniquePath(paths, model.ScopeSystem, "/etc/codex/skills")
+	}
+
+	var result []ScopedPath
+	for _, scope := range []model.SkillScope{model.ScopeRepo, model.ScopeUser, model.ScopeAdmin, model.ScopeSystem} {
+		for _, path := range paths[scope] {
+			result = append(result, ScopedPath{Path: path, Scope: scope})
+		}
+	}
 	return result
 }
 

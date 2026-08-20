@@ -11,7 +11,7 @@ import (
 func TestSyncCopilotToCodex(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	copilotFixture := h.CopilotFixture()
+	copilotFixture := h.CopilotRepoFixture()
 	copilotFixture.WriteFile("prompts/review.prompt.md", "---\ndescription: Review code\n---\n\nReview the code at $ARGUMENTS.")
 
 	codexFixture := h.CodexFixture()
@@ -45,18 +45,18 @@ func TestSyncCodexToGemini(t *testing.T) {
 	e2e.AssertFileExists(t, geminiFixture.Path("codex-gemini/SKILL.md"))
 }
 
-// TestSyncPiDevSystemMDToClaudeCode verifies that Pi.dev SYSTEM.md system-prompt
+// TestSyncPiSystemMDToClaudeCode verifies that Pi SYSTEM.md system-prompt
 // artifacts are synced to Claude Code. SYSTEM.md lives in configRoot (parent of
 // the skills basePath: ~/.pi/agent/ not ~/.pi/agent/skills/).
-func TestSyncPiDevSystemMDToClaudeCode(t *testing.T) {
+func TestSyncPiSystemMDToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piDevFixture := h.PiDevFixture()
-	piDevFixture.WriteFile("../SYSTEM.md", "You are a helpful assistant focused on coding.")
+	piFixture := h.PiFixture()
+	piFixture.WriteFile("../SYSTEM.md", "You are a helpful assistant focused on coding.")
 
 	claudeFixture := h.ClaudeCodeFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi.dev", "claudecode")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi", "claudecode")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertFileExists(t, claudeFixture.Path("SYSTEM.md"))

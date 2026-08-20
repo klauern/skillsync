@@ -3,6 +3,9 @@ package model
 import "testing"
 
 func TestPlatformValidation(t *testing.T) {
+	if PiAgent != Pi || PiDev != Pi || string(Pi) != "pi" {
+		t.Fatalf("Pi aliases are not canonical: Pi=%q PiDev=%q PiAgent=%q", Pi, PiDev, PiAgent)
+	}
 	tests := map[string]struct {
 		platform Platform
 		valid    bool
@@ -105,7 +108,7 @@ func TestParsePlatform(t *testing.T) {
 		"codex exact":           {input: "codex", want: Codex, wantErr: false},
 		"pi agent exact":        {input: "pi-agent", want: PiDev, wantErr: false},
 		"pi shorthand":          {input: "pi", want: PiDev, wantErr: false},
-		"pia shorthand":         {input: "pia", want: PiDev, wantErr: false},
+		"pia removed alias":     {input: "pia", want: "", wantErr: true},
 		"gemini exact":          {input: "gemini", want: Gemini, wantErr: false},
 		"pi.dev exact":          {input: "pi.dev", want: PiDev, wantErr: false},
 		"pi-dev alias":          {input: "pi-dev", want: PiDev, wantErr: false},

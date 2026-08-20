@@ -143,7 +143,7 @@ func TestSyncCommand(t *testing.T) {
 			wantOutput: "Synced claude-code -> cursor",
 		},
 		"valid sync with dry-run": {
-			args:       []string{"skillsync", "sync", "--dry-run", "--skip-validation", "cursor", "codex"},
+			args:       []string{"skillsync", "sync", "--trust", "external-reference,executable,native-config", "--dry-run", "--skip-validation", "cursor", "codex"},
 			wantErr:    false,
 			wantOutput: "Dry run - no changes made",
 		},

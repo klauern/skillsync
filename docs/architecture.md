@@ -8,6 +8,7 @@ graph TD
     cli --> config[config]
     cli --> parser[parser]
     cli --> sync[sync]
+    cli --> harness[harness registry]
     cli --> backup[backup]
     cli --> export[export]
     parser --> model[model]
@@ -17,10 +18,10 @@ graph TD
     tiered --> claude[parser/claude]
     tiered --> cursor[parser/cursor]
     tiered --> codex[parser/codex]
-    tiered --> piagent[parser/piagent]
     tiered --> copilot[parser/copilot]
     tiered --> gemini[parser/gemini]
-    tiered --> pidev[parser/pidev]
+    tiered --> pi[parser/pidev]
+    harness --> model
 ```
 
 ## Core Interfaces
@@ -35,7 +36,11 @@ type Parser interface {
 }
 ```
 
-**Platform**: `ClaudeCode | Cursor | Codex | PiAgent | Copilot | Gemini | PiDev` (`internal/model/platform.go`) — all 7 are first-class implementations.
+**Platform**: `ClaudeCode | Codex | Cursor | Copilot | Gemini | Pi`
+(`internal/model/platform.go`) — six canonical harnesses. The harness registry
+owns aliases, canonical write roots, discovery precedence, parser selection,
+and supported artifact surfaces. Legacy Pi spellings resolve to `Pi` with an
+advisory deprecation warning; they are not separate implementations.
 
 See `docs/platforms/` for per-platform format references and `docs/platforms/cross-platform-mapping.md` for conversion rules.
 
@@ -45,9 +50,18 @@ See `docs/platforms/` for per-platform format references and `docs/platforms/cro
 ## Data Flow
 
 1. CLI command invoked
-2. Parser discovers skills from platform config
-3. Sync applies strategy to merge skills
-4. Export writes to target format
+2. Harness registry resolves the canonical adapter and ordered roots
+3. Parser discovers skills from platform config and attaches conformance issues
+4. Sync validates and applies the selected merge strategy
+5. Export writes the shared core plus explicitly mapped target fields
+
+## Shared Agent Skills Core
+
+Directory bundles are the common unit across all six adapters. The shared model
+keeps the standard scalar fields, nested standard metadata, supporting bundle
+files, raw source frontmatter for same-harness round trips, and structured
+conformance issues. Discovery reports invalid bundles instead of hiding them;
+write operations reject them unless `--skip-validation` is explicit.
 
 ## Transport-Layer Prompt Support
 
@@ -74,6 +88,12 @@ The architecture docs use the same portability classes as the platform docs:
   files, where content survives but runtime semantics differ by platform.
 - **Non-portable**: agent/subagent definitions, plugin/package provenance, and
   other runtime-owned behavior with no common cross-platform file model.
+
+Native plugins, packages, and extensions use `model.NativePackage`. They do not
+use `model.Skill`. The `internal/native` package keeps discovery and writes off
+by default. A caller must enable native synchronization, allow the
+`native-config` trust category, and register an exact identity mapping before a
+cross-harness write. A matching name does not imply portability.
 
 This means the unified model is intentionally conservative:
 

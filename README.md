@@ -1,7 +1,7 @@
 # SkillSync
 
-Synchronize AI coding skills across Claude Code, Cursor, Codex, PiAgent,
-Copilot, Gemini, and Pi.dev with a single CLI.
+Synchronize Agent Skills bundles across Claude Code, Codex, Cursor, Copilot,
+Gemini CLI, and Pi with a single CLI.
 
 ## Requirements
 
@@ -34,7 +34,7 @@ skillsync sync cursor:repo,user codex:repo
 ```
 
 When syncing from Claude Code, directory-based `SKILL.md` skills are linked
-by default into Codex, Cursor, and Pi.dev targets. Flat `.md` skills and
+by default into Codex, Cursor, and Pi targets. Flat `.md` skills and
 prompt/command artifacts still use the existing copy/transform behavior.
 
 ## Commands
@@ -69,10 +69,9 @@ override them with colon-separated environment variables:
 - `SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS`
 - `SKILLSYNC_CURSOR_SKILLS_PATHS`
 - `SKILLSYNC_CODEX_SKILLS_PATHS`
-- `SKILLSYNC_PI_AGENT_SKILLS_PATHS`
 - `SKILLSYNC_COPILOT_SKILLS_PATHS`
 - `SKILLSYNC_GEMINI_SKILLS_PATHS`
-- `SKILLSYNC_PI_DEV_SKILLS_PATHS`
+- `SKILLSYNC_PI_SKILLS_PATHS`
 
 By default, Claude Code discovery checks both `commands` and `skills` paths
 (`.claude/commands`, `.claude/skills`, `~/.claude/commands`, `~/.claude/skills`)
@@ -124,10 +123,19 @@ Legacy single-path overrides are still supported:
 - `SKILLSYNC_CLAUDE_CODE_PATH`
 - `SKILLSYNC_CURSOR_PATH`
 - `SKILLSYNC_CODEX_PATH`
-- `SKILLSYNC_PI_AGENT_PATH`
 - `SKILLSYNC_COPILOT_PATH`
 - `SKILLSYNC_GEMINI_PATH`
-- `SKILLSYNC_PI_DEV_PATH`
+- `SKILLSYNC_PI_PATH`
+
+The older Pi Dev and Pi Agent environment variable forms are still read after
+the canonical Pi forms, but new configuration and documentation use `pi`.
+
+Canonical skill roots are `.claude/skills`, `.agents/skills`, `.cursor/skills`,
+`.github/skills`, `.gemini/skills`, and `.pi/skills` for repositories; user
+roots are `~/.claude/skills`, `~/.agents/skills`, `~/.cursor/skills`,
+`~/.copilot/skills`, `~/.gemini/skills`, and `~/.pi/agent/skills`. Codex,
+Cursor, Copilot, Gemini, and Pi retain documented compatibility discovery
+roots, but hooks, plugins, packages, and custom agents are not synchronized.
 
 Use `SKILLSYNC_HOME` to relocate the config directory.
 
@@ -138,14 +146,13 @@ Use `SKILLSYNC_HOME` to relocate the config directory.
 - Sync strategies: `docs/strategies.md`
 - Portability assessment: `docs/platforms/portability-assessment.md`
 - Cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
-- Implemented platform support: Claude Code, Cursor, Codex, Pi Agent, Copilot, Gemini, Pi.dev
-- PiAgent reference: `docs/platforms/pi-agent.md`
+- Implemented harnesses: Claude Code, Codex, Cursor, Copilot, Gemini CLI, Pi
 - Claude Code reference: `docs/platforms/claude.md`
 - Codex reference: `docs/platforms/codex.md`
 - Cursor reference: `docs/platforms/cursor.md`
 - Copilot reference: `docs/platforms/copilot.md`
 - Gemini reference: `docs/platforms/gemini.md`
-- Pi.dev reference: `docs/platforms/pidev.md`
+- Pi reference: `docs/platforms/pi.md`
 
 ## Development
 

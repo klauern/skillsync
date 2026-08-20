@@ -45,7 +45,7 @@ func TestExecutePromoteDemoteWrapsUnderlyingErrors(t *testing.T) {
 		SelectedSkills: []model.Skill{
 			{
 				Name:     "missing-skill",
-				Path:     filepath.Join(t.TempDir(), "missing", "SKILL.md"),
+				Path:     filepath.Join(t.TempDir(), "missing-skill", "SKILL.md"),
 				Scope:    model.ScopeUser,
 				Platform: model.Cursor,
 			},
