@@ -180,8 +180,45 @@ func assertAgent(t *testing.T, skill model.Skill) {
 }
 
 func TestDefaultPath(t *testing.T) {
-	if got := New("").DefaultPath(); filepath.Base(got) != ".github" {
-		t.Fatalf("DefaultPath() = %q, want path rooted at .github", got)
+	if got := New("").DefaultPath(); filepath.Base(filepath.Dir(got)) != ".copilot" {
+		t.Fatalf("DefaultPath() = %q, want path rooted at ~/.copilot/skills", got)
+	}
+}
+
+func TestParseCanonicalSkillsRootAlsoDiscoversNativeArtifacts(t *testing.T) {
+	githubRoot := filepath.Join(t.TempDir(), ".github")
+	agentPath := filepath.Join(githubRoot, "agents", "reviewer.agent.md")
+	if err := os.MkdirAll(filepath.Dir(agentPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agentPath, []byte("---\nname: reviewer\ndescription: Review code\n---\nReview carefully."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	parsed, err := New(filepath.Join(githubRoot, "skills")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed) != 1 || parsed[0].Metadata[model.MetadataKeyCopilotArtifact] != model.CopilotArtifactAgent {
+		t.Fatalf("canonical skills root lost sibling native agent: %#v", parsed)
+	}
+}
+
+func TestParseUserSkillsRootDoesNotInventNativeSurfaces(t *testing.T) {
+	copilotRoot := filepath.Join(t.TempDir(), ".copilot")
+	agentPath := filepath.Join(copilotRoot, "agents", "reviewer.agent.md")
+	if err := os.MkdirAll(filepath.Dir(agentPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(agentPath, []byte("---\nname: reviewer\ndescription: Review code\n---\nBody"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := New(filepath.Join(copilotRoot, "skills")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed) != 0 {
+		t.Fatalf("undocumented user native surfaces were discovered: %#v", parsed)
 	}
 }
 

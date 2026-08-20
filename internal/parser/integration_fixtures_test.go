@@ -84,8 +84,8 @@ func TestCodexFixturesIncludeHumanReadableNameSkill(t *testing.T) {
 		names = append(names, skill.Name)
 	}
 
-	if !slices.Contains(names, "agent-development") {
-		t.Fatalf("expected parsed Codex fixtures to include %q, got %v", "agent-development", names)
+	if !slices.Contains(names, "Agent Development") {
+		t.Fatalf("expected parsed Codex fixtures to include original name, got %v", names)
 	}
 }
 

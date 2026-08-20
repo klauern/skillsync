@@ -16,14 +16,14 @@ func TestSyncClaudeCodeToCursor(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("platform-test.md", "platform-test", "Cross-platform skill", "# Platform Test\n\nWorks across platforms.")
+	claudeFixture.WriteSkill("platform-test/SKILL.md", "platform-test", "Cross-platform skill", "# Platform Test\n\nWorks across platforms.")
 
 	cursorFixture := h.CursorFixture()
 
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "cursor")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertFileExists(t, cursorFixture.Path("platform-test.md"))
+	e2e.AssertFileExists(t, cursorFixture.Path("platform-test/SKILL.md"))
 }
 
 // TestSyncCursorRuleWithGlobsToClaudeCode verifies that a cursor rule file
@@ -32,8 +32,8 @@ func TestSyncClaudeCodeToCursor(t *testing.T) {
 func TestSyncCursorRuleWithGlobsToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	cursorFixture := h.CursorFixture()
-	cursorFixture.WriteFile("go-rules.md", `---
+	cursorFixture := h.CursorRulesFixture()
+	cursorFixture.WriteFile("go-rules.mdc", `---
 name: go-rules
 description: Go coding rules
 globs:
@@ -59,14 +59,14 @@ func TestSyncCursorToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	cursorFixture := h.CursorFixture()
-	cursorFixture.WriteSkill("reverse-test.md", "reverse-test", "Reverse sync skill", "# Reverse Test\n\nFrom Cursor to Claude.")
+	cursorFixture.WriteSkill("reverse-test/SKILL.md", "reverse-test", "Reverse sync skill", "# Reverse Test\n\nFrom Cursor to Claude.")
 
 	claudeFixture := h.ClaudeCodeFixture()
 
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "cursor", "claudecode")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertFileExists(t, claudeFixture.Path("reverse-test.md"))
+	e2e.AssertFileExists(t, claudeFixture.Path("reverse-test/SKILL.md"))
 }
 
 // TestSyncClaudeCodeToCodex verifies sync from Claude Code to Codex.
@@ -74,7 +74,7 @@ func TestSyncClaudeCodeToCodex(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("codex-test.md", "codex-test", "To Codex", "# Codex Test\n\nContent for Codex.")
+	claudeFixture.WriteSkill("codex-test/SKILL.md", "codex-test", "To Codex", "# Codex Test\n\nContent for Codex.")
 
 	codexFixture := h.CodexFixture()
 
@@ -84,70 +84,70 @@ func TestSyncClaudeCodeToCodex(t *testing.T) {
 	// Codex may transform the file differently
 	e2e.AssertOutputContains(t, result, "Created")
 	// Verify something was created in codex directory
-	if !codexFixture.Exists("AGENTS.md") && !codexFixture.Exists("codex-test.md") {
+	if !codexFixture.Exists("codex-test/SKILL.md") {
 		// Codex might aggregate into AGENTS.md or use individual files
 		t.Log("Note: Codex file structure may differ from other platforms")
 	}
 }
 
-// TestSyncClaudeCodeToPiDev verifies sync from Claude Code to Pi.dev.
-func TestSyncClaudeCodeToPiDev(t *testing.T) {
+// TestSyncClaudeCodeToPi verifies sync from Claude Code to Pi.
+func TestSyncClaudeCodeToPi(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("pi-test.md", "pi-test", "To Pi.dev", "# Pi Test\n\nContent for Pi.")
+	claudeFixture.WriteSkill("pi-test/SKILL.md", "pi-test", "To Pi", "# Pi Test\n\nContent for Pi.")
 
-	piFixture := h.PiDevFixture()
+	piFixture := h.PiFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "pi-dev")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "pi")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "Created")
 	e2e.AssertFileExists(t, piFixture.Path("pi-test/SKILL.md"))
 }
 
-// TestSyncPiDevToCursor verifies sync from Pi.dev to Cursor.
-func TestSyncPiDevToCursor(t *testing.T) {
+// TestSyncPiToCursor verifies sync from Pi to Cursor.
+func TestSyncPiToCursor(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiDevFixture()
+	piFixture := h.PiFixture()
 	piFixture.WriteSkill("pi-to-cursor/SKILL.md", "pi-to-cursor", "Pi to Cursor", "# Pi To Cursor\n\nContent for Cursor.")
 
 	cursorFixture := h.CursorFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-dev", "cursor")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi", "cursor")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "Created")
 	e2e.AssertFileExists(t, cursorFixture.Path("pi-to-cursor/SKILL.md"))
 }
 
-// TestSyncPiDevToClaudeCode verifies sync from Pi.dev to Claude Code (user scope).
-func TestSyncPiDevToClaudeCode(t *testing.T) {
+// TestSyncPiToClaudeCode verifies sync from Pi to Claude Code (user scope).
+func TestSyncPiToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiDevFixture()
+	piFixture := h.PiFixture()
 	piFixture.WriteSkill("pi-to-claude/SKILL.md", "pi-to-claude", "Pi to Claude", "# Pi To Claude\n\nContent for Claude.")
 
 	claudeFixture := h.ClaudeCodeFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-dev", "claudecode")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi", "claudecode")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "Created")
 	e2e.AssertFileExists(t, claudeFixture.Path("pi-to-claude/SKILL.md"))
 }
 
-// TestSyncPiDevToCodex verifies sync from Pi.dev to Codex.
-func TestSyncPiDevToCodex(t *testing.T) {
+// TestSyncPiToCodex verifies sync from Pi to Codex.
+func TestSyncPiToCodex(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	piFixture := h.PiDevFixture()
+	piFixture := h.PiFixture()
 	piFixture.WriteSkill("pi-to-codex/SKILL.md", "pi-to-codex", "Pi to Codex", "# Pi To Codex\n\nContent for Codex.")
 
 	codexFixture := h.CodexFixture()
 
-	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi-dev", "codex")
+	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "pi", "codex")
 
 	e2e.AssertSuccess(t, result)
 	e2e.AssertOutputContains(t, result, "Created")
@@ -159,7 +159,7 @@ func TestSyncPiDevToCodex(t *testing.T) {
 func TestSyncClaudeCommandToCodexWithIncludePrompts(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	claudeFixture := h.ClaudeCodeFixture()
+	claudeFixture := h.ClaudeCommandsFixture()
 	claudeFixture.WriteFile("review.md", `---
 description: review command
 allowed-tools: Bash, Read
@@ -182,21 +182,21 @@ func TestSyncClaudeCodeToCopilot(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("copilot-test.md", "copilot-test", "Test for Copilot", "# Copilot Test\n\nContent for Copilot.")
+	claudeFixture.WriteSkill("copilot-test/SKILL.md", "copilot-test", "Test for Copilot", "# Copilot Test\n\nContent for Copilot.")
 
 	copilotFixture := h.CopilotFixture()
 
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "copilot")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertFileExists(t, copilotFixture.Path("agents/copilot-test.agent.md"))
+	e2e.AssertFileExists(t, copilotFixture.Path("copilot-test/SKILL.md"))
 }
 
 // TestSyncCopilotToClaudeCode verifies sync from GitHub Copilot to Claude Code.
 func TestSyncCopilotToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
-	copilotFixture := h.CopilotFixture()
+	copilotFixture := h.CopilotRepoFixture()
 	copilotFixture.WriteFile("copilot-instructions.md", "# Copilot Instructions\n\nAlways follow best practices.")
 
 	claudeFixture := h.ClaudeCodeFixture()
@@ -212,14 +212,14 @@ func TestSyncClaudeCodeToGemini(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	claudeFixture := h.ClaudeCodeFixture()
-	claudeFixture.WriteSkill("gemini-test.md", "gemini-test", "Test for Gemini", "# Gemini Test\n\nContent for Gemini.")
+	claudeFixture.WriteSkill("gemini-test/SKILL.md", "gemini-test", "Test for Gemini", "# Gemini Test\n\nContent for Gemini.")
 
 	geminiFixture := h.GeminiFixture()
 
 	result := h.Run("sync", "--yes", "--skip-backup", "--skip-validation", "claudecode", "gemini")
 
 	e2e.AssertSuccess(t, result)
-	e2e.AssertFileExists(t, geminiFixture.Path("gemini-test.md"))
+	e2e.AssertFileExists(t, geminiFixture.Path("gemini-test/SKILL.md"))
 }
 
 // TestSyncGeminiToClaudeCode verifies sync from Gemini CLI to Claude Code.
@@ -227,10 +227,10 @@ func TestSyncGeminiToClaudeCode(t *testing.T) {
 	h := e2e.NewHarness(t)
 
 	geminiFixture := h.GeminiFixture()
-	if err := os.MkdirAll(geminiFixture.Path("skills/gemini-skill"), 0o750); err != nil {
+	if err := os.MkdirAll(geminiFixture.Path("gemini-skill"), 0o750); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
-	geminiFixture.WriteSkill("skills/gemini-skill/SKILL.md", "gemini-skill", "Gemini to Claude", "# Gemini Skill\n\nContent.")
+	geminiFixture.WriteSkill("gemini-skill/SKILL.md", "gemini-skill", "Gemini to Claude", "# Gemini Skill\n\nContent.")
 
 	claudeFixture := h.ClaudeCodeFixture()
 

@@ -630,3 +630,10 @@ Extension settings are configured separately via `gemini extensions config`.
 - System prompt override docs: https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/system-prompt.md (accessed 2026-02-22)
 - CLI reference: https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/cli-reference.md (accessed 2026-02-22)
 - Subagents docs: https://github.com/google-gemini/gemini-cli/blob/main/docs/core/subagents.md (accessed 2026-02-22)
+## v2 reference boundary (verified 2026-08-18)
+
+Official source: https://geminicli.com/docs/cli/skills/. Gemini writes
+`.gemini/skills/` and `~/.gemini/skills/`; higher-precedence `.agents/skills/`
+aliases are discovered. The Antigravity transition remains documented while
+the adapter is retained. Extensions, hooks, packages, themes, and subagents
+are native/documented-only, not synchronized.

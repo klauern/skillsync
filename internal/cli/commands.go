@@ -187,8 +187,9 @@ func showConfigPaths() error {
 	fmt.Printf("  Claude Code:     %v\n", cfg.Platforms.ClaudeCode.SkillsPaths)
 	fmt.Printf("  Cursor:          %v\n", cfg.Platforms.Cursor.SkillsPaths)
 	fmt.Printf("  Codex:           %v\n", cfg.Platforms.Codex.SkillsPaths)
-	fmt.Printf("  Pi Agent:        %v\n", cfg.Platforms.PiAgent.SkillsPaths)
-	fmt.Printf("  Pi.dev:          %v\n", cfg.Platforms.PiDev.SkillsPaths)
+	fmt.Printf("  Copilot:         %v\n", cfg.Platforms.Copilot.SkillsPaths)
+	fmt.Printf("  Gemini CLI:      %v\n", cfg.Platforms.Gemini.SkillsPaths)
+	fmt.Printf("  Pi:              %v\n", cfg.Platforms.Pi.SkillsPaths)
 
 	fmt.Println("\nData paths:")
 	fmt.Printf("  Backups:         %s\n", util.SkillsyncBackupsPath())
@@ -1844,6 +1845,10 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 	var errs []error
 
 	for _, skill := range result.SelectedSkills {
+		if err := validateScopeMoveSkill(skill); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		// Determine source and target scopes based on operation type
 		var fromScope, toScope model.SkillScope
 		if isPromotion {
@@ -1869,14 +1874,14 @@ func executePromoteDemote(result tui.PromoteDemoteListResult) error {
 			continue
 		}
 
-		if err := copySkillFile(skill.Path, targetPath); err != nil {
+		if err := sync.CopySkillBundle(skill, targetPath); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", skill.Name, err))
 			continue
 		}
 
 		// Remove source if requested
 		if result.RemoveSource {
-			if err := os.Remove(skill.Path); err != nil {
+			if err := sync.RemoveSkillBundle(skill); err != nil {
 				errs = append(errs, fmt.Errorf("%s: copied but failed to remove source: %w", skill.Name, err))
 				// Don't continue - the copy was successful
 			}

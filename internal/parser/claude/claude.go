@@ -190,6 +190,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		if err != nil {
 			return model.Skill{}, fmt.Errorf("failed to parse type in %q: %w", filePath, err)
 		}
+		fields.rawFrontmatter = fm
 	}
 
 	// If no name in frontmatter, derive from filename
@@ -227,16 +228,20 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 	// Build and return the skill
 	skill := model.Skill{
-		Name:        fields.name,
-		Description: fields.description,
-		Platform:    p.Platform(),
-		Path:        filePath,
-		Tools:       fields.tools,
-		Metadata:    fields.metadata,
-		Content:     normalizedContent,
-		ModifiedAt:  fileInfo.ModTime(),
-		Type:        fields.skillType,
-		Trigger:     fields.trigger,
+		Name:           fields.name,
+		Description:    fields.description,
+		Platform:       p.Platform(),
+		Path:           filePath,
+		Tools:          fields.tools,
+		Metadata:       fields.metadata,
+		Content:        normalizedContent,
+		ModifiedAt:     fileInfo.ModTime(),
+		Type:           fields.skillType,
+		Trigger:        fields.trigger,
+		RawFrontmatter: fields.rawFrontmatter,
+	}
+	if metadata, ok := fields.rawFrontmatter["metadata"].(map[string]any); ok {
+		skill.StandardMetadata = metadata
 	}
 
 	return skill, nil
@@ -257,6 +262,7 @@ type frontmatterFields struct {
 	metadata            map[string]string
 	hasExplicitName     bool
 	commandMetadataHint bool
+	rawFrontmatter      map[string]any
 }
 
 // extractFrontmatterFields parses all relevant fields from a frontmatter map.

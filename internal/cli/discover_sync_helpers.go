@@ -470,10 +470,11 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 	}
 
 	opts := sync.Options{
-		DryRun:      cfg.dryRun,
-		Strategy:    cfg.strategy,
-		TargetScope: cfg.targetSpec.TargetScope(),
-		TrustPolicy: cfg.trustPolicy,
+		DryRun:         cfg.dryRun,
+		Strategy:       cfg.strategy,
+		TargetScope:    cfg.targetSpec.TargetScope(),
+		SkipValidation: cfg.skipValidation,
+		TrustPolicy:    cfg.trustPolicy,
 	}
 
 	syncer := sync.New()
@@ -698,7 +699,7 @@ var platformColorFns = map[model.Platform]func(...any) string{
 	model.ClaudeCode: ui.Info,
 	model.Cursor:     ui.Success,
 	model.Codex:      ui.Warning,
-	model.PiDev:      ui.Magenta,
+	model.Pi:         ui.Magenta,
 	model.Copilot:    ui.Blue,
 	model.Gemini:     ui.Bold,
 }
@@ -994,10 +995,11 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 
 	// Create sync options and execute
 	opts := sync.Options{
-		DryRun:      cfg.dryRun,
-		Strategy:    cfg.strategy,
-		TargetScope: cfg.targetSpec.TargetScope(),
-		TrustPolicy: cfg.trustPolicy,
+		DryRun:         cfg.dryRun,
+		Strategy:       cfg.strategy,
+		TargetScope:    cfg.targetSpec.TargetScope(),
+		SkipValidation: cfg.skipValidation,
+		TrustPolicy:    cfg.trustPolicy,
 	}
 
 	syncer := sync.New()

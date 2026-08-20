@@ -95,7 +95,7 @@ Review the Go code for:
 
 ### Rules (`*.md` / `*.mdc`)
 
-Rules are auto-applied context instructions stored in `.cursor/rules/`. They use YAML frontmatter
+Rules are auto-applied context instructions stored only as `.cursor/rules/*.mdc`. They use YAML frontmatter
 for scope control. The `.mdc` extension is the legacy Cursor Markdown format; `.md` is also
 supported. Cursor recommends keeping rules under 500 lines and using `@filename` references
 rather than copying content.
@@ -108,7 +108,8 @@ for basic project-wide instructions.
 | Field         | Type       | Required | Description |
 |:--------------|:-----------|:---------|:------------|
 | `description` | `string`   | no       | Presented to the agent to decide if the rule should be applied |
-| `globs`       | `string[]` | no       | Glob patterns for file matching (e.g., `["*.go", "internal/**/*.go"]`) |
+| `paths`       | `string[]` | no       | Current path patterns for file matching |
+| `globs`       | `string[]` | no       | Legacy fallback when `paths` is absent |
 | `alwaysApply` | `bool`     | no       | If `true`, applies to all files regardless of globs |
 
 #### Application Modes
@@ -119,7 +120,7 @@ Cursor supports four rule application modes:
 |:-------------------------|:--------|:------------|
 | **Always**               | `alwaysApply: true` | Activates for every chat session |
 | **Apply Intelligently**  | `description` set, no `globs`/`alwaysApply` | Agent decides relevance based on `description` field |
-| **Apply to Specific Files** | `globs: [...]` | Triggers when files match glob patterns |
+| **Apply to Specific Files** | `paths: [...]` (`globs` legacy fallback) | Triggers when files match path patterns |
 | **Apply Manually**       | none of the above | Invoked via `@rule-name` in chat |
 
 #### Example
@@ -127,7 +128,7 @@ Cursor supports four rule application modes:
 ```markdown
 ---
 description: Go error handling conventions
-globs: ["*.go"]
+paths: ["*.go"]
 alwaysApply: false
 ---
 
@@ -247,7 +248,7 @@ Test fixtures are in `testdata/skills/cursor/`:
 | `cursor-with-globs/SKILL.md` | Skill with glob patterns and `alwaysApply` |
 
 Additional coverage via inline test cases in `internal/parser/cursor/cursor_test.go`:
-- Legacy `.md` and `.mdc` files with globs/alwaysApply
+- Legacy `.mdc` files with `globs`/`alwaysApply`; plain `.md` files under `.cursor/rules` are inactive
 - Mixed format parsing (SKILL.md + legacy)
 - SKILL.md precedence over legacy files with same name
 - Skill directory exclusion (reference files not treated as skills)
@@ -283,3 +284,8 @@ Additional coverage via inline test cases in `internal/parser/cursor/cursor_test
 - `internal/model/skill.go` -- unified skill model
 - `docs/platforms/portability-assessment.md` -- focused portability assessment
 - `docs/platforms/cross-platform-mapping.md` -- broad cross-platform reference
+## v2 reference boundary (verified 2026-08-18)
+
+Official source: https://cursor.com/docs/skills. Canonical roots are
+`.cursor/skills/` and `~/.cursor/skills/`; `.agents/skills/` is discovery-only.
+`.mdc` rules, nested AGENTS.md, subagents, hooks, and plugins are native-only.

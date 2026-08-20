@@ -62,7 +62,7 @@ func compareCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (claude-code, codex, cursor, copilot, gemini, pi)",
 			},
 			&cli.BoolFlag{
 				Name:  "include-cross-platform",

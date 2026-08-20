@@ -72,13 +72,10 @@ func TestSkillAgentSkillsFields(t *testing.T) {
 		Scope:                  ScopeUser,
 		DisableModelInvocation: true,
 		License:                "MIT",
-		Compatibility: map[string]string{
-			"claude-code": ">=1.0.0",
-			"cursor":      ">=0.30.0",
-		},
-		Scripts:    []string{"setup.sh", "validate.sh"},
-		References: []string{"https://docs.example.com", "related-skill"},
-		Assets:     []string{"template.json", "config.yaml"},
+		Compatibility:          "claude-code >=1.0.0; cursor >=0.30.0",
+		Scripts:                []string{"setup.sh", "validate.sh"},
+		References:             []string{"https://docs.example.com", "related-skill"},
+		Assets:                 []string{"template.json", "config.yaml"},
 	}
 
 	// Verify basic fields
@@ -102,12 +99,8 @@ func TestSkillAgentSkillsFields(t *testing.T) {
 	if skill.License != "MIT" {
 		t.Errorf("License = %q, want %q", skill.License, "MIT")
 	}
-	if len(skill.Compatibility) != 2 {
-		t.Errorf("Compatibility has %d entries, want 2", len(skill.Compatibility))
-	}
-	if skill.Compatibility["claude-code"] != ">=1.0.0" {
-		t.Errorf("Compatibility[claude-code] = %q, want %q",
-			skill.Compatibility["claude-code"], ">=1.0.0")
+	if skill.Compatibility != "claude-code >=1.0.0; cursor >=0.30.0" {
+		t.Errorf("Compatibility = %q", skill.Compatibility)
 	}
 	if len(skill.Scripts) != 2 {
 		t.Errorf("Scripts has %d entries, want 2", len(skill.Scripts))
@@ -138,19 +131,19 @@ func TestSkillDisplayScope(t *testing.T) {
 		},
 		"user scope codex": {
 			skill: Skill{Platform: Codex, Scope: ScopeUser},
-			want:  "~/.codex/skills",
+			want:  "~/.agents/skills",
 		},
-		"user scope pi agent": {
-			skill: Skill{Platform: PiDev, Scope: ScopeUser},
+		"user scope pi": {
+			skill: Skill{Platform: Pi, Scope: ScopeUser},
 			want:  "~/.pi/agent/skills",
 		},
 		"user scope gemini": {
 			skill: Skill{Platform: Gemini, Scope: ScopeUser},
-			want:  "~/.gemini",
+			want:  "~/.gemini/skills",
 		},
 		"user scope copilot": {
 			skill: Skill{Platform: Copilot, Scope: ScopeUser},
-			want:  "~/.github/skills",
+			want:  "~/.copilot/skills",
 		},
 		"repo scope copilot": {
 			skill: Skill{Platform: Copilot, Scope: ScopeRepo},
@@ -164,13 +157,13 @@ func TestSkillDisplayScope(t *testing.T) {
 			skill: Skill{Platform: Cursor, Scope: ScopeRepo},
 			want:  ".cursor/skills",
 		},
-		"repo scope pi agent": {
-			skill: Skill{Platform: PiDev, Scope: ScopeRepo},
-			want:  ".pi/agent/skills",
+		"repo scope pi": {
+			skill: Skill{Platform: Pi, Scope: ScopeRepo},
+			want:  ".pi/skills",
 		},
 		"repo scope gemini": {
 			skill: Skill{Platform: Gemini, Scope: ScopeRepo},
-			want:  ".gemini",
+			want:  ".gemini/skills",
 		},
 		"plugin scope with name": {
 			skill: Skill{

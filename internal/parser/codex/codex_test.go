@@ -15,7 +15,7 @@ func TestNew(t *testing.T) {
 	}{
 		"empty path uses default": {
 			basePath:     "",
-			wantContains: ".codex/skills",
+			wantContains: ".agents/skills",
 		},
 		"custom path preserved": {
 			basePath:     "/custom/path",
@@ -29,7 +29,7 @@ func TestNew(t *testing.T) {
 			t.Setenv("HOME", home)
 			p := New(tt.basePath)
 			if tt.basePath == "" {
-				// For empty path, just verify it contains .codex/skills
+				// For empty path, verify it uses the canonical shared root.
 				if p.basePath == "" || !containsPathSubstring(p.basePath, tt.wantContains) {
 					t.Errorf("New(%q).basePath = %q, want to contain %q", tt.basePath, p.basePath, tt.wantContains)
 				}
@@ -59,8 +59,8 @@ func TestParser_DefaultPath(t *testing.T) {
 	t.Setenv("HOME", home)
 	p := New("")
 	got := p.DefaultPath()
-	if !containsPathSubstring(got, ".codex/skills") {
-		t.Errorf("DefaultPath() = %q, want to contain .codex/skills", got)
+	if !containsPathSubstring(got, ".agents/skills") {
+		t.Errorf("DefaultPath() = %q, want to contain .agents/skills", got)
 	}
 }
 
@@ -691,8 +691,11 @@ Use this skill for building agents.`
 	if len(skills) != 1 {
 		t.Fatalf("expected 1 skill, got %d: %v", len(skills), skillNames(skills))
 	}
-	if skills[0].Name != "agent-development" {
-		t.Fatalf("Name = %q, want %q", skills[0].Name, "agent-development")
+	if skills[0].Name != "Agent Development" {
+		t.Fatalf("Name = %q, want original frontmatter name", skills[0].Name)
+	}
+	if len(skills[0].ConformanceIssues) == 0 {
+		t.Fatal("expected warning for human-readable name")
 	}
 	if skills[0].Description != "Human-readable Codex name" {
 		t.Fatalf("Description = %q, want %q", skills[0].Description, "Human-readable Codex name")
@@ -822,6 +825,33 @@ SKILL content.`
 	})
 }
 
+func TestParser_ParseAgentsFiles_OverrideWinsAndReservedInstructionsIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.md"), []byte("base"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "AGENTS.override.md"), []byte("override"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "instructions.md"), []byte("reserved"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, "instructions"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "instructions", "extra.md"), []byte("reserved"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := New(tmpDir)
+	got, err := p.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Content != "override" {
+		t.Fatalf("got instruction chain %v, want one override", got)
+	}
+}
+
 func TestParser_parseFlatMdFile(t *testing.T) {
 	tests := map[string]struct {
 		content     string
@@ -874,6 +904,49 @@ func TestParser_parseFlatMdFile(t *testing.T) {
 				t.Errorf("Platform = %v, want %v", skill.Platform, model.Codex)
 			}
 		})
+	}
+}
+
+func TestParser_CanonicalSkillsRootDiscoversProjectContext(t *testing.T) {
+	repo := t.TempDir()
+	configPath := filepath.Join(repo, ".codex", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte("developer_instructions = \"Use tests.\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "AGENTS.md"), []byte("Repository guidance"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	parsed, err := New(filepath.Join(repo, ".agents", "skills")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findSkillByName(t, parsed, "codex-config"); got.Path != configPath {
+		t.Fatalf("config path = %q, want %q", got.Path, configPath)
+	}
+	if got := findSkillByName(t, parsed, "agents"); got.Content != "Repository guidance" {
+		t.Fatalf("AGENTS content = %q", got.Content)
+	}
+}
+
+func TestParser_CanonicalMissingRootRequiresActualSiblingArtifact(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("not Codex instructions"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := New(filepath.Join(repo, ".agents", "skills"))
+	if p.hasDiscoverableRoot() {
+		t.Fatal("unrelated parent directory content activated Codex sibling discovery")
+	}
+	parsed, err := p.Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed) != 0 {
+		t.Fatalf("missing canonical root discovered unrelated content: %#v", parsed)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
@@ -100,6 +101,11 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 			)
 			continue
 		}
+		// Cursor activates only .mdc rule files under .cursor/rules. Plain
+		// markdown there is documentation, not an active rule.
+		if filepath.Base(p.basePath) == "rules" && filepath.Ext(f) != ".mdc" {
+			continue
+		}
 		legacyFiles = append(legacyFiles, f)
 	}
 
@@ -145,6 +151,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		)
 	}
 	allSkills = append(allSkills, commandSkills...)
+	allSkills = append(allSkills, p.parseNestedInstructions(seenNames)...)
 
 	logging.Debug(
 		"completed parsing skills",
@@ -153,6 +160,79 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	)
 
 	return allSkills, nil
+}
+
+func (p *Parser) parseNestedInstructions(seen map[string]bool) []model.Skill {
+	root := cursorProjectRoot(p.basePath)
+	if root == "" {
+		return nil
+	}
+	files, err := parser.DiscoverFiles(root, []string{"AGENTS.md", "**/AGENTS.md"})
+	if err != nil {
+		logging.Warn("failed to discover nested AGENTS.md files", logging.Path(root), logging.Err(err))
+		return nil
+	}
+
+	var results []model.Skill
+	for _, path := range files {
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil || hasHiddenDirectory(rel) {
+			continue
+		}
+		// #nosec G304 -- path comes from DiscoverFiles rooted at the inferred project root.
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			continue
+		}
+		dirRel := filepath.Dir(rel)
+		namePrefix := filepath.Base(root)
+		if dirRel != "." {
+			namePrefix = strings.ReplaceAll(dirRel, string(os.PathSeparator), "-")
+		}
+		name := namePrefix + "-agents"
+		if seen[name] {
+			continue
+		}
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			continue
+		}
+		results = append(results, model.Skill{Name: name, Description: "Cursor AGENTS.md instructions", Platform: p.Platform(), Path: path, Content: parser.NormalizeContent(string(content)), ModifiedAt: info.ModTime(), Metadata: map[string]string{"type": "instructions", "native": "true", "scope_path": dirRel}})
+		seen[name] = true
+	}
+	return results
+}
+
+func cursorProjectRoot(basePath string) string {
+	base, err := filepath.Abs(basePath)
+	if err != nil {
+		return ""
+	}
+	home := filepath.Clean(util.HomeDir())
+	for dir := filepath.Clean(base); ; dir = filepath.Dir(dir) {
+		switch filepath.Base(dir) {
+		case ".cursor", ".agents", ".claude", ".codex":
+			root := filepath.Dir(dir)
+			if filepath.Clean(root) == home {
+				return ""
+			}
+			return root
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+	}
+}
+
+func hasHiddenDirectory(rel string) bool {
+	parts := strings.Split(filepath.Clean(rel), string(os.PathSeparator))
+	for _, part := range parts[:len(parts)-1] {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 // parseCommandFiles discovers and parses .cursor/commands/*.md files as SkillTypePrompt artifacts.
@@ -308,12 +388,14 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 	// Extract metadata from frontmatter
 	var name string
 	metadata := make(map[string]string)
+	var rawFrontmatter map[string]any
 
 	if result.HasFrontmatter {
 		fm, err := parser.ParseYAMLFrontmatter(result.Frontmatter)
 		if err != nil {
 			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
 		}
+		rawFrontmatter = fm
 
 		// Cursor skills typically don't have a name field in frontmatter
 		// But we handle it if present
@@ -348,6 +430,12 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 			}
 		}
 	}
+	if result.HasFrontmatter {
+		fm, _ := parser.ParseYAMLFrontmatter(result.Frontmatter)
+		if _, hasPaths := fm["paths"]; hasPaths {
+			delete(metadata, "globs")
+		}
+	}
 
 	// If no name in frontmatter, derive from filename (common for Cursor)
 	if name == "" {
@@ -371,14 +459,15 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 
 	// Build and return the skill
 	skill := model.Skill{
-		Name:        name,
-		Description: "", // Cursor doesn't typically use description
-		Platform:    p.Platform(),
-		Path:        filePath,
-		Tools:       nil, // Cursor doesn't specify tools in frontmatter
-		Metadata:    metadata,
-		Content:     normalizedContent,
-		ModifiedAt:  fileInfo.ModTime(),
+		Name:           name,
+		Description:    "", // Cursor doesn't typically use description
+		Platform:       p.Platform(),
+		Path:           filePath,
+		Tools:          nil, // Cursor doesn't specify tools in frontmatter
+		Metadata:       metadata,
+		RawFrontmatter: rawFrontmatter,
+		Content:        normalizedContent,
+		ModifiedAt:     fileInfo.ModTime(),
 	}
 
 	return skill, nil

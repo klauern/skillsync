@@ -106,12 +106,30 @@ func (h *Harness) platformFixture(envKey, label string, fallbackParts ...string)
 	return NewFixture(h.t, skillsDir)
 }
 
+func (h *Harness) addDiscoveryPath(envKey, path string) {
+	h.t.Helper()
+	paths := h.env[envKey]
+	if paths == "" {
+		h.SetEnv(envKey, path)
+		return
+	}
+	h.SetEnv(envKey, paths+string(os.PathListSeparator)+path)
+}
+
 // ClaudeCodeFixture creates a fixture helper for the Claude Code skills directory.
 // It sets up the expected directory structure for Claude Code.
 // The path matches the SKILLSYNC_CLAUDE_CODE_PATH environment variable set by NewHarness.
 func (h *Harness) ClaudeCodeFixture() *Fixture {
 	h.t.Helper()
-	return h.platformFixture("SKILLSYNC_CLAUDE_CODE_PATH", "Claude Code skills", ".claude", "commands")
+	return h.platformFixture("SKILLSYNC_CLAUDE_CODE_PATH", "Claude Code skills", ".claude", "skills")
+}
+
+// ClaudeCommandsFixture creates a fixture for Claude Code command artifacts.
+func (h *Harness) ClaudeCommandsFixture() *Fixture {
+	h.t.Helper()
+	fixture := h.platformFixture("", "Claude Code commands", ".claude", "commands")
+	h.addDiscoveryPath("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", fixture.Path(""))
+	return fixture
 }
 
 // CursorFixture creates a fixture helper for the Cursor skills directory.
@@ -119,7 +137,15 @@ func (h *Harness) ClaudeCodeFixture() *Fixture {
 // The path matches the SKILLSYNC_CURSOR_PATH environment variable set by NewHarness.
 func (h *Harness) CursorFixture() *Fixture {
 	h.t.Helper()
-	return h.platformFixture("SKILLSYNC_CURSOR_PATH", "Cursor skills", ".cursor", "rules")
+	return h.platformFixture("SKILLSYNC_CURSOR_PATH", "Cursor skills", ".cursor", "skills")
+}
+
+// CursorRulesFixture creates a fixture for Cursor project rules.
+func (h *Harness) CursorRulesFixture() *Fixture {
+	h.t.Helper()
+	fixture := h.platformFixture("", "Cursor rules", ".cursor", "rules")
+	h.addDiscoveryPath("SKILLSYNC_CURSOR_SKILLS_PATHS", fixture.Path(""))
+	return fixture
 }
 
 // CodexFixture creates a fixture helper for the Codex skills directory.
@@ -127,28 +153,49 @@ func (h *Harness) CursorFixture() *Fixture {
 // The path matches the SKILLSYNC_CODEX_PATH environment variable set by NewHarness.
 func (h *Harness) CodexFixture() *Fixture {
 	h.t.Helper()
-	return h.platformFixture("SKILLSYNC_CODEX_PATH", "Codex skills", ".codex", "skills")
+	return h.platformFixture("SKILLSYNC_CODEX_PATH", "Codex skills", ".agents", "skills")
 }
 
-// PiDevFixture creates a fixture helper for the Pi.dev skills directory.
-// It sets up the expected ~/.pi/agent/skills structure in an isolated home.
+// PiFixture creates a fixture helper for the Pi user skills directory.
+func (h *Harness) PiFixture() *Fixture {
+	h.t.Helper()
+	return h.platformFixture("SKILLSYNC_PI_PATH", "Pi skills", ".pi", "agent", "skills")
+}
+
+// PiDevFixture is retained for compatibility with older E2E tests.
 func (h *Harness) PiDevFixture() *Fixture {
 	h.t.Helper()
-	return h.platformFixture("SKILLSYNC_PIDEV_PATH", "Pi.dev skills", ".pi", "agent", "skills")
+	return h.PiFixture()
 }
 
 // CopilotFixture creates a fixture helper for the GitHub Copilot skills directory.
 // It sets up the expected ~/.github structure in an isolated home.
 func (h *Harness) CopilotFixture() *Fixture {
 	h.t.Helper()
-	return h.platformFixture("SKILLSYNC_COPILOT_PATH", "Copilot skills", ".github")
+	return h.platformFixture("SKILLSYNC_COPILOT_PATH", "Copilot skills", ".copilot", "skills")
+}
+
+// CopilotRepoFixture creates a fixture for repository instruction, prompt, and agent artifacts.
+func (h *Harness) CopilotRepoFixture() *Fixture {
+	h.t.Helper()
+	fixture := h.platformFixture("", "Copilot repository artifacts", ".github")
+	h.addDiscoveryPath("SKILLSYNC_COPILOT_SKILLS_PATHS", fixture.Path(""))
+	return fixture
 }
 
 // GeminiFixture creates a fixture helper for the Gemini CLI skills directory.
 // It sets up the expected ~/.gemini structure in an isolated home.
 func (h *Harness) GeminiFixture() *Fixture {
 	h.t.Helper()
-	return h.platformFixture("SKILLSYNC_GEMINI_PATH", "Gemini skills", ".gemini")
+	return h.platformFixture("SKILLSYNC_GEMINI_PATH", "Gemini skills", ".gemini", "skills")
+}
+
+// GeminiConfigFixture creates a fixture for Gemini context and command artifacts.
+func (h *Harness) GeminiConfigFixture() *Fixture {
+	h.t.Helper()
+	fixture := h.platformFixture("", "Gemini configuration", ".gemini")
+	h.addDiscoveryPath("SKILLSYNC_GEMINI_SKILLS_PATHS", fixture.Path(""))
+	return fixture
 }
 
 // TempFixture creates a fixture helper rooted at a new temporary directory.

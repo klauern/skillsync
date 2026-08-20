@@ -174,6 +174,19 @@ func (idx *PluginIndex) entriesForParsing() []*PluginIndexEntry {
 	return entries
 }
 
+// Entries returns one preferred enabled installation for each plugin key.
+// The returned values are copies and callers can modify them safely.
+func (idx *PluginIndex) Entries() []PluginIndexEntry {
+	entries := idx.entriesForParsing()
+	result := make([]PluginIndexEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry != nil {
+			result = append(result, *entry)
+		}
+	}
+	return result
+}
+
 // LookupByPath looks up plugin information by install path.
 // Returns nil if the path is not found in the index.
 func (idx *PluginIndex) LookupByPath(installPath string) *PluginIndexEntry {

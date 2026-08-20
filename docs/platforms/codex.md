@@ -218,10 +218,10 @@ Codex searches skills across multiple scope levels, highest precedence first:
 
 | Priority | Scope | Path | Description |
 |---|---|---|---|
-| 1 | Project (cwd) | `.codex/skills` | Current working directory skills. |
-| 2 | Project (parent) | `$CWD/../.codex/skills` | Parent directory skills (nested repos). |
-| 3 | Project (root) | `$REPO_ROOT/.codex/skills` | Repository root skills. |
-| 4 | User | `~/.agents/skills` / `~/.codex/skills` | User-wide skills; `.agents` wins when both exist. |
+| 1 | Project (cwd) | `.agents/skills` | Canonical current working directory skills. |
+| 2 | Project (parent) | `$CWD/../.agents/skills` | Canonical parent-directory skills (nested repos). |
+| 3 | Project (root) | `$REPO_ROOT/.agents/skills` | Canonical repository root skills. |
+| 4 | User | `~/.agents/skills` | Canonical user-wide skills. |
 | 5 | Admin | `/etc/codex/skills` | System-administered skills. |
 | 6 | System | (bundled) | Skills shipped with Codex. |
 
@@ -232,7 +232,7 @@ merging rather than one silently shadowing the other.
 
 **Skills**: Searched in scope order (project > user > admin > system). Custom
 directories can be configured via the config system. When both
-`~/.agents/skills` and `~/.codex/skills` exist, SkillSync treats them as one
+`~/.agents/skills` and legacy `~/.codex/skills` exist, SkillSync treats them as one
 logical user scope with `.agents` taking precedence.
 
 **Instructions**: `AGENTS.md` files are concatenated root-to-cwd. Later entries
@@ -311,3 +311,9 @@ The parser does **not** currently handle:
 - SkillSync portability assessment: `docs/platforms/portability-assessment.md`
 - SkillSync cross-platform mapping: `docs/platforms/cross-platform-mapping.md`
 - Parser source: `internal/parser/codex/codex.go`, `internal/parser/skills/skills.go`
+## v2 reference boundary (verified 2026-08-18)
+
+Official source: https://developers.openai.com/codex/skills. SkillSync writes
+`.agents/skills/` and `~/.agents/skills/`; it discovers legacy `.codex/skills/`,
+`~/.codex/skills/`, and `/etc/codex/skills/`. AGENTS.md chaining, overrides,
+fallbacks, hooks, and `.codex/agents` remain native/documented-only surfaces.
