@@ -163,6 +163,12 @@ The `chat.promptFilesLocations` setting adds additional workspace folders beyond
 
 Persistent personas with the richest frontmatter of any Copilot artifact type. Define specialized AI roles with tool restrictions, model preferences, and orchestrated handoffs.
 
+SkillSync treats these as native custom agents, separate from standard skills.
+The canonical repository destination is `.github/agents/<name>.agent.md`.
+Same-platform round trips preserve native frontmatter. Explicit mappings to
+Claude or Gemini preserve common fields and warn when Copilot-only fields do
+not transfer.
+
 #### Frontmatter Schema
 
 | Field                      | Type          | Required    | Description                                                                                      |

@@ -29,8 +29,9 @@ Cursor uses `paths` as its current activation field; `globs` is a legacy
 fallback and active rule files are `.cursor/rules/*.mdc`. Copilot standard
 skills are distinct from `.github/agents/*.agent.md` custom-agent artifacts.
 Pi settings discovery reads `settings.json` `skills` entries and resolves them
-relative to the declaring settings file. Hooks, plugins, packages, and custom
-agents are documented/native-only and are not synchronized.
+relative to the declaring settings file. Native custom agents have a separate,
+opt-in synchronization path for Claude, Copilot, and Gemini. Hooks, plugins,
+packages, and agents remain separate from standard skills.
 
 ## Executive Summary
 
@@ -52,10 +53,10 @@ agents are documented/native-only and are not synchronized.
 - Pi adds a useful middle ground: prompt templates are first-class markdown
   artifacts, but their placeholder expansion and system-prompt layers are still
   not portable 1:1 to other CLIs.
-- Subagents/agents are not portable in a 1:1 way. Claude Code has explicit
-  `.claude/agents/*.md` files; Codex CLI has `AGENTS.md` instruction chaining,
-  not a matching subagent file model; Pi packages/extensions/themes are not
-  first-pass sync targets here.
+- Subagents/agents are not portable in a 1:1 way. SkillSync supports explicit,
+  lossy native-agent mappings among Claude, Copilot, and Gemini. Codex CLI has
+  `AGENTS.md` instruction chaining, Cursor has aggregate modes, and Pi has no
+  matching agent file model. These three platforms are unsupported targets.
 - The unified `model.Skill` type is intentionally transport-first.
   Command-like content can ride along as `Type=prompt`, but that does not
   create a native Codex or Pi runtime equivalent.
@@ -77,7 +78,7 @@ SkillSync uses three portability classes in the docs and transport model:
 |---|---|---|
 | Portable | The destination can usually keep both the content shape and the core author intent with limited adaptation. | `SKILL.md` skill body, shared skill directories |
 | Partially portable | The content can move, but runtime behavior, invocation, precedence, or interpolation semantics change. | Commands/prompts, `AGENTS.md`/`CLAUDE.md`, tool restrictions |
-| Non-portable | The source behavior depends on a platform-specific runtime surface that has no direct equivalent. | Claude subagents, plugin/package provenance, Pi system-prompt replacement semantics |
+| Non-portable | The source behavior depends on a platform-specific runtime surface that has no direct equivalent. | Unmapped agent behavior, plugin/package provenance, Pi system-prompt replacement semantics |
 
 The rest of this note uses those labels deliberately:
 
@@ -109,7 +110,7 @@ The machine-readable source of truth for this status table is
 |---|---|---|---|---|
 | `SKILL.md` skill | Native, first-class | Native, first-class | Native, first-class | High for core skill content; medium for advanced fields |
 | Slash command / prompt | Native `.claude/commands/*.md` | Not a first-class supported target in this repo; `~/.codex/prompts` is deprecated/unsupported here | Native `.pi/prompts/*.md` templates | Low to medium as content; low for behavior |
-| Subagent / agent | Native `.claude/agents/*.md` | No matching file model | No first-pass sync target | None to low |
+| Subagent / agent | Native `.claude/agents/*.md`; explicit mappings to Copilot or Gemini | No matching file model | No matching file model | Low; content and common fields only |
 | Always-on instructions | `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` + `SYSTEM.md` / `APPEND_SYSTEM.md` | Medium, but not behaviorally identical |
 | Plugin / package-installed content | Native Claude plugin scope | No equivalent plugin provenance | Packages/extensions/themes exist but are not first-pass sync targets | Low, content-only copy |
 
