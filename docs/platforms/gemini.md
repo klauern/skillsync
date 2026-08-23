@@ -491,6 +491,12 @@ emergency block.
 Specialized agents operating within a session, defined as markdown files with
 YAML frontmatter.
 
+SkillSync treats these as native custom agents, separate from standard skills.
+The canonical repository destination is `.gemini/agents/<name>.md`. Discovery
+and writes are opt-in and require `native-config` trust. Explicit mappings to
+Claude or Copilot preserve common fields and warn about Gemini-only runtime
+fields. The target runtime still requires `experimental.enableAgents: true`.
+
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Unique slug identifier |

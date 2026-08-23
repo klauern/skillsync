@@ -74,9 +74,8 @@ structure using:
   portable
 
 This is a transport model, not a claim of runtime parity. SkillSync does not
-introduce separate first-class `command` or `agent` entities for Codex, and it
-does not imply that Codex can reproduce Claude command triggers or subagent
-behavior natively.
+introduce first-class `command` or `agent` entities for Codex, and it does not
+imply that Codex can reproduce Claude command triggers or subagent behavior.
 
 ## Portability Boundaries
 
@@ -86,8 +85,8 @@ The architecture docs use the same portability classes as the platform docs:
   shared Agent Skills subset.
 - **Partially portable**: prompt/command artifacts and always-on instruction
   files, where content survives but runtime semantics differ by platform.
-- **Non-portable**: agent/subagent definitions, plugin/package provenance, and
-  other runtime-owned behavior with no common cross-platform file model.
+- **Non-portable**: unmapped agent/subagent behavior, plugin/package provenance,
+  and other runtime-owned behavior with no common cross-platform file model.
 
 Native plugins, packages, and extensions use `model.NativePackage`. They do not
 use `model.Skill`. The `internal/native` package keeps discovery and writes off
@@ -95,11 +94,20 @@ by default. A caller must enable native synchronization, allow the
 `native-config` trust category, and register an exact identity mapping before a
 cross-harness write. A matching name does not imply portability.
 
+Native custom agents use `model.CustomAgent` and `internal/agents`. They do not
+use `model.Skill`. Discovery and writes are off by default. Claude, Copilot,
+and Gemini support native Markdown codecs. Cross-harness writes require
+`native-config` trust and an exact directional mapping. The planner removes
+source-only native fields, reports the loss boundary, validates the full batch,
+and calls the writer once. Codex, Cursor, and Pi are explicit unsupported
+targets because their instruction, mode, and prompt surfaces are not native
+agent equivalents.
+
 This means the unified model is intentionally conservative:
 
 - it preserves content and source metadata for lossy conversions
 - it does not claim that `Type=prompt` recreates native slash-command behavior
-- it does not model agent files as a portable top-level runtime concept
+- it models native agent files separately and does not claim portable runtime parity
 
 ### Discovery
 
