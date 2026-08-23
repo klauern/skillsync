@@ -35,11 +35,11 @@ type Resolution struct {
 }
 
 var definitions = []Definition{
-	{Platform: model.ClaudeCode, DisplayName: "Claude Code", RepoRoots: []string{".claude/skills"}, UserRoots: []string{"~/.claude/skills"}, DiscoveryRoots: []string{".claude/skills", "~/.claude/skills"}, ArtifactSurfaces: []string{"skills", "commands"}, FactoryKey: "claude"},
+	{Platform: model.ClaudeCode, DisplayName: "Claude Code", RepoRoots: []string{".claude/skills"}, UserRoots: []string{"~/.claude/skills"}, DiscoveryRoots: []string{".claude/skills", "~/.claude/skills"}, ArtifactSurfaces: []string{"skills", "commands", "agents"}, FactoryKey: "claude"},
 	{Platform: model.Codex, DisplayName: "Codex", RepoRoots: []string{".agents/skills"}, UserRoots: []string{"~/.agents/skills"}, DiscoveryRoots: []string{".agents/skills", "~/.agents/skills", ".codex/skills", "~/.codex/skills", "/etc/codex/skills"}, ArtifactSurfaces: []string{"skills"}, FactoryKey: "codex"},
 	{Platform: model.Cursor, DisplayName: "Cursor", RepoRoots: []string{".cursor/skills"}, UserRoots: []string{"~/.cursor/skills"}, DiscoveryRoots: []string{".cursor/skills", "~/.cursor/skills", ".agents/skills", "~/.agents/skills", ".claude/skills", "~/.claude/skills", ".codex/skills", "~/.codex/skills"}, ArtifactSurfaces: []string{"skills", "commands"}, FactoryKey: "cursor"},
 	{Platform: model.Copilot, DisplayName: "Copilot", RepoRoots: []string{".github/skills"}, UserRoots: []string{"~/.copilot/skills"}, DiscoveryRoots: []string{".github/skills", "~/.copilot/skills", ".agents/skills", ".claude/skills"}, ArtifactSurfaces: []string{"skills", "agents", "prompts"}, FactoryKey: "copilot"},
-	{Platform: model.Gemini, DisplayName: "Gemini CLI", RepoRoots: []string{".gemini/skills"}, UserRoots: []string{"~/.gemini/skills"}, DiscoveryRoots: []string{".agents/skills", "~/.agents/skills", ".gemini/skills", "~/.gemini/skills"}, ArtifactSurfaces: []string{"skills", "commands"}, FactoryKey: "gemini"},
+	{Platform: model.Gemini, DisplayName: "Gemini CLI", RepoRoots: []string{".gemini/skills"}, UserRoots: []string{"~/.gemini/skills"}, DiscoveryRoots: []string{".agents/skills", "~/.agents/skills", ".gemini/skills", "~/.gemini/skills"}, ArtifactSurfaces: []string{"skills", "commands", "agents"}, FactoryKey: "gemini"},
 	{Platform: model.Pi, DisplayName: "Pi", Aliases: []Alias{{"pi.dev", true}, {"pi-dev", true}, {"pidev", true}, {"pi-agent", true}, {"piagent", true}}, RepoRoots: []string{".pi/skills"}, UserRoots: []string{"~/.pi/agent/skills"}, DiscoveryRoots: []string{".pi/skills", "~/.pi/agent/skills", ".agents/skills", "~/.agents/skills"}, ArtifactSurfaces: []string{"skills", "prompts", "settings"}, FactoryKey: "pi"},
 }
 
