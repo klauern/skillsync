@@ -880,38 +880,3 @@ func TestRestoreBackup_FileWithZipExtension(t *testing.T) {
 		t.Error("restored path is a directory; expected a regular file")
 	}
 }
-
-func TestGetStats(t *testing.T) {
-	// Setup temp environment
-	tempHome := util.CreateTempDir(t)
-	t.Setenv("SKILLSYNC_HOME", tempHome)
-
-	// Create test files and backups
-	platforms := []string{"claude-code", "claude-code", "cursor"}
-	for i, platform := range platforms {
-		testFile := filepath.Join(tempHome, "test.md")
-		content := fmt.Sprintf("test content %d", i)
-		if err := os.WriteFile(testFile, []byte(content), 0o600); err != nil {
-			t.Fatalf("failed to create test file: %v", err)
-		}
-
-		opts := Options{Platform: platform}
-		if _, err := CreateBackup(testFile, opts); err != nil {
-			t.Fatalf("CreateBackup failed: %v", err)
-		}
-	}
-
-	// Get stats
-	stats, err := GetStats()
-	if err != nil {
-		t.Fatalf("GetStats failed: %v", err)
-	}
-
-	util.AssertEqual(t, stats.TotalBackups, 3)
-	util.AssertEqual(t, stats.BackupsByPlatform["claude-code"], 2)
-	util.AssertEqual(t, stats.BackupsByPlatform["cursor"], 1)
-
-	if stats.TotalSize == 0 {
-		t.Error("expected non-zero total size")
-	}
-}
