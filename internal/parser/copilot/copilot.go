@@ -212,13 +212,13 @@ func (p *Parser) parseArtifactFile(
 			return model.Skill{}, fmt.Errorf("failed to parse frontmatter in %q: %w", filePath, err)
 		}
 
-		if name := extractString(fm, "name"); name != "" {
+		if name := parser.ExtractString(fm, "name"); name != "" {
 			skill.Name = name
 		}
-		skill.Description = extractString(fm, "description")
+		skill.Description = parser.ExtractString(fm, "description")
 		skill.Tools = extractTools(fm, "tools")
 
-		if typeStr := extractString(fm, "type"); typeStr != "" {
+		if typeStr := parser.ExtractString(fm, "type"); typeStr != "" {
 			if parsed, err := model.ParseSkillType(typeStr); err == nil {
 				skill.Type = parsed
 			}
@@ -266,15 +266,6 @@ func artifactStem(filePath string) string {
 	stem = strings.TrimSuffix(stem, ".agent")
 	stem = strings.TrimSuffix(stem, ".instructions")
 	return stem
-}
-
-func extractString(fm map[string]any, key string) string {
-	if val, ok := fm[key]; ok {
-		if strVal, ok := val.(string); ok {
-			return strVal
-		}
-	}
-	return ""
 }
 
 func extractTools(fm map[string]any, key string) []string {

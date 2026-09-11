@@ -267,13 +267,13 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	}
 
 	// Extract name
-	if nameStr := extractString(fm, "name"); nameStr != "" {
+	if nameStr := parser.ExtractString(fm, "name"); nameStr != "" {
 		f.name = nameStr
 		f.hasExplicitName = true
 	}
 
 	// Extract description
-	f.description = extractString(fm, "description")
+	f.description = parser.ExtractString(fm, "description")
 
 	// Extract tool allowlist.
 	// Claude command files commonly use `allowed-tools`, while skills use `tools`.
@@ -292,14 +292,14 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	}
 
 	// Extract type and trigger (for command/prompt artifacts).
-	if typeStr := extractString(fm, "type"); typeStr != "" {
+	if typeStr := parser.ExtractString(fm, "type"); typeStr != "" {
 		parsedType, err := model.ParseSkillType(typeStr)
 		if err != nil {
 			return f, fmt.Errorf("parse skill type %q: %w", typeStr, err)
 		}
 		f.skillType = parsedType
 	}
-	f.trigger = extractString(fm, "trigger")
+	f.trigger = parser.ExtractString(fm, "trigger")
 	if f.trigger != "" {
 		f.commandMetadataHint = true
 	}
@@ -316,15 +316,6 @@ func extractFrontmatterFields(fm map[string]any) (frontmatterFields, error) {
 	}
 
 	return f, nil
-}
-
-func extractString(fm map[string]any, key string) string {
-	if val, ok := fm[key]; ok {
-		if strVal, ok := val.(string); ok {
-			return strVal
-		}
-	}
-	return ""
 }
 
 func extractTools(fm map[string]any, key string) []string {
