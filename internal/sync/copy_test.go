@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/trust"
 )
 
 // TestDetectSourceType verifies detection of file, directory, and symlink source types.
@@ -597,6 +598,9 @@ func TestSymlinkPreservation(t *testing.T) {
 		DryRun:     false,
 		Strategy:   StrategyOverwrite,
 		TargetPath: targetDir,
+		TrustPolicy: trust.Policy{Allowed: map[trust.Risk]bool{
+			trust.RiskExternalReference: true,
+		}},
 	}
 
 	result, err := s.SyncWithSkills([]model.Skill{sourceSkill}, model.Codex, opts)
