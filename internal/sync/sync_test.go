@@ -336,6 +336,45 @@ Nested content.`
 	}
 }
 
+func TestSynchronizer_SyncWithSkills_BlocksNestedSkillBeforeTargetMutation(t *testing.T) {
+	s := New()
+	sourceDir := t.TempDir()
+	parentDir := filepath.Join(sourceDir, "parent")
+	nestedDir := filepath.Join(parentDir, "skills", "blocked")
+	if err := os.MkdirAll(nestedDir, 0o750); err != nil {
+		t.Fatalf("failed to create nested skill directory: %v", err)
+	}
+	targetDir := t.TempDir()
+	marker := filepath.Join(targetDir, "existing.txt")
+	if err := os.WriteFile(marker, []byte("preserve"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.SyncWithSkills([]model.Skill{
+		{Name: "parent", Path: parentDir},
+		{Name: "blocked", Path: nestedDir, Metadata: map[string]string{"hooks": "pre-run"}},
+	}, model.Codex, Options{Strategy: StrategyOverwrite, TargetPath: targetDir})
+	if err != nil {
+		t.Fatalf("SyncWithSkills failed: %v", err)
+	}
+	if result.Success() {
+		t.Fatal("expected nested trust failure")
+	}
+	if len(result.Failed()) != 1 || result.Failed()[0].Skill.Name != "blocked" {
+		t.Fatalf("expected blocked nested skill result, got %+v", result.Skills)
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, "parent")); !os.IsNotExist(err) {
+		t.Fatalf("target was mutated despite nested trust failure: %v", err)
+	}
+	content, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "preserve" {
+		t.Fatalf("existing target content changed: %q", content)
+	}
+}
+
 func TestSynchronizer_SyncWithSkills_SkipsNestedSkillDuplicates(t *testing.T) {
 	s := New()
 	sourceDir := t.TempDir()

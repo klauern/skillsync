@@ -159,6 +159,14 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		return result, nil // Nothing to sync
 	}
 
+	// Evaluate trust on every parsed skill before filtering nested duplicates.
+	// A nested skill may carry blocked metadata, scripts, or references even
+	// when its parent directory will be copied as the canonical artifact.
+	if blocked := preflightTrust(sourceSkills, opts.TrustPolicy); len(blocked) > 0 {
+		result.Skills = append(result.Skills, blocked...)
+		return result, nil
+	}
+
 	// Skip nested skills when a parent directory/symlink skill is also present.
 	// The parent copy already includes nested content, so syncing both creates
 	// duplicate top-level artifacts.
@@ -179,11 +187,6 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		})
 		return result, nil
 	}
-	if blocked := preflightTrust(sourceSkills, opts.TrustPolicy); len(blocked) > 0 {
-		result.Skills = append(result.Skills, blocked...)
-		return result, nil
-	}
-
 	// Get target path
 	targetPath := opts.TargetPath
 	if targetPath == "" {
@@ -940,6 +943,14 @@ func (s *Synchronizer) SyncWithSkills(
 		result.Strategy = StrategyOverwrite
 	}
 
+	// Evaluate trust on every provided skill before filtering nested duplicates.
+	// A nested skill may carry blocked metadata, scripts, or references even
+	// when its parent directory will be copied as the canonical artifact.
+	if blocked := preflightTrust(skills, opts.TrustPolicy); len(blocked) > 0 {
+		result.Skills = append(result.Skills, blocked...)
+		return result, nil
+	}
+
 	// Skip nested skills when a parent directory/symlink skill is also present.
 	// The parent copy already includes nested content, so syncing both creates
 	// duplicate top-level artifacts.
@@ -960,11 +971,6 @@ func (s *Synchronizer) SyncWithSkills(
 		})
 		return result, nil
 	}
-	if blocked := preflightTrust(skills, opts.TrustPolicy); len(blocked) > 0 {
-		result.Skills = append(result.Skills, blocked...)
-		return result, nil
-	}
-
 	if err := s.emitProgress(opts, ProgressEvent{
 		Type:        ProgressEventStart,
 		TotalSkills: len(skills),

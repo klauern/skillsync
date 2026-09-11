@@ -1260,6 +1260,14 @@ func runSyncTUI() error {
 		return fmt.Errorf("sync failed: %w", err)
 	}
 
+	// A failed result (including trust-policy preflight failures) must be
+	// reported before success or orphan cleanup. Never clean up orphans after
+	// a sync that did not complete successfully.
+	if !result.Success() {
+		displaySyncResults(result)
+		return summarizeSyncFailures(result, "sync completed with errors")
+	}
+
 	// Display results
 	changed := result.TotalChanged()
 	ui.Success(fmt.Sprintf("Synced %d skills from %s to %s", changed, sourcePlatform, targetPlatform))
