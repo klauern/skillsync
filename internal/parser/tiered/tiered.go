@@ -80,7 +80,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	for _, sp := range searchPaths {
 		// Skip non-existent paths
-		if _, err := os.Stat(sp.Path); os.IsNotExist(err) {
+		if p.skipMissingPath(sp.Path) {
 			logging.Debug(
 				"tiered lookup: path not found",
 				logging.Platform(string(p.platform)),
@@ -203,7 +203,7 @@ func (p *Parser) ParseWithScopeFilter(scopes []model.SkillScope) ([]model.Skill,
 	var allSkills []model.Skill
 
 	for _, sp := range filteredPaths {
-		if _, err := os.Stat(sp.Path); os.IsNotExist(err) {
+		if p.skipMissingPath(sp.Path) {
 			continue
 		}
 
@@ -295,7 +295,7 @@ func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
 		var allSkills []model.Skill
 		seen := make(map[string]bool)
 		for _, path := range scopePaths {
-			if _, err := os.Stat(path); os.IsNotExist(err) {
+			if p.skipMissingPath(path) {
 				continue
 			}
 
@@ -333,7 +333,7 @@ func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
 	seen := make(map[string]bool)
 
 	for _, path := range scopePaths {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+		if p.skipMissingPath(path) {
 			continue
 		}
 
@@ -365,6 +365,16 @@ func (p *Parser) ParseFromScope(scope model.SkillScope) ([]model.Skill, error) {
 // Platform returns the platform this parser handles.
 func (p *Parser) Platform() model.Platform {
 	return p.platform
+}
+
+func (p *Parser) skipMissingPath(path string) bool {
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		return false
+	}
+	// Codex and Copilot parsers derive native configuration/instruction roots
+	// from their canonical skills roots, so sibling artifacts can exist even
+	// when the skills directory itself does not.
+	return p.platform != model.Codex && p.platform != model.Copilot
 }
 
 // DefaultPath returns the user-level skills path for the platform.

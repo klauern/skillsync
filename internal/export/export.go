@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -137,7 +136,7 @@ type exportSkill struct {
 	Scope                  string            `json:"scope,omitempty" yaml:"scope,omitempty"`
 	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty" yaml:"disable_model_invocation,omitempty"`
 	License                string            `json:"license,omitempty" yaml:"license,omitempty"`
-	Compatibility          map[string]string `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
+	Compatibility          string            `json:"compatibility,omitempty" yaml:"compatibility,omitempty"`
 	Scripts                []string          `json:"scripts,omitempty" yaml:"scripts,omitempty"`
 	References             []string          `json:"references,omitempty" yaml:"references,omitempty"`
 	Assets                 []string          `json:"assets,omitempty" yaml:"assets,omitempty"`
@@ -267,17 +266,8 @@ func (e *Exporter) formatMarkdownSkill(skill model.Skill) string {
 	if skill.License != "" {
 		fmt.Fprintf(&sb, "| License | %s |\n", skill.License)
 	}
-	if len(skill.Compatibility) > 0 {
-		keys := make([]string, 0, len(skill.Compatibility))
-		for k := range skill.Compatibility {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		var parts []string
-		for _, k := range keys {
-			parts = append(parts, k+": "+skill.Compatibility[k])
-		}
-		fmt.Fprintf(&sb, "| Compatibility | %s |\n", strings.Join(parts, ", "))
+	if skill.Compatibility != "" {
+		fmt.Fprintf(&sb, "| Compatibility | %s |\n", skill.Compatibility)
 	}
 	if len(skill.Scripts) > 0 {
 		fmt.Fprintf(&sb, "| Scripts | %s |\n", strings.Join(skill.Scripts, ", "))

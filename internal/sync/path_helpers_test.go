@@ -137,41 +137,41 @@ func TestShouldLinkClaudeDirectorySkill(t *testing.T) {
 		target model.Platform
 		want   bool
 	}{
-		"Claude directory skill to Codex should link": {
+		"Claude directory skill to Codex should not link": {
 			skill: model.Skill{
 				Name:     "my-skill",
 				Platform: model.ClaudeCode,
 				Path:     skillMdPath,
 			},
 			target: model.Codex,
-			want:   true,
+			want:   false,
 		},
-		"Claude directory skill to Cursor should link": {
+		"Claude directory skill to Cursor should not link": {
 			skill: model.Skill{
 				Name:     "my-skill",
 				Platform: model.ClaudeCode,
 				Path:     skillMdPath,
 			},
 			target: model.Cursor,
-			want:   true,
+			want:   false,
 		},
-		"Claude directory skill to PiDev should link": {
+		"Claude directory skill to Pi should not link": {
 			skill: model.Skill{
 				Name:     "my-skill",
 				Platform: model.ClaudeCode,
 				Path:     skillMdPath,
 			},
-			target: model.PiDev,
-			want:   true,
+			target: model.Pi,
+			want:   false,
 		},
-		"Claude directory skill to ClaudeCode should NOT link": {
+		"Claude directory skill to ClaudeCode should link": {
 			skill: model.Skill{
 				Name:     "my-skill",
 				Platform: model.ClaudeCode,
 				Path:     skillMdPath,
 			},
 			target: model.ClaudeCode,
-			want:   false,
+			want:   true,
 		},
 		"Claude directory skill to Gemini should NOT link": {
 			skill: model.Skill{

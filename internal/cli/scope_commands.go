@@ -14,8 +14,10 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser/tiered"
+	"github.com/klauern/skillsync/internal/sync"
 	"github.com/klauern/skillsync/internal/ui"
 	"github.com/klauern/skillsync/internal/util"
+	"github.com/klauern/skillsync/internal/validation"
 )
 
 func promoteCommand() *cli.Command {
@@ -38,7 +40,7 @@ func promoteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to promote from (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Platform to promote from (claude-code, codex, cursor, copilot, gemini, pi)",
 			},
 			&cli.StringFlag{
 				Name:  "from",
@@ -101,7 +103,7 @@ func demoteCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to demote from (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Platform to demote from (claude-code, codex, cursor, copilot, gemini, pi)",
 			},
 			&cli.StringFlag{
 				Name:  "from",
@@ -183,7 +185,7 @@ func scopeListCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Filter by platform (claude-code, cursor, codex, pi.dev)",
+				Usage:   "Filter by platform (claude-code, codex, cursor, copilot, gemini, pi)",
 			},
 			&cli.BoolFlag{
 				Name:  "all",
@@ -232,7 +234,7 @@ func scopePruneCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "platform",
 				Aliases: []string{"p"},
-				Usage:   "Platform to prune (claude-code, cursor, codex, pi.dev). Required.",
+				Usage:   "Platform to prune (claude-code, codex, cursor, copilot, gemini, pi). Required.",
 			},
 			&cli.StringFlag{
 				Name:  "scope",
@@ -335,6 +337,9 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 		if skill == nil {
 			continue
 		}
+		if err := validateScopeMoveSkill(*skill); err != nil {
+			return err
+		}
 
 		// Determine target name
 		targetName := skillName
@@ -377,7 +382,7 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 			return nil
 		}
 
-		if err := copySkillFile(skill.Path, targetPath); err != nil {
+		if err := sync.CopySkillBundle(*skill, targetPath); err != nil {
 			return err
 		}
 
@@ -385,7 +390,7 @@ func runScopeMove(cmd *cli.Command, skillName string, isPromotion bool) error {
 
 		// Remove source if requested
 		if removeSource {
-			if err := os.Remove(skill.Path); err != nil {
+			if err := sync.RemoveSkillBundle(*skill); err != nil {
 				return fmt.Errorf("failed to remove source skill: %w", err)
 			}
 			fmt.Printf("✓ Removed source skill from %s\n", skill.Path)
@@ -768,6 +773,9 @@ func findSkillInScope(platform model.Platform, skillName string, scope model.Ski
 
 // getSkillPathForScope returns the path where a skill should be written for a given scope.
 func getSkillPathForScope(platform model.Platform, scope model.SkillScope, skillName string) (string, error) {
+	if err := validateScopeTargetName(skillName); err != nil {
+		return "", err
+	}
 	var basePath string
 
 	switch scope {
@@ -784,14 +792,35 @@ func getSkillPathForScope(platform model.Platform, scope model.SkillScope, skill
 		return "", fmt.Errorf("scope %q is not writable", scope)
 	}
 
-	// Construct a writable target path that the destination platform parser
-	// will discover again within the selected scope.
-	switch platform {
-	case model.Copilot:
-		return filepath.Join(basePath, "agents", skillName+".agent.md"), nil
-	case model.Gemini:
-		return filepath.Join(basePath, "skills", skillName, "SKILL.md"), nil
-	}
-
+	// Scope moves operate on standard skill bundles. Native agent/prompt
+	// transports use their own commands and are never inferred from a skill.
 	return filepath.Join(basePath, skillName, "SKILL.md"), nil
+}
+
+func validateScopeTargetName(name string) error {
+	probe := model.Skill{
+		Name:        name,
+		Description: "scope move target",
+		Path:        filepath.Join(name, "SKILL.md"),
+	}
+	if issues := validation.ValidateSkillConformance(probe); len(issues) > 0 {
+		return fmt.Errorf("invalid target skill name %q: %s", name, issues[0].Message)
+	}
+	return nil
+}
+
+func validateScopeMoveSkill(skill model.Skill) error {
+	if (skill.Type != "" && skill.Type != model.SkillTypeSkill) || skill.Metadata[model.MetadataKeyCopilotArtifact] != "" {
+		return fmt.Errorf("skill %q is a native runtime artifact; scope moves support only standard SKILL.md bundles", skill.Name)
+	}
+	if filepath.Base(skill.Path) != "SKILL.md" {
+		return fmt.Errorf("skill %q is not a canonical SKILL.md bundle", skill.Name)
+	}
+	if len(skill.ConformanceIssues) > 0 {
+		return fmt.Errorf("skill %q has Agent Skills conformance warnings and cannot be moved", skill.Name)
+	}
+	if filepath.Base(filepath.Dir(skill.Path)) != skill.Name {
+		return fmt.Errorf("skill %q does not match its bundle directory", skill.Name)
+	}
+	return nil
 }

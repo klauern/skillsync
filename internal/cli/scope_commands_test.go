@@ -307,7 +307,7 @@ func TestGetSkillPathForScope(t *testing.T) {
 			platform:   model.Codex,
 			scope:      model.ScopeRepo,
 			skillName:  "test-skill",
-			wantSuffix: filepath.Join(".codex", "skills", "test-skill", "SKILL.md"),
+			wantSuffix: filepath.Join(".agents", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
 		"user scope codex prefers agents": {
@@ -321,14 +321,14 @@ func TestGetSkillPathForScope(t *testing.T) {
 			platform:   model.Copilot,
 			scope:      model.ScopeRepo,
 			skillName:  "test-skill",
-			wantSuffix: filepath.Join(".github", "agents", "test-skill.agent.md"),
+			wantSuffix: filepath.Join(".github", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
 		"user scope copilot": {
 			platform:   model.Copilot,
 			scope:      model.ScopeUser,
 			skillName:  "test-skill",
-			wantSuffix: filepath.Join(".github", "agents", "test-skill.agent.md"),
+			wantSuffix: filepath.Join(".copilot", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
 		"repo scope gemini": {
@@ -345,18 +345,18 @@ func TestGetSkillPathForScope(t *testing.T) {
 			wantSuffix: filepath.Join(".gemini", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
-		"repo scope pi.dev": {
-			platform:   model.PiDev,
+		"repo scope pi": {
+			platform:   model.Pi,
 			scope:      model.ScopeRepo,
 			skillName:  "test-skill",
-			wantSuffix: filepath.Join(".agents", "skills", "test-skill", "SKILL.md"),
+			wantSuffix: filepath.Join(".pi", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
-		"user scope pi.dev": {
-			platform:   model.PiDev,
+		"user scope pi": {
+			platform:   model.Pi,
 			scope:      model.ScopeUser,
 			skillName:  "test-skill",
-			wantSuffix: filepath.Join(".agents", "skills", "test-skill", "SKILL.md"),
+			wantSuffix: filepath.Join(".pi", "agent", "skills", "test-skill", "SKILL.md"),
 			wantErr:    false,
 		},
 		"admin scope not writable": {
@@ -369,6 +369,12 @@ func TestGetSkillPathForScope(t *testing.T) {
 			platform:  model.Cursor,
 			scope:     model.ScopeSystem,
 			skillName: "my-skill",
+			wantErr:   true,
+		},
+		"rename traversal rejected": {
+			platform:  model.Codex,
+			scope:     model.ScopeRepo,
+			skillName: "../outside",
 			wantErr:   true,
 		},
 	}
@@ -400,8 +406,7 @@ func TestPromoteDemoteCommand_AllPlatforms(t *testing.T) {
 		{name: "codex", platformArg: "codex", platform: model.Codex},
 		{name: "copilot", platformArg: "copilot", platform: model.Copilot},
 		{name: "gemini", platformArg: "gemini", platform: model.Gemini},
-		{name: "pi.dev", platformArg: "pi.dev", platform: model.PiDev},
-		{name: "pi-agent alias", platformArg: "pi-agent", platform: model.PiDev},
+		{name: "pi", platformArg: "pi", platform: model.Pi},
 	}
 
 	for _, tt := range tests {
@@ -435,7 +440,7 @@ func TestPromoteDemoteCommand_AllPlatforms(t *testing.T) {
 			promoteName := "repo-promote"
 			demoteName := "user-demote"
 
-			promoteSource := writeScopeMoveFixture(t, tt.platform, model.ScopeRepo, repoRoot, home, promoteName)
+			promoteSource := writeScopeMoveFixture(t, tt.platform, model.ScopeRepo, repoRoot, promoteName)
 			promoteTarget, err := getSkillPathForScope(tt.platform, model.ScopeUser, promoteName)
 			if err != nil {
 				t.Fatalf("failed to determine promote target: %v", err)
@@ -449,7 +454,7 @@ func TestPromoteDemoteCommand_AllPlatforms(t *testing.T) {
 			assertFileHasContent(t, promoteTarget, promoteName)
 			assertFileHasContent(t, promoteSource, promoteName)
 
-			demoteSource := writeScopeMoveFixture(t, tt.platform, model.ScopeUser, repoRoot, home, demoteName)
+			demoteSource := writeScopeMoveFixture(t, tt.platform, model.ScopeUser, repoRoot, demoteName)
 			demoteTarget, err := getSkillPathForScope(tt.platform, model.ScopeRepo, demoteName)
 			if err != nil {
 				t.Fatalf("failed to determine demote target: %v", err)
@@ -465,36 +470,43 @@ func TestPromoteDemoteCommand_AllPlatforms(t *testing.T) {
 	}
 }
 
+func TestValidateScopeMoveSkill(t *testing.T) {
+	valid := model.Skill{
+		Name:     "bundle",
+		Path:     filepath.Join(t.TempDir(), "bundle", "SKILL.md"),
+		Type:     model.SkillTypeSkill,
+		Metadata: map[string]string{},
+	}
+	if err := validateScopeMoveSkill(valid); err != nil {
+		t.Fatalf("valid bundle rejected: %v", err)
+	}
+
+	native := valid
+	native.Metadata = map[string]string{model.MetadataKeyCopilotArtifact: model.CopilotArtifactAgent}
+	if err := validateScopeMoveSkill(native); err == nil {
+		t.Fatal("native Copilot artifact should be rejected")
+	}
+
+	invalid := valid
+	invalid.ConformanceIssues = []model.ConformanceIssue{{Code: "name.directory", Severity: "warning"}}
+	if err := validateScopeMoveSkill(invalid); err == nil {
+		t.Fatal("conformance-invalid bundle should be rejected")
+	}
+}
+
 func writeScopeMoveFixture(
 	t *testing.T,
 	platform model.Platform,
 	scope model.SkillScope,
-	repoRoot, home, skillName string,
+	repoRoot, skillName string,
 ) string {
 	t.Helper()
 
-	var targetPath string
-
-	switch platform {
-	case model.Copilot:
-		basePath := filepath.Join(home, ".github")
-		if scope == model.ScopeRepo {
-			basePath = filepath.Join(repoRoot, ".github")
-		}
-		targetPath = filepath.Join(basePath, "agents", skillName+".agent.md")
-	case model.Gemini:
-		basePath := filepath.Join(home, ".gemini")
-		if scope == model.ScopeRepo {
-			basePath = filepath.Join(repoRoot, ".gemini")
-		}
-		targetPath = filepath.Join(basePath, "skills", skillName, "SKILL.md")
-	default:
-		basePath := util.PlatformSkillsPath(platform)
-		if scope == model.ScopeRepo {
-			basePath = util.RepoSkillsPath(platform, repoRoot)
-		}
-		targetPath = filepath.Join(basePath, skillName, "SKILL.md")
+	basePath := util.PlatformSkillsPath(platform)
+	if scope == model.ScopeRepo {
+		basePath = util.RepoSkillsPath(platform, repoRoot)
 	}
+	targetPath := filepath.Join(basePath, skillName, "SKILL.md")
 
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o750); err != nil {
 		t.Fatalf("failed to create fixture dir for %s: %v", targetPath, err)

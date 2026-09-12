@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/klauern/skillsync/internal/harness"
 	"github.com/klauern/skillsync/internal/model"
 )
 
@@ -28,66 +29,49 @@ func ClaudeCodeSkillsPath() string {
 	return filepath.Join(HomeDir(), ".claude", "skills")
 }
 
-// CopilotSkillsPath returns the preferred GitHub Copilot workspace root.
+// CopilotSkillsPath returns the canonical GitHub Copilot user skills root.
 func CopilotSkillsPath() string {
-	return filepath.Join(HomeDir(), ".github")
+	return filepath.Join(HomeDir(), ".copilot", "skills")
 }
 
-// piDevRootCandidates returns the preferred Pi.dev config roots in priority order.
-func piDevRootCandidates(home string) []string {
-	return []string{
-		filepath.Join(home, ".agents"),
-		filepath.Join(home, ".pi", "agent"),
-	}
+// PiSkillsPath returns the canonical Pi user skills root.
+func PiSkillsPath() string {
+	return filepath.Join(HomeDir(), ".pi", "agent", "skills")
 }
 
-// piDevProjectRootCandidates returns the preferred Pi.dev project roots in priority order.
-func piDevProjectRootCandidates(projectDir string) []string {
-	return []string{
-		filepath.Join(projectDir, ".agents"),
-		filepath.Join(projectDir, ".pi"),
-	}
+// PiPromptsPath returns the canonical Pi user prompts root.
+func PiPromptsPath() string {
+	return filepath.Join(HomeDir(), ".pi", "agent", "prompts")
 }
 
-// firstExistingDir returns the first directory that exists from the provided candidates.
-// If none exist, it returns the first candidate.
-func firstExistingDir(candidates ...string) string {
-	for _, candidate := range candidates {
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
-		}
-	}
-	if len(candidates) > 0 {
-		return candidates[len(candidates)-1]
-	}
-	return ""
-}
-
-// PiDevSkillsPath returns the preferred Pi.dev user-level skills directory.
-// When ~/.agents exists, it is preferred over ~/.pi/agent to avoid duplicate sync roots.
+// PiDevSkillsPath is a deprecated source-compatible alias for PiSkillsPath.
 func PiDevSkillsPath() string {
-	root := firstExistingDir(piDevRootCandidates(HomeDir())...)
-	return filepath.Join(root, "skills")
+	return PiSkillsPath()
 }
 
-// PiDevPromptsPath returns the preferred Pi.dev user-level prompts directory.
-// It follows the same root selection as PiDevSkillsPath.
+// PiDevPromptsPath is a deprecated source-compatible alias for PiPromptsPath.
 func PiDevPromptsPath() string {
-	root := firstExistingDir(piDevRootCandidates(HomeDir())...)
-	return filepath.Join(root, "prompts")
+	return PiPromptsPath()
 }
 
-// PiDevRepoSkillsPath returns the preferred Pi.dev repo-level skills directory.
-// When .agents exists, it is preferred over .pi to avoid duplicate sync roots.
+// PiRepoSkillsPath returns the canonical Pi repository skills root.
+func PiRepoSkillsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".pi", "skills")
+}
+
+// PiDevRepoSkillsPath is a deprecated source-compatible alias for PiRepoSkillsPath.
 func PiDevRepoSkillsPath(projectDir string) string {
-	root := firstExistingDir(piDevProjectRootCandidates(projectDir)...)
-	return filepath.Join(root, "skills")
+	return PiRepoSkillsPath(projectDir)
 }
 
-// PiDevRepoPromptsPath returns the preferred Pi.dev repo-level prompts directory.
+// PiRepoPromptsPath returns the canonical Pi repository prompts root.
+func PiRepoPromptsPath(projectDir string) string {
+	return filepath.Join(projectDir, ".pi", "prompts")
+}
+
+// PiDevRepoPromptsPath is a deprecated source-compatible alias for PiRepoPromptsPath.
 func PiDevRepoPromptsPath(projectDir string) string {
-	root := firstExistingDir(piDevProjectRootCandidates(projectDir)...)
-	return filepath.Join(root, "prompts")
+	return PiRepoPromptsPath(projectDir)
 }
 
 // CursorSkillsPath returns the default Cursor skills directory (global)
@@ -106,24 +90,14 @@ func CursorProjectCommandsPath(projectDir string) string {
 	return filepath.Join(projectDir, ".cursor", "commands")
 }
 
-// CodexConfigPath returns the Codex skills directory for a project
+// CodexConfigPath returns the canonical Codex skills directory for a project.
 func CodexConfigPath(projectDir string) string {
-	return filepath.Join(projectDir, ".codex", "skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
-// codexUserRootCandidates returns the preferred Codex user roots in priority order.
-func codexUserRootCandidates(home string) []string {
-	return []string{
-		filepath.Join(home, ".agents"),
-		filepath.Join(home, ".codex"),
-	}
-}
-
-// CodexSkillsPath returns the preferred Codex skills directory (user-level).
-// When ~/.agents exists, it is preferred over ~/.codex to avoid duplicate sync roots.
+// CodexSkillsPath returns the canonical Codex user skills directory.
 func CodexSkillsPath() string {
-	root := firstExistingDir(codexUserRootCandidates(HomeDir())...)
-	return filepath.Join(root, "skills")
+	return filepath.Join(HomeDir(), ".agents", "skills")
 }
 
 // GeminiPath returns the default Gemini CLI config directory (user-level).
@@ -134,6 +108,16 @@ func GeminiPath() string {
 // GeminiRepoPath returns the Gemini CLI config directory for a project.
 func GeminiRepoPath(projectDir string) string {
 	return filepath.Join(projectDir, ".gemini")
+}
+
+// GeminiSkillsPath returns the canonical Gemini CLI user skills root.
+func GeminiSkillsPath() string {
+	return filepath.Join(GeminiPath(), "skills")
+}
+
+// GeminiRepoSkillsPath returns the canonical Gemini CLI repository skills root.
+func GeminiRepoSkillsPath(projectDir string) string {
+	return filepath.Join(GeminiRepoPath(projectDir), "skills")
 }
 
 // SkillsyncConfigPath returns the skillsync configuration directory
@@ -206,114 +190,67 @@ type TieredPathConfig struct {
 // This enables cascading skill discovery where repo skills override user skills, etc.
 func GetTieredPaths(cfg TieredPathConfig) map[model.SkillScope][]string {
 	paths := make(map[model.SkillScope][]string)
-
-	platformDir := platformDirName(cfg.Platform)
-
-	switch cfg.Platform {
-	case model.Copilot:
-		if cfg.WorkingDir != "" {
-			cwdPath := filepath.Join(cfg.WorkingDir, ".github")
-			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
-
-			repoRoot := cfg.RepoRoot
-			if repoRoot == "" {
-				repoRoot = GetRepoRoot(cfg.WorkingDir)
-			}
-			if repoRoot != "" && repoRoot != cfg.WorkingDir {
-				paths[model.ScopeRepo] = append(paths[model.ScopeRepo], filepath.Join(repoRoot, ".github"))
-			}
-		}
-
-		paths[model.ScopeUser] = []string{filepath.Join(HomeDir(), ".github")}
-
-		if cfg.AdminPath != "" {
-			paths[model.ScopeAdmin] = []string{cfg.AdminPath}
-		}
-
-		if cfg.SystemPath != "" {
-			paths[model.ScopeSystem] = []string{cfg.SystemPath}
-		}
-
-		return paths
-	case model.Gemini:
-		if cfg.WorkingDir != "" {
-			cwdPath := filepath.Join(cfg.WorkingDir, ".gemini")
-			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
-
-			repoRoot := cfg.RepoRoot
-			if repoRoot == "" {
-				repoRoot = GetRepoRoot(cfg.WorkingDir)
-			}
-			if repoRoot != "" && repoRoot != cfg.WorkingDir {
-				paths[model.ScopeRepo] = append(paths[model.ScopeRepo], filepath.Join(repoRoot, ".gemini"))
-			}
-		}
-
-		paths[model.ScopeUser] = []string{filepath.Join(HomeDir(), ".gemini")}
-
-		if cfg.AdminPath != "" {
-			paths[model.ScopeAdmin] = []string{cfg.AdminPath}
-		}
-
-		if cfg.SystemPath != "" {
-			paths[model.ScopeSystem] = []string{cfg.SystemPath}
-		}
-
+	definition, ok := harness.Lookup(cfg.Platform)
+	if !ok {
 		return paths
 	}
 
-	// Repo scope: $CWD/.{platform}/skills and $REPO_ROOT/.{platform}/skills
-	if cfg.WorkingDir != "" {
-		var cwdPath string
-		if cfg.Platform == model.PiDev {
-			cwdPath = PiDevRepoSkillsPath(cfg.WorkingDir)
-		} else {
-			cwdPath = filepath.Join(cfg.WorkingDir, platformDir, "skills")
-		}
-		paths[model.ScopeRepo] = append(paths[model.ScopeRepo], cwdPath)
-
-		// Also check repo root if different from working dir
-		repoRoot := cfg.RepoRoot
-		if repoRoot == "" {
-			repoRoot = GetRepoRoot(cfg.WorkingDir)
-		}
-		if repoRoot != "" && repoRoot != cfg.WorkingDir {
-			var repoPath string
-			if cfg.Platform == model.PiDev {
-				repoPath = PiDevRepoSkillsPath(repoRoot)
-			} else {
-				repoPath = filepath.Join(repoRoot, platformDir, "skills")
+	repoRoots := repoSearchRoots(cfg)
+	for _, root := range definition.DiscoveryRoots {
+		switch {
+		case strings.HasPrefix(root, "~/"):
+			appendUniquePath(paths, model.ScopeUser, filepath.Join(HomeDir(), root[2:]))
+		case filepath.IsAbs(root):
+			appendUniquePath(paths, model.ScopeSystem, filepath.Clean(root))
+		default:
+			for _, repoRoot := range repoRoots {
+				appendUniquePath(paths, model.ScopeRepo, filepath.Join(repoRoot, root))
 			}
-			paths[model.ScopeRepo] = append(paths[model.ScopeRepo], repoPath)
 		}
 	}
 
-	// User scope: ~/.{platform}/skills
-	if cfg.Platform == model.Codex {
-		for _, root := range codexUserRootCandidates(HomeDir()) {
-			paths[model.ScopeUser] = append(paths[model.ScopeUser], filepath.Join(root, "skills"))
-		}
-	} else {
-		var userPath string
-		if cfg.Platform == model.PiDev {
-			userPath = PiDevSkillsPath()
-		} else {
-			userPath = filepath.Join(HomeDir(), platformDir, "skills")
-		}
-		paths[model.ScopeUser] = []string{userPath}
-	}
-
-	// Admin scope: optional, typically /opt/{platform}/skills
 	if cfg.AdminPath != "" {
 		paths[model.ScopeAdmin] = []string{cfg.AdminPath}
 	}
-
-	// System scope: optional, typically /etc/{platform}/skills
 	if cfg.SystemPath != "" {
-		paths[model.ScopeSystem] = []string{cfg.SystemPath}
+		paths[model.ScopeSystem] = prependUniquePath(paths[model.ScopeSystem], cfg.SystemPath)
 	}
 
 	return paths
+}
+
+func repoSearchRoots(cfg TieredPathConfig) []string {
+	if cfg.WorkingDir == "" {
+		return nil
+	}
+	roots := []string{cfg.WorkingDir}
+	repoRoot := cfg.RepoRoot
+	if repoRoot == "" {
+		repoRoot = GetRepoRoot(cfg.WorkingDir)
+	}
+	if repoRoot != "" && filepath.Clean(repoRoot) != filepath.Clean(cfg.WorkingDir) {
+		roots = append(roots, repoRoot)
+	}
+	return roots
+}
+
+func appendUniquePath(paths map[model.SkillScope][]string, scope model.SkillScope, path string) {
+	for _, existing := range paths[scope] {
+		if existing == path {
+			return
+		}
+	}
+	paths[scope] = append(paths[scope], path)
+}
+
+func prependUniquePath(paths []string, path string) []string {
+	result := []string{path}
+	for _, existing := range paths {
+		if existing != path {
+			result = append(result, existing)
+		}
+	}
+	return result
 }
 
 // GetAllSearchPaths returns all search paths in precedence order (highest first).
@@ -362,9 +299,9 @@ func platformDirName(p model.Platform) string {
 // to their resolver functions.
 var platformSkillsPathFns = map[model.Platform]func() string{
 	model.Copilot: CopilotSkillsPath,
-	model.Gemini:  GeminiPath,
+	model.Gemini:  GeminiSkillsPath,
 	model.Codex:   CodexSkillsPath,
-	model.PiDev:   PiDevSkillsPath,
+	model.Pi:      PiSkillsPath,
 }
 
 // PlatformSkillsPath returns the user-level skills path for a platform.
@@ -378,9 +315,10 @@ func PlatformSkillsPath(p model.Platform) string {
 // repoSkillsPathFns maps platforms with non-standard repo-level skills paths
 // to their resolver functions.
 var repoSkillsPathFns = map[model.Platform]func(string) string{
-	model.Copilot: func(root string) string { return filepath.Join(root, ".github") },
-	model.Gemini:  GeminiRepoPath,
-	model.PiDev:   PiDevRepoSkillsPath,
+	model.Copilot: func(root string) string { return filepath.Join(root, ".github", "skills") },
+	model.Gemini:  GeminiRepoSkillsPath,
+	model.Codex:   func(root string) string { return filepath.Join(root, ".agents", "skills") },
+	model.Pi:      PiRepoSkillsPath,
 }
 
 // RepoSkillsPath returns the repo-level skills path for a platform.

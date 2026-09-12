@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/klauern/skillsync/internal/harness"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/claude"
@@ -51,7 +52,7 @@ func GeminiParserFactory() ParserFactory {
 	}
 }
 
-// PiDevParserFactory returns a ParserFactory for Pi.dev.
+// PiDevParserFactory returns a ParserFactory for Pi.
 func PiDevParserFactory() ParserFactory {
 	return func(basePath string) parser.Parser {
 		return pidev.New(basePath)
@@ -62,18 +63,22 @@ func PiDevParserFactory() ParserFactory {
 // error if the platform is not recognized. Callers that receive an error should
 // treat the platform as unsupported rather than falling back to another parser.
 func ParserFactoryFor(platform model.Platform) (ParserFactory, error) {
-	switch platform {
-	case model.ClaudeCode:
+	definition, ok := harness.Lookup(platform)
+	if !ok {
+		return nil, fmt.Errorf("no parser factory for platform %q", platform)
+	}
+	switch definition.FactoryKey {
+	case "claude":
 		return ClaudeCodeParserFactory(), nil
-	case model.Cursor:
+	case "cursor":
 		return CursorParserFactory(), nil
-	case model.Codex:
+	case "codex":
 		return CodexParserFactory(), nil
-	case model.Copilot:
+	case "copilot":
 		return CopilotParserFactory(), nil
-	case model.Gemini:
+	case "gemini":
 		return GeminiParserFactory(), nil
-	case model.PiDev:
+	case "pi":
 		return PiDevParserFactory(), nil
 	default:
 		return nil, fmt.Errorf("no parser factory for platform %q", platform)

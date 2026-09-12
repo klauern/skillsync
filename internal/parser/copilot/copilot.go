@@ -10,6 +10,7 @@ import (
 	"github.com/klauern/skillsync/internal/logging"
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
+	"github.com/klauern/skillsync/internal/parser/skills"
 	"github.com/klauern/skillsync/internal/util"
 )
 
@@ -29,7 +30,7 @@ func New(basePath string) *Parser {
 
 // Parse discovers supported Copilot artifacts from the configured .github root.
 func (p *Parser) Parse() ([]model.Skill, error) {
-	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
+	if !pathExists(p.basePath) && !pathExists(p.nativeRoot()) {
 		logging.Debug(
 			"copilot directory not found",
 			logging.Platform(string(p.Platform())),
@@ -40,6 +41,23 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	var allSkills []model.Skill
 	seenNames := make(map[string]bool)
+	// Agent Skills bundles remain SkillTypeSkill regardless of which
+	// compatibility root supplied them. Custom .github/agents artifacts are
+	// parsed separately below and retain their agent transport metadata.
+	for _, root := range p.skillRoots() {
+		parsed, parseErr := skills.New(root, p.Platform()).Parse()
+		if parseErr != nil {
+			logging.Warn("failed to parse Copilot skill bundle", logging.Path(root), logging.Err(parseErr))
+			continue
+		}
+		for _, skill := range parsed {
+			if seenNames[skill.Name] {
+				continue
+			}
+			seenNames[skill.Name] = true
+			allSkills = append(allSkills, skill)
+		}
+	}
 
 	repositoryInstructions, err := p.parseRepositoryInstructions(seenNames)
 	if err != nil {
@@ -68,6 +86,23 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	return allSkills, nil
 }
 
+func (p *Parser) skillRoots() []string {
+	roots := []string{p.basePath}
+	base := filepath.Clean(p.basePath)
+	if filepath.Base(base) == "skills" && filepath.Base(filepath.Dir(base)) == ".github" {
+		base = filepath.Dir(base)
+	}
+	if filepath.Base(base) == ".github" {
+		project := filepath.Dir(base)
+		for _, root := range []string{filepath.Join(base, "skills"), filepath.Join(project, ".agents", "skills"), filepath.Join(project, ".claude", "skills")} {
+			if root != p.basePath {
+				roots = append(roots, root)
+			}
+		}
+	}
+	return roots
+}
+
 // Platform returns the platform identifier for GitHub Copilot.
 func (p *Parser) Platform() model.Platform {
 	return model.Copilot
@@ -78,8 +113,35 @@ func (p *Parser) DefaultPath() string {
 	return util.CopilotSkillsPath()
 }
 
+func (p *Parser) nativeRoot() string {
+	base := filepath.Clean(p.basePath)
+	if filepath.Base(base) == "skills" {
+		parent := filepath.Dir(base)
+		if filepath.Base(parent) == ".github" {
+			return parent
+		}
+		return ""
+	}
+	if filepath.Base(base) == ".github" {
+		return base
+	}
+	return ""
+}
+
+func pathExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func (p *Parser) parseRepositoryInstructions(seen map[string]bool) ([]model.Skill, error) {
-	filePath := filepath.Join(p.basePath, "copilot-instructions.md")
+	root := p.nativeRoot()
+	if root == "" {
+		return nil, nil
+	}
+	filePath := filepath.Join(root, "copilot-instructions.md")
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
@@ -103,9 +165,13 @@ func (p *Parser) parseRepositoryInstructions(seen map[string]bool) ([]model.Skil
 }
 
 func (p *Parser) parseInstructionFiles(seen map[string]bool) ([]model.Skill, error) {
-	files, err := parser.DiscoverFiles(p.basePath, []string{"instructions/*.instructions.md"})
+	root := p.nativeRoot()
+	if root == "" {
+		return nil, nil
+	}
+	files, err := parser.DiscoverFiles(root, []string{"instructions/*.instructions.md"})
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover Copilot instruction files in %q: %w", p.basePath, err)
+		return nil, fmt.Errorf("failed to discover Copilot instruction files in %q: %w", root, err)
 	}
 
 	var results []model.Skill
@@ -130,9 +196,13 @@ func (p *Parser) parseInstructionFiles(seen map[string]bool) ([]model.Skill, err
 }
 
 func (p *Parser) parsePromptFiles(seen map[string]bool) ([]model.Skill, error) {
-	files, err := parser.DiscoverFiles(p.basePath, []string{"prompts/*.prompt.md"})
+	root := p.nativeRoot()
+	if root == "" {
+		return nil, nil
+	}
+	files, err := parser.DiscoverFiles(root, []string{"prompts/*.prompt.md"})
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover Copilot prompt files in %q: %w", p.basePath, err)
+		return nil, fmt.Errorf("failed to discover Copilot prompt files in %q: %w", root, err)
 	}
 
 	var results []model.Skill
@@ -157,9 +227,13 @@ func (p *Parser) parsePromptFiles(seen map[string]bool) ([]model.Skill, error) {
 }
 
 func (p *Parser) parseAgentFiles(seen map[string]bool) ([]model.Skill, error) {
-	files, err := parser.DiscoverFiles(p.basePath, []string{"agents/*.agent.md"})
+	root := p.nativeRoot()
+	if root == "" {
+		return nil, nil
+	}
+	files, err := parser.DiscoverFiles(root, []string{"agents/*.agent.md"})
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover Copilot agent files in %q: %w", p.basePath, err)
+		return nil, fmt.Errorf("failed to discover Copilot agent files in %q: %w", root, err)
 	}
 
 	var results []model.Skill

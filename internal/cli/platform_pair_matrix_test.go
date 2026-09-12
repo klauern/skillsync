@@ -64,8 +64,7 @@ func TestCompareAndDedupePlatformPairs(t *testing.T) {
 		{name: "codex", parse: parseCodexFixture},
 		{name: "copilot", parse: parseCopilotFixture},
 		{name: "gemini", parse: parseGeminiFixture},
-		{name: "pi.dev", parse: parsePiDevFixture},
-		{name: "pi-agent", parse: parsePiAgentFixture},
+		{name: "pi", parse: parsePiFixture},
 	}
 
 	for _, source := range platforms {
@@ -169,7 +168,7 @@ func parseGeminiFixture(t *testing.T) model.Skill {
 	})
 }
 
-func parsePiDevFixture(t *testing.T) model.Skill {
+func parsePiFixture(t *testing.T) model.Skill {
 	t.Helper()
 	return parseMatrixFixture(t, matrixFixtureSpec{
 		relPath: filepath.Join("skills", "matrix-skill", "SKILL.md"),
@@ -178,12 +177,6 @@ func parsePiDevFixture(t *testing.T) model.Skill {
 			return pidev.New(tmpDir)
 		},
 	})
-}
-
-func parsePiAgentFixture(t *testing.T) model.Skill {
-	t.Helper()
-
-	return parsePiDevFixture(t)
 }
 
 func mustParseMatrixSkill(t *testing.T, parser interface{ Parse() ([]model.Skill, error) }) model.Skill {

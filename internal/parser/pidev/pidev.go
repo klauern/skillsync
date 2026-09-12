@@ -1,4 +1,4 @@
-// Package pidev implements the Parser interface for Pi.dev skills, prompt templates, and instructions.
+// Package pidev implements the Parser interface for Pi skills, prompt templates, and instructions.
 //
 // First-pass scope:
 //   - SKILL.md files under the selected skills root
@@ -8,6 +8,7 @@
 package pidev
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,13 +22,13 @@ import (
 	"github.com/klauern/skillsync/internal/util"
 )
 
-// Parser implements the parser.Parser interface for Pi.dev artifacts.
+// Parser implements the parser.Parser interface for Pi artifacts.
 type Parser struct {
 	basePath string
 }
 
-// New creates a new Pi.dev parser.
-// If basePath is empty, uses the preferred Pi.dev skills directory.
+// New creates a new Pi parser.
+// If basePath is empty, uses the preferred Pi skills directory.
 func New(basePath string) *Parser {
 	if basePath == "" {
 		basePath = util.PiDevSkillsPath()
@@ -37,7 +38,7 @@ func New(basePath string) *Parser {
 
 // Parse discovers skills, prompt templates, and AGENTS.md instructions.
 func (p *Parser) Parse() ([]model.Skill, error) {
-	if _, err := os.Stat(p.basePath); os.IsNotExist(err) {
+	if _, err := os.Stat(p.basePath); os.IsNotExist(err) && len(p.settingsSkillRoots()) == 0 {
 		logging.Debug(
 			"skills directory not found",
 			logging.Platform(string(p.Platform())),
@@ -51,8 +52,22 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 
 	// Parse SKILL.md files first so they take precedence over prompt/instruction
 	// artifacts with the same discovery name.
-	skillsParser := skills.New(p.basePath, p.Platform())
-	agentSkills, err := skillsParser.Parse()
+	skillRoots := append([]string{p.basePath}, p.settingsSkillRoots()...)
+	var agentSkills []model.Skill
+	var err error
+	seenRoots := make(map[string]bool)
+	for _, root := range skillRoots {
+		if seenRoots[root] {
+			continue
+		}
+		seenRoots[root] = true
+		parsed, parseErr := skills.New(root, p.Platform()).Parse()
+		if parseErr != nil {
+			err = parseErr
+			continue
+		}
+		agentSkills = append(agentSkills, parsed...)
+	}
 	if err != nil {
 		logging.Warn(
 			"failed to parse SKILL.md files",
@@ -106,12 +121,50 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	return allSkills, nil
 }
 
-// Platform returns the platform identifier for Pi.dev.
+// settingsSkillRoots reads Pi's documented `skills` entries. Relative entries
+// are resolved against the settings file declaring them; settings are a
+// discovery input only and are never rewritten by SkillSync.
+func (p *Parser) settingsSkillRoots() []string {
+	var roots []string
+	base := filepath.Clean(p.basePath)
+	var settingsPaths []string
+	if filepath.Base(base) == "skills" && filepath.Base(filepath.Dir(base)) == ".pi" {
+		settingsPaths = append(settingsPaths, filepath.Join(filepath.Dir(base), "settings.json"))
+	} else if filepath.Base(base) == "skills" && filepath.Base(filepath.Dir(base)) == "agent" && filepath.Base(filepath.Dir(filepath.Dir(base))) == ".pi" {
+		settingsPaths = append(settingsPaths, filepath.Join(filepath.Dir(base), "settings.json"))
+	}
+	if len(settingsPaths) == 0 {
+		settingsPaths = append(settingsPaths, filepath.Join(p.configRoot(), "settings.json"))
+	}
+	for _, settingsPath := range settingsPaths {
+		// #nosec G304 -- settingsPath is constructed from the configured Pi
+		// root and is only used for discovery.
+		content, err := os.ReadFile(settingsPath)
+		if err != nil {
+			continue
+		}
+		var settings struct {
+			Skills []string `json:"skills"`
+		}
+		if json.Unmarshal(content, &settings) != nil {
+			continue
+		}
+		for _, entry := range settings.Skills {
+			if !filepath.IsAbs(entry) {
+				entry = filepath.Join(filepath.Dir(settingsPath), entry)
+			}
+			roots = append(roots, filepath.Clean(entry))
+		}
+	}
+	return roots
+}
+
+// Platform returns the platform identifier for Pi.
 func (p *Parser) Platform() model.Platform {
 	return model.PiDev
 }
 
-// DefaultPath returns the preferred Pi.dev user-level skills path.
+// DefaultPath returns the preferred Pi user-level skills path.
 func (p *Parser) DefaultPath() string {
 	return util.PiDevSkillsPath()
 }
@@ -208,7 +261,7 @@ func (p *Parser) parsePromptFile(filePath string) (model.Skill, error) {
 		name = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	if description == "" {
-		description = "Pi.dev prompt template"
+		description = "Pi prompt template"
 	}
 	if trigger == "" {
 		trigger = "/" + strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
@@ -241,7 +294,7 @@ func (p *Parser) parsePromptFile(filePath string) (model.Skill, error) {
 func (p *Parser) parseInstructions(seenNames map[string]bool) ([]model.Skill, error) {
 	var results []model.Skill
 
-	// Global AGENTS.md can live at either the chosen Pi.dev root (e.g. ~/.pi/agent)
+	// Global AGENTS.md can live at either the chosen Pi root (e.g. ~/.pi/agent)
 	// or at the project root (e.g. repo/AGENTS.md).
 	instructionRoots := []string{
 		p.configRoot(),
@@ -251,10 +304,11 @@ func (p *Parser) parseInstructions(seenNames map[string]bool) ([]model.Skill, er
 		if root == "" {
 			continue
 		}
-		if global, err := p.parseAgentsFile(filepath.Join(root, "AGENTS.md"), root); err == nil && global != nil {
-			if !seenNames[global.Name] {
+		for _, name := range []string{"AGENTS.override.md", "AGENTS.md", "CLAUDE.md"} {
+			if global, err := p.parseAgentsFile(filepath.Join(root, name), root); err == nil && global != nil && !seenNames[global.Name] {
 				seenNames[global.Name] = true
 				results = append(results, *global)
+				break
 			}
 		}
 	}
@@ -285,16 +339,16 @@ func (p *Parser) parseInstructions(seenNames map[string]bool) ([]model.Skill, er
 	}
 
 	for _, dir := range dirs {
-		filePath := filepath.Join(dir, "AGENTS.md")
-		skill, err := p.parseAgentsFile(filePath, repoRoot)
-		if err != nil || skill == nil {
-			continue
+		for _, name := range []string{"AGENTS.override.md", "AGENTS.md", "CLAUDE.md"} {
+			filePath := filepath.Join(dir, name)
+			skill, err := p.parseAgentsFile(filePath, repoRoot)
+			if err != nil || skill == nil || seenNames[skill.Name] {
+				continue
+			}
+			seenNames[skill.Name] = true
+			results = append(results, *skill)
+			break
 		}
-		if seenNames[skill.Name] {
-			continue
-		}
-		seenNames[skill.Name] = true
-		results = append(results, *skill)
 	}
 
 	return results, nil
@@ -308,8 +362,8 @@ func (p *Parser) parseSystemPrompts(seenNames map[string]bool) ([]model.Skill, e
 		description string
 		mode        string
 	}{
-		{name: "SYSTEM.md", description: "Pi.dev SYSTEM.md replacement prompt", mode: "replace"},
-		{name: "APPEND_SYSTEM.md", description: "Pi.dev APPEND_SYSTEM.md append prompt", mode: "append"},
+		{name: "SYSTEM.md", description: "Pi SYSTEM.md replacement prompt", mode: "replace"},
+		{name: "APPEND_SYSTEM.md", description: "Pi APPEND_SYSTEM.md append prompt", mode: "append"},
 	} {
 		filePath := filepath.Join(p.configRoot(), fileName.name)
 		skill, err := p.parseSystemPromptFile(filePath, fileName.description, fileName.mode)
@@ -378,13 +432,17 @@ func (p *Parser) parseAgentsFile(filePath, nameRoot string) (*model.Skill, error
 	}
 
 	name := instructionName(filePath, nameRoot)
+	base := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+	if base != "AGENTS" {
+		name += "-" + strings.ToLower(strings.ReplaceAll(base, ".", "-"))
+	}
 	if err := coreparser.ValidateSkillName(name); err != nil {
 		return nil, fmt.Errorf("invalid instruction name %q in %q: %w", name, filePath, err)
 	}
 
 	return &model.Skill{
 		Name:        name,
-		Description: "Pi.dev AGENTS.md instructions",
+		Description: "Pi AGENTS.md instructions",
 		Platform:    p.Platform(),
 		Path:        filePath,
 		Metadata:    map[string]string{"type": "agents"},

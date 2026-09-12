@@ -21,8 +21,12 @@ const (
 	Copilot Platform = "copilot"
 	// Gemini is the identifier for the Gemini CLI platform.
 	Gemini Platform = "gemini"
-	// PiDev is the identifier for the Pi.dev platform.
-	PiDev Platform = "pi.dev"
+	// Pi is the canonical identifier for the Pi coding agent.
+	Pi Platform = "pi"
+	// PiDev is retained as a source-compatible alias. New code should use Pi.
+	PiDev Platform = Pi
+	// PiAgent is retained as a source-compatible alias. New code should use Pi.
+	PiAgent Platform = Pi
 )
 
 // PlatformInfo holds static metadata for a platform.
@@ -49,7 +53,7 @@ var platformRegistry = map[Platform]PlatformInfo{
 	Codex:      {Short: "cdx", ConfigDir: "codex", DotDir: ".codex", DisplayName: "Codex", ValidExtensions: []string{".md", ".toml"}},
 	Copilot:    {Short: "cop", ConfigDir: "github", DotDir: ".github", DisplayName: "Copilot", ValidExtensions: []string{".md"}},
 	Gemini:     {Short: "gem", ConfigDir: "gemini", DotDir: ".gemini", DisplayName: "Gemini", ValidExtensions: []string{".md"}},
-	PiDev:      {Short: "pi", ConfigDir: "pi/agent", DotDir: ".pi/agent", DisplayName: "Pi.dev", ValidExtensions: []string{".md"}},
+	Pi:         {Short: "pi", ConfigDir: "pi/agent", DotDir: ".pi/agent", DisplayName: "Pi", ValidExtensions: []string{".md"}},
 }
 
 // PlatformInfoFor returns the PlatformInfo for p, or (zero, false) if unrecognized.
@@ -83,7 +87,7 @@ func (p Platform) Short() string {
 
 // AllPlatforms returns all supported platforms.
 func AllPlatforms() []Platform {
-	return []Platform{ClaudeCode, Cursor, Codex, Copilot, Gemini, PiDev}
+	return []Platform{ClaudeCode, Cursor, Codex, Copilot, Gemini, Pi}
 }
 
 // AllPlatformNames returns a comma-separated string of all supported platform names.
@@ -96,48 +100,50 @@ func AllPlatformNames() string {
 	return strings.Join(names, ", ")
 }
 
+// PlatformAlias describes a parsed platform alias.
+type PlatformAlias struct {
+	Platform   Platform
+	Input      string
+	Deprecated bool
+}
+
+// ResolvePlatform converts a string to a platform and reports whether the
+// spelling is deprecated. ParsePlatform remains the compatibility API.
+func ResolvePlatform(s string) (PlatformAlias, error) {
+	normalized := strings.ToLower(strings.TrimSpace(s))
+	if normalized == "" {
+		return PlatformAlias{}, fmt.Errorf("unknown platform %q (valid: %s)", s, AllPlatformNames())
+	}
+	if normalized == "pi.dev" || normalized == "pi-dev" || normalized == "pidev" || normalized == "pi-agent" || normalized == "piagent" {
+		return PlatformAlias{Platform: Pi, Input: normalized, Deprecated: true}, nil
+	}
+	if normalized == "pi" {
+		return PlatformAlias{Platform: Pi, Input: normalized}, nil
+	}
+	aliases := map[string]Platform{
+		"claudecode": ClaudeCode, "claude": ClaudeCode,
+		"github-copilot": Copilot, "githubcopilot": Copilot,
+	}
+	if p, ok := aliases[normalized]; ok {
+		return PlatformAlias{Platform: p, Input: normalized}, nil
+	}
+	p := Platform(normalized)
+	if p.IsValid() {
+		return PlatformAlias{Platform: p, Input: normalized}, nil
+	}
+	return PlatformAlias{}, fmt.Errorf("unknown platform %q (valid: %s)", s, AllPlatformNames())
+}
+
 // ParsePlatform converts a string to a Platform type.
 // Accepts both kebab-case (claude-code) and single-word (claudecode) formats.
 // Returns an error if the platform is not recognized.
 func ParsePlatform(s string) (Platform, error) {
-	normalized := strings.ToLower(strings.TrimSpace(s))
-
-	// Deprecation check: pi-agent aliases should migrate to pi-dev / PiDev.
-	switch normalized {
-	case "pi-agent", "piagent", "pia":
-		slog.Warn(
-			"platform name is deprecated; use 'pi-dev' instead",
-			"platform", s,
-			"replacement", "pi-dev",
-		)
-		return PiDev, nil
+	resolved, err := ResolvePlatform(s)
+	if err != nil {
+		return "", err
 	}
-
-	// Try exact match first.
-	p := Platform(normalized)
-	if p.IsValid() {
-		return p, nil
+	if resolved.Deprecated {
+		slog.Warn("platform name is deprecated; use 'pi' instead", "platform", s, "replacement", "pi")
 	}
-
-	// Try normalized formats.
-	switch normalized {
-	case "claudecode", "claude":
-		return ClaudeCode, nil
-	case "cursor":
-		return Cursor, nil
-	case "codex":
-		return Codex, nil
-	case "copilot", "github-copilot", "githubcopilot":
-		return Copilot, nil
-	case "gemini":
-		return Gemini, nil
-	case "pi.dev", "pidev", "pi-dev", "pi":
-		return PiDev, nil
-	default:
-		valid := make([]string, 0, len(AllPlatforms()))
-		for _, platform := range AllPlatforms() {
-			valid = append(valid, string(platform))
-		}
-		return "", fmt.Errorf("unknown platform %q (valid: %s)", s, strings.Join(valid, ", "))
-	}
+	return resolved.Platform, nil
 }

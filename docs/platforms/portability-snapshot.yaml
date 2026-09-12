@@ -1,275 +1,55 @@
-# SkillSync Portability Snapshot
-#
-# Machine-readable companion to docs/platforms/portability-assessment.md.
-# This file is intentionally conservative: it captures the portability claims
-# that the narrative docs make today so future checks can compare them
-# mechanically.
-
-version: 1
+version: 2
+verified_at: "2026-08-18"
 generated_from:
   narrative: docs/platforms/portability-assessment.md
   structured: docs/platforms/schema.yaml
-
 platform_support:
-  claude:
-    status: implemented
-    artifact_surfaces:
-      - skills
-      - commands
-      - agents
-      - instructions
-    notes:
-      - First-class parser and sync support in SkillSync.
-  cursor:
-    status: implemented
-    artifact_surfaces:
-      - skills
-      - rules
-      - commands
-    notes:
-      - First-class parser and sync support in SkillSync.
-  codex:
-    status: implemented
-    artifact_surfaces:
-      - skills
-      - instructions
-      - config
-    notes:
-      - First-class parser and sync support in SkillSync.
-      - Deprecated custom prompts are compatibility metadata only.
-  copilot:
-    status: implemented
-    artifact_surfaces:
-      - instructions
-      - prompts
-      - agents
-    notes:
-      - First-class parser and sync support in SkillSync.
-      - Supports copilot-instructions.md, .github/prompts/*.prompt.md, .github/instructions/*.md, and .github/agents/*.agent.md.
-  gemini:
-    status: implemented
-    artifact_surfaces:
-      - instructions
-      - skills
-      - commands
-      - agents
-    notes:
-      - First-class parser and sync support in SkillSync.
-      - Parses GEMINI.md, skills/*/SKILL.md, and commands/*.toml files.
-      - Gemini extensions/hooks/subagents/themes have no cross-platform equivalent and are not sync targets.
-  pidev:
-    status: implemented
-    artifact_surfaces:
-      - skills
-      - prompts
-      - instructions
-      - system-prompt layers
-    notes:
-      - First-class parser and sync support in SkillSync.
-      - Packages, extensions, and themes remain out of scope for first-pass sync.
-
+  claude: {status: implemented, implementation_status: implemented, verified_at: "2026-08-18", official_sources: [https://code.claude.com/docs/en/skills], observed_local_version: "2.1.234", artifact_surfaces: [skills, commands, instructions], harness_capabilities: [skills, hooks, plugins, packages, custom_agents], implemented_capabilities: [skills, commands, instructions], documented_only_capabilities: [custom_agents], native_only_capabilities: [hooks, plugins, packages]}
+  codex: {status: implemented, implementation_status: implemented, verified_at: "2026-08-18", official_sources: [https://developers.openai.com/codex/skills], observed_local_version: "0.147.0", artifact_surfaces: [skills, instructions, config], harness_capabilities: [skills, AGENTS.md, hooks, custom_agents], implemented_capabilities: [skills, instructions], documented_only_capabilities: [hooks, custom_agents], native_only_capabilities: [config, .codex/agents]}
+  cursor: {status: implemented, implementation_status: implemented, verified_at: "2026-08-18", official_sources: [https://cursor.com/docs/skills], observed_local_version: absent, artifact_surfaces: [skills, rules, commands], harness_capabilities: [skills, rules, subagents, hooks, plugins, custom_agents], implemented_capabilities: [skills, rules], documented_only_capabilities: [subagents, hooks, plugins, custom_agents], native_only_capabilities: [.mdc_rules]}
+  copilot: {status: implemented, implementation_status: implemented, verified_at: "2026-08-18", official_sources: [https://docs.github.com/en/copilot/concepts/agents/about-agent-skills], observed_local_version: absent, artifact_surfaces: [skills, instructions, prompts, agents], harness_capabilities: [skills, instructions, prompts, custom_agents], implemented_capabilities: [skills, instructions, prompts], documented_only_capabilities: [custom_agents], native_only_capabilities: [handoffs]}
+  gemini: {status: implemented, implementation_status: implemented, verified_at: "2026-08-18", official_sources: [https://geminicli.com/docs/cli/skills/], observed_local_version: absent, artifact_surfaces: [skills, instructions, commands], harness_capabilities: [skills, commands, extensions, hooks, subagents, packages, themes], implemented_capabilities: [skills, instructions, commands], documented_only_capabilities: [extensions, hooks, subagents], native_only_capabilities: [packages, themes]}
+  pi: {status: implemented, implementation_status: implemented, verified_at: "2026-08-18", official_sources: [https://pi.dev/docs/latest/skills], observed_local_version: "0.84.2", artifact_surfaces: [skills, prompts, instructions, settings], harness_capabilities: [skills, prompts, AGENTS.md, CLAUDE.md, AGENTS.override.md, settings, packages, extensions], implemented_capabilities: [skills, instructions], documented_only_capabilities: [prompts, settings skills entries], native_only_capabilities: [packages, extensions, trust, /skill:name]}
 artifact_portability:
-  skill:
-    portability: high
-    description: Core reusable SKILL.md content.
-    supported_platforms:
-      - claude
-      - codex
-      - copilot
-      - cursor
-      - gemini
-      - pidev
-    notes:
-      - Shared skill bodies are the strongest cross-platform unit.
-      - Platform-specific metadata lowers fidelity but usually preserves intent.
-  command:
-    portability: low
-    description: Slash commands and prompt artifacts.
-    supported_platforms:
-      - claude
-      - copilot
-      - cursor
-      - gemini
-      - pidev
-    notes:
-      - SkillSync keeps this in `model.Skill` as transport metadata rather than a separate Codex runtime model.
-      - Codex prompt files are compatibility content only in this repo.
-      - Gemini extension-bundled commands are content-only first-pass sync inputs, not runtime-equivalent extension behavior.
-      - Slash triggers and argument interpolation are not behaviorally portable.
-  agent:
-    portability: none
-    description: Claude subagents and other agent-definition artifacts.
-    supported_platforms:
-      - claude
-      - copilot
-      - gemini
-    notes:
-      - SkillSync does not define a first-class Codex agent artifact.
-      - Claude subagents do not map 1:1 to Codex AGENTS.md instructions.
-      - Flatten or re-author agent behavior when targeting Codex.
-  instructions:
-    portability: medium
-    description: Always-on instruction files.
-    supported_platforms:
-      - claude
-      - codex
-      - copilot
-      - cursor
-      - gemini
-      - pidev
-    notes:
-      - Similar intent, different loading and precedence models.
-      - Instruction files should usually be re-authored, not copied verbatim.
-
+  skill: {portability: high, description: Shared SKILL.md body and resources., supported_platforms: [claude, codex, cursor, copilot, gemini, pi]}
+  command: {portability: low, description: Slash commands and prompt artifacts; triggers are not equivalent., supported_platforms: [claude, copilot, cursor, gemini, pi]}
+  agent: {portability: none, description: Custom agent definitions are native or documented-only surfaces., supported_platforms: [claude, copilot, cursor, gemini]}
+  instructions: {portability: medium, description: Always-on instruction content with different loading semantics., supported_platforms: [claude, codex, cursor, copilot, gemini, pi]}
 precedence:
-  claude:
-    - enterprise
-    - personal
-    - project
-  codex:
-    - project
-    - user
-    - admin
-  copilot:
-    - personal
-    - repository
-    - organization
-  cursor:
-    - project
-    - global
-  gemini:
-    - workspace
-    - user
-    - extension
-  pidev:
-    - user
-    - project
-
+  claude: [enterprise, personal, project]
+  codex: [project, user, admin]
+  cursor: [project, global]
+  copilot: [personal, repository, organization]
+  gemini: [workspace, user, extension]
+  pi: [project, user]
 lossy_field_mappings:
-  - field: argument-hint
-    supported_by:
-      - claude
-      - copilot
-    unsupported_by:
-      - codex
-      - cursor
-      - gemini
-      - pidev
-    behavior: preserve as metadata only
-  - field: allowed-tools
-    supported_by:
-      - claude
-      - codex
-      - copilot
-      - cursor
-    unsupported_by:
-      - gemini
-      - pidev
-    behavior: preserve as intent, not identical enforcement
-  - field: gemini extension runtime surfaces
-    supported_by:
-      - gemini
-    unsupported_by:
-      - claude
-      - codex
-      - copilot
-      - cursor
-      - pidev
-    behavior: preserve only safe metadata; mcpServers, hooks, subagents, themes, and package/install state are not first-pass sync targets
-  - field: model
-    supported_by:
-      - claude
-      - copilot
-    unsupported_by:
-      - codex
-      - cursor
-      - gemini
-      - pidev
-    behavior: preserve as metadata only
-  - field: disable-model-invocation
-    supported_by:
-      - claude
-      - copilot
-    unsupported_by:
-      - codex
-      - cursor
-      - gemini
-      - pidev
-    behavior: preserve as metadata only
-  - field: user-invocable
-    supported_by:
-      - claude
-      - copilot
-    unsupported_by:
-      - codex
-      - cursor
-      - gemini
-      - pidev
-    behavior: preserve as metadata only
-  - field: context
-    supported_by:
-      - claude
-    unsupported_by:
-      - codex
-      - copilot
-      - cursor
-      - gemini
-      - pidev
-    behavior: Claude-specific subagent forking; no cross-platform equivalent
-  - field: hooks
-    supported_by:
-      - claude
-    unsupported_by:
-      - codex
-      - copilot
-      - cursor
-      - gemini
-      - pidev
-    behavior: preserve the Claude hook object as metadata only; lifecycle timing and runtime behavior remain Claude-specific
-  - field: applyTo
-    supported_by:
-      - copilot
-    unsupported_by:
-      - claude
-      - codex
-      - cursor
-      - gemini
-      - pidev
-    behavior: no native portable equivalent
-  - field: globs
-    supported_by:
-      - cursor
-    unsupported_by:
-      - claude
-      - codex
-      - copilot
-      - gemini
-      - pidev
-    behavior: no native portable equivalent
-  - field: SYSTEM.md
-    supported_by:
-      - pidev
-    unsupported_by:
-      - claude
-      - codex
-      - copilot
-      - cursor
-      - gemini
-    behavior: Pi.dev-specific system prompt replacement/append layer; preserve as instruction metadata or re-author manually
-
+  - {field: argument-hint, supported_by: [claude, copilot], unsupported_by: [codex, cursor, gemini, pi], behavior: preserve as metadata only}
+  - {field: allowed-tools, supported_by: [claude, codex, copilot, cursor], unsupported_by: [gemini, pi], behavior: preserve as intent; enforcement is harness-specific}
+  - {field: model, supported_by: [claude, copilot], unsupported_by: [codex, cursor, gemini, pi], behavior: preserve as metadata only}
+  - {field: disable-model-invocation, supported_by: [claude, cursor, copilot], unsupported_by: [codex, gemini, pi], behavior: preserve as metadata only}
+  - {field: user-invocable, supported_by: [claude, copilot], unsupported_by: [codex, cursor, gemini, pi], behavior: preserve as metadata only}
+  - {field: context, supported_by: [claude], unsupported_by: [codex, cursor, copilot, gemini, pi], behavior: preserve as metadata only; subagent forking remains native}
+  - {field: hooks, supported_by: [claude], unsupported_by: [codex, cursor, copilot, gemini, pi], behavior: harnesses may support native hooks, but SkillSync preserves metadata only and does not synchronize runtime behavior}
+  - {field: applyTo, supported_by: [copilot], unsupported_by: [claude, codex, cursor, gemini, pi], behavior: no portable runtime equivalent}
+  - {field: paths, supported_by: [cursor], unsupported_by: [claude, codex, copilot, gemini, pi], behavior: preserve as metadata only}
+  - {field: globs, supported_by: [cursor], unsupported_by: [claude, codex, copilot, gemini, pi], behavior: legacy Cursor fallback; preserve as metadata only}
+  - {field: custom agents, supported_by: [], unsupported_by: [claude, codex, cursor, copilot, gemini, pi], behavior: documented/native-only; SkillSync does not synchronize agent definitions}
+  - {field: plugins, supported_by: [], unsupported_by: [claude, codex, cursor, copilot, gemini, pi], behavior: native installation surfaces and packages are never synchronized}
 nonportable_behaviors:
-  - Claude subagents
-  - Codex prompt files
-  - Slash-trigger behavior
-  - Session-specific tool permission policy
-  - plugin-specific installation precedence
-  - Pi.dev `SYSTEM.md` replacement and `APPEND_SYSTEM.md` append semantics
-  - Gemini extension/package/theme installation precedence
-  - Gemini extension-only runtime surfaces
-  - package/extension/theme installation precedence
+  - AGENTS.md chaining, overrides, and fallback behavior
+  - Codex .codex/agents definitions
+  - Cursor .mdc rules and nested AGENTS.md loading
+  - Gemini Antigravity transition and extension runtime behavior
+  - Pi settings.json skills entries, trust checks, and /skill:name invocation
+  - hooks, plugins, packages, and custom agents
+source_refs: [https://agentskills.io/specification, https://code.claude.com/docs/en/skills, https://developers.openai.com/codex/skills, https://cursor.com/docs/skills, https://docs.github.com/en/copilot/concepts/agents/about-agent-skills, https://geminicli.com/docs/cli/skills/, https://pi.dev/docs/latest/skills]
 
-source_refs:
-  - docs/platforms/claude.md
-  - docs/platforms/codex.md
-  - docs/platforms/cross-platform-mapping.md
-  - docs/platforms/portability-assessment.md
+# Detailed compatibility notes retained from the v1 snapshot. These are
+# warnings for conversion/reporting, not claims that native surfaces sync.
+compatibility_notes:
+  claude: [".claude/skills and ~/.claude/skills are canonical", "hooks/plugins/packages/custom agents remain native-only"]
+  codex: [".agents/skills and ~/.agents/skills are canonical write roots", "legacy .codex/skills, ~/.codex/skills, and /etc/codex/skills are discovery-only", "AGENTS.md chaining, overrides, and fallbacks are not flattened", ".codex/agents is native-only"]
+  cursor: [".cursor/skills and ~/.cursor/skills are canonical", ".mdc rules, nested AGENTS.md, subagents, hooks, and plugins are native-only"]
+  copilot: [".github/skills and ~/.copilot/skills are canonical", "skill artifacts are distinct from agent artifacts", "custom agents and handoffs are native-only"]
+  gemini: [".gemini/skills and ~/.gemini/skills use higher-precedence .agents/skills aliases", "Antigravity transition remains documented while adapter is retained", "extension hooks, packages, themes, and subagents are native-only"]
+  pi: [".pi/skills and ~/.pi/agent/skills are canonical", "settings.json skills entries are discovery-only", "AGENTS.md, CLAUDE.md, and AGENTS.override.md plus trust checks affect runtime", "/skill:name is a native trigger"]

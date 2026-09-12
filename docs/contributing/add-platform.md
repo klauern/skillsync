@@ -1,32 +1,30 @@
 # Adding a New Platform to skillsync
 
-Adding a platform requires changes in at least 10 separate sites. Miss one and the platform will compile but silently fail to discover skills, display incorrectly in the TUI, or break tests.
-
-> **Note**: Once `ss-370` (platform registry) lands, most of this checklist will collapse into a single registry entry. Until then, follow every step.
+Adding a harness starts with one registry definition. The registry is the source
+of truth for canonical identity, aliases, roots, parser selection metadata, and
+artifact surfaces; callers should not introduce another platform switch.
 
 ---
 
 ## Checklist
 
-### 1. `internal/model/platform.go` — 4 places
+### 1. Add the canonical platform identity
 
 - [ ] Add a `Platform` constant:
   ```go
   MyPlatform Platform = "my-platform"
   ```
-- [ ] Add to `AllPlatforms()` return slice.
-- [ ] Add to `IsValid()` switch (or verify it's covered by the loop over `AllPlatforms()`).
-- [ ] Add aliases in `ParsePlatform()` switch so single-word and kebab-case inputs work.
+- [ ] Add it to the canonical six-or-more platform enumeration and parsing tests.
+- [ ] Add deprecated spellings only when a compatibility contract requires them.
 
-### 2. `internal/util/paths.go` — 3+ places
+### 2. Add one `internal/harness` registry definition
 
-Add helper functions for the platform's default directory layout:
+- [ ] Canonical repository and user write roots.
+- [ ] Ordered compatibility/discovery roots.
+- [ ] Parser factory key and supported artifact surfaces.
+- [ ] Alias-resolution and root-order tests.
 
-- [ ] `MyPlatformSkillsPath() string` — user-level skills dir
-- [ ] `MyPlatformRepoSkillsPath(projectDir string) string` — project-level skills dir
-- [ ] Any additional path helpers (prompts, agents, etc.) following the existing patterns.
-
-### 3. `internal/config/config.go` — 2 places
+### 3. Add configuration and environment overrides
 
 - [ ] Add `MyPlatform PlatformConfig` field to `PlatformsConfig` with a `yaml:"my_platform"` tag.
 - [ ] Populate default `SkillsPaths` in `Default()`.
@@ -36,48 +34,40 @@ Add helper functions for the platform's default directory layout:
       c.Platforms.MyPlatform.SkillsPaths = splitPaths(v)
   }
   ```
-- [ ] Add to `warnDeprecatedYAMLFields()` platforms slice.
+- [ ] If replacing an old identifier, add deterministic load precedence and emit
+      only the canonical key on new saves.
 
-### 4. `internal/validation/validation.go` — 2+ places
+### 4. Add parser and conformance coverage
 
-- [ ] Add a `case model.MyPlatform:` arm in `PlatformSkillsPath()` (the function that resolves the primary skills directory for a given platform).
-- [ ] Add format validation rules in `ValidateSkillFormat()` if the platform has unusual file extension requirements.
+- [ ] Create `internal/parser/myplatform/` and register its factory key.
+- [ ] Reuse the shared `SKILL.md` parser for directory bundles.
+- [ ] Add harness-specific fixtures without weakening shared conformance rules.
 
-### 5. `internal/sync/transformer.go` — 2 places
+### 5. Add target transformation only where necessary
 
 - [ ] Add a `case model.MyPlatform:` arm in `transformPath()` for any target-platform-specific path rules.
 - [ ] Add a `case model.MyPlatform:` arm in `transformMetadata()` if metadata keys need to be renamed or dropped when targeting this platform.
 
-### 6. `internal/parser/tiered/factories.go` — 1 place
-
-- [ ] Create a new parser package at `internal/parser/myplatform/`.
-- [ ] Register it in `ParserFactoryFor()`:
-  ```go
-  case model.MyPlatform:
-      return MyPlatformParserFactory(), nil
-  ```
-- [ ] Add `MyPlatformParserFactory()` helper following the existing factory pattern.
-
-### 7. `internal/cli/commands.go` — 3 places
+### 6. Update user-facing surfaces
 
 - [ ] Add a `case "my-platform":` arm in `colorPlatform()` (`internal/cli/commands.go` around line 927) to assign a distinct color.
-- [ ] Add the platform's skills path to `parsePlatformSkillsFromPaths()` so it participates in discover/sync.
-- [ ] Update any help strings that enumerate platform names.
+- [ ] Ensure CLI/TUI enumeration consumes the registry rather than a local list.
+- [ ] Update help, configuration snapshots, and platform documentation.
 
-### 8. `docs/platforms/portability-snapshot.yaml` — 2 places
+### 7. Update portability references
 
 - [ ] Add a `my_platform` entry under `platform_support` with `status`, `artifact_surfaces`, and `notes`.
 - [ ] Add a `my_platform` entry under `precedence` listing the scope names in order.
 
-### 9. `internal/sync/portability.go` — 1 place
+### 8. Add portability warnings
 
 - [ ] Add any platform-specific metadata keys to `lossyFieldUnsupportedBy` that should warn when syncing _to_ other platforms (e.g. `"applyTo"` for Copilot).
 
-### 10. Tests
+### 9. Tests
 
 - [ ] Unit tests in `internal/parser/myplatform/` for the new parser.
-- [ ] `internal/parser/tiered/factories.go` test: `NewForPlatformWithDir("my-platform", ...)` should succeed.
-- [ ] E2E tests in `internal/e2e/e2e_test.go`: at minimum a round-trip sync FROM and TO the new platform.
+- [ ] Registry/factory test: `NewForPlatformWithDir("my-platform", ...)` should succeed.
+- [ ] Six-or-more harness bundle matrix coverage for a round trip FROM and TO the new harness.
 - [ ] `internal/parser/tiered/coverage_test.go`: add a `TestParseFromScope_<MyPlatform>` case if new scope rules apply.
 
 ---

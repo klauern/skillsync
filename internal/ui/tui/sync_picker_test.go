@@ -82,11 +82,11 @@ func TestSyncPickerModel_CompleteSelectionFlow(t *testing.T) {
 	}
 }
 
-func TestSyncPickerModel_PiDevIsSelectable(t *testing.T) {
+func TestSyncPickerModel_PiIsSelectable(t *testing.T) {
 	m := NewSyncPickerModel()
 
 	for i, p := range m.platforms {
-		if p == model.PiDev {
+		if p == model.Pi {
 			m.cursor = i
 			break
 		}
@@ -94,8 +94,8 @@ func TestSyncPickerModel_PiDevIsSelectable(t *testing.T) {
 
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = newModel.(SyncPickerModel)
-	if m.source != model.PiDev {
-		t.Fatalf("source = %q, want pi.dev", m.source)
+	if m.source != model.Pi {
+		t.Fatalf("source = %q, want pi", m.source)
 	}
 
 	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -104,8 +104,8 @@ func TestSyncPickerModel_PiDevIsSelectable(t *testing.T) {
 		t.Fatalf("expected target platform phase, got %v", m.phase)
 	}
 
-	if !strings.Contains(m.View(), "pi.dev") {
-		t.Fatalf("expected view to include pi.dev, got %q", m.View())
+	if !strings.Contains(m.View(), "pi") {
+		t.Fatalf("expected view to include pi, got %q", m.View())
 	}
 }
 
