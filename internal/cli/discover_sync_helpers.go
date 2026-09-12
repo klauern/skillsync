@@ -504,12 +504,13 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 // outputSyncResultJSON prints a sync result as JSON, including portability warnings per skill.
 func outputSyncResultJSON(result *sync.Result) error {
 	type skillJSON struct {
-		Name                string   `json:"name"`
-		Action              string   `json:"action"`
-		TargetPath          string   `json:"target_path,omitempty"`
-		Message             string   `json:"message,omitempty"`
-		Error               string   `json:"error,omitempty"`
-		PortabilityWarnings []string `json:"portability_warnings,omitempty"`
+		Name                string           `json:"name"`
+		Action              string           `json:"action"`
+		TargetPath          string           `json:"target_path,omitempty"`
+		Message             string           `json:"message,omitempty"`
+		Error               string           `json:"error,omitempty"`
+		PortabilityWarnings []string         `json:"portability_warnings,omitempty"`
+		TrustDecisions      []trust.Decision `json:"trust_decisions,omitempty"`
 	}
 	type resultJSON struct {
 		Source   string      `json:"source"`
@@ -527,6 +528,7 @@ func outputSyncResultJSON(result *sync.Result) error {
 			TargetPath:          sr.TargetPath,
 			Message:             sr.Message,
 			PortabilityWarnings: sr.PortabilityWarnings,
+			TrustDecisions:      sr.TrustDecisions,
 		}
 		if sr.Error != nil {
 			sj.Error = sr.Error.Error()
@@ -699,7 +701,7 @@ var platformColorFns = map[model.Platform]func(...any) string{
 	model.ClaudeCode: ui.Info,
 	model.Cursor:     ui.Success,
 	model.Codex:      ui.Warning,
-	model.Pi:         ui.Magenta,
+	model.PiDev:      ui.Magenta,
 	model.Copilot:    ui.Blue,
 	model.Gemini:     ui.Bold,
 }
@@ -1014,6 +1016,12 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 	}
 
 	displaySyncResults(result)
+
+	// Trust and other sync failures must stop before orphan deletion. In
+	// particular, a blocked preflight must not delete target-only skills.
+	if !result.Success() {
+		return summarizeSyncFailures(result, "sync completed with errors")
+	}
 
 	// Post-sync orphan deletion (--delete flag)
 	if err := runSyncOrphanDeletion(cfg); err != nil {

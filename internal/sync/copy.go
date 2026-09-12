@@ -185,13 +185,18 @@ func copySkillDir(src, dst, entrypointPath string) error {
 		return fmt.Errorf("source %q is not a directory", src)
 	}
 
-	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
-		return fmt.Errorf("failed to create destination directory %q: %w", dst, err)
-	}
-
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return fmt.Errorf("failed to read source directory %q: %w", src, err)
+	}
+
+	// Replace the destination bundle as a unit so files removed from the
+	// source cannot survive a later overwrite.
+	if err := removeExisting(dst); err != nil {
+		return fmt.Errorf("failed to clear destination directory %q: %w", dst, err)
+	}
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("failed to create destination directory %q: %w", dst, err)
 	}
 
 	selectedEntrypoint := filepath.Base(entrypointPath)

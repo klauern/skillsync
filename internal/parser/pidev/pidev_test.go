@@ -1,6 +1,7 @@
 package pidev
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -173,6 +174,46 @@ Prompt body.
 	}
 	if appendSystem.Metadata["mode"] != "append" {
 		t.Fatalf("append system metadata mode = %q, want append", appendSystem.Metadata["mode"])
+	}
+}
+
+func TestParser_Parse_RetainsSkillsWhenConfiguredRootFails(t *testing.T) {
+	root := t.TempDir()
+	config := filepath.Join(root, ".pi")
+	baseSkills := filepath.Join(config, "skills", "base")
+	configuredSkills := filepath.Join(root, "configured-skills", "extra")
+	invalidRoot := filepath.Join(root, "not-a-directory")
+	for _, dir := range []string{baseSkills, configuredSkills} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(invalidRoot, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, "settings.json"), []byte(`{"skills":["../not-a-directory","../configured-skills/extra"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for path, name := range map[string]string{
+		filepath.Join(baseSkills, "SKILL.md"):       "base",
+		filepath.Join(configuredSkills, "SKILL.md"): "configured",
+	} {
+		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\nbody\n", name, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := New(filepath.Join(config, "skills")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make(map[string]bool)
+	for _, skill := range got {
+		names[skill.Name] = true
+	}
+	if !names["base"] || !names["configured"] {
+		t.Fatalf("successful roots were not retained: names=%v", names)
 	}
 }
 

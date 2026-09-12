@@ -100,6 +100,29 @@ func TestParser_Parse_SharedAgentsCompatibilityRoot(t *testing.T) {
 	t.Fatal("shared .agents skill was not discovered")
 }
 
+func TestParser_Parse_SharedAgentsWhenGeminiRootAbsent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	shared := filepath.Join(home, ".agents", "skills", "shared")
+	if err := os.MkdirAll(shared, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shared, "SKILL.md"), []byte("---\nname: shared\ndescription: shared\n---\nbody\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := New(filepath.Join(home, ".gemini")).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, skill := range got {
+		if skill.Name == "shared" {
+			return
+		}
+	}
+	t.Fatal("shared .agents skill was not discovered when ~/.gemini is absent")
+}
+
 func TestParser_Parse_ContextOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmpDir, "GEMINI.md"), []byte("Workspace rules"), 0o644); err != nil {
