@@ -32,8 +32,9 @@ type Registry struct{ mappings []Mapping }
 
 // Register adds one exact directional mapping.
 func (r *Registry) Register(m Mapping) error {
-	if strings.TrimSpace(m.Key) == "" || !supported(m.SourcePlatform) || !supported(m.TargetPlatform) || m.SourcePlatform == m.TargetPlatform {
-		return fmt.Errorf("agent mapping requires a key and distinct supported platforms")
+	key := strings.TrimSpace(m.Key)
+	if key == "" || key != m.Key || !supported(m.SourcePlatform) || !supported(m.TargetPlatform) || m.SourcePlatform == m.TargetPlatform {
+		return fmt.Errorf("agent mapping requires a non-whitespace key and distinct supported platforms")
 	}
 	for _, existing := range r.mappings {
 		if existing == m {
@@ -149,6 +150,13 @@ func Sync(ctx context.Context, sourceAgents []model.CustomAgent, target model.Pl
 	items, err := Plan(sourceAgents, target, opts)
 	if err != nil {
 		return nil, err
+	}
+	if opts.Enabled {
+		for i, item := range items {
+			if item.Action != ActionWrite {
+				return items, fmt.Errorf("custom agent batch item %d cannot be written: %s (%s)", i, item.Action, item.Reason)
+			}
+		}
 	}
 	var writes []model.CustomAgent
 	for _, item := range items {

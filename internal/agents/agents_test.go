@@ -107,6 +107,28 @@ func TestSyncPreflightsAndWritesOnce(t *testing.T) {
 	}
 }
 
+func TestSyncRejectsBlockedBatchBeforeWriting(t *testing.T) {
+	t.Parallel()
+	w := &writerStub{}
+	valid := agent("valid", model.ClaudeCode)
+	blocked := agent("blocked", model.ClaudeCode)
+	if _, err := Sync(context.Background(), []model.CustomAgent{valid, blocked}, model.ClaudeCode, w, Options{Enabled: true}); err == nil {
+		t.Fatal("Sync() blocked batch error = nil")
+	}
+	if w.calls != 0 {
+		t.Fatalf("writer calls = %d, want no partial write", w.calls)
+	}
+}
+
+func TestRegistryRejectsWhitespaceMappingKeys(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{" review", "review ", "\t"} {
+		if err := (&Registry{}).Register(Mapping{Key: key, SourcePlatform: model.ClaudeCode, TargetPlatform: model.Gemini}); err == nil {
+			t.Fatalf("Register(%q) error = nil", key)
+		}
+	}
+}
+
 func TestPlanRejectsDuplicateTarget(t *testing.T) {
 	t.Parallel()
 	if _, err := Plan([]model.CustomAgent{agent("same", model.Gemini), agent("same", model.Gemini)}, model.Gemini, Options{Enabled: true, TrustPolicy: trusted()}); err == nil {

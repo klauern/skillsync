@@ -21,14 +21,27 @@ type CustomAgent struct {
 
 // Validate checks the native-agent boundary without invoking the agent.
 func (a CustomAgent) Validate() error {
-	if strings.TrimSpace(a.Name) == "" {
-		return fmt.Errorf("custom agent name is required")
+	if err := validateCustomAgentName(a.Name); err != nil {
+		return err
 	}
 	if !a.Platform.IsValid() {
 		return fmt.Errorf("unsupported custom agent platform %q", a.Platform)
 	}
 	if strings.TrimSpace(a.Description) == "" {
 		return fmt.Errorf("custom agent %q description is required", a.Name)
+	}
+	return nil
+}
+
+func validateCustomAgentName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("custom agent name is required")
+	}
+	if name != strings.TrimSpace(name) {
+		return fmt.Errorf("custom agent name %q has leading or trailing whitespace", name)
+	}
+	if name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") {
+		return fmt.Errorf("custom agent name %q is not a safe filename", name)
 	}
 	return nil
 }
