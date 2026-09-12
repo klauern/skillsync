@@ -17,12 +17,14 @@ import (
 	"github.com/klauern/skillsync/internal/parser/cursor"
 	"github.com/klauern/skillsync/internal/parser/gemini"
 	"github.com/klauern/skillsync/internal/parser/pidev"
+	"github.com/klauern/skillsync/internal/trust"
 	"github.com/klauern/skillsync/internal/util"
 	"github.com/klauern/skillsync/internal/validation"
 )
 
 // Options configures synchronization behavior.
 type Options struct {
+	TrustPolicy trust.Policy
 	// DryRun enables preview mode without making actual changes.
 	DryRun bool
 
@@ -124,11 +126,6 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		)
 		return result, fmt.Errorf("failed to parse source skills: %w", err)
 	}
-	if !opts.SkipValidation {
-		if err := validateSourceSkills(sourceSkills, source); err != nil {
-			return result, err
-		}
-	}
 	result.SelectedCount = len(sourceSkills)
 	result.TotalAvailable = len(sourceSkills)
 
@@ -162,6 +159,14 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		return result, nil // Nothing to sync
 	}
 
+	// Evaluate trust on every parsed skill before filtering nested duplicates.
+	// A nested skill may carry blocked metadata, scripts, or references even
+	// when its parent directory will be copied as the canonical artifact.
+	if blocked := preflightTrust(sourceSkills, opts.TrustPolicy); len(blocked) > 0 {
+		result.Skills = append(result.Skills, blocked...)
+		return result, nil
+	}
+
 	// Skip nested skills when a parent directory/symlink skill is also present.
 	// The parent copy already includes nested content, so syncing both creates
 	// duplicate top-level artifacts.
@@ -182,7 +187,6 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		})
 		return result, nil
 	}
-
 	// Get target path
 	targetPath := opts.TargetPath
 	if targetPath == "" {
@@ -460,6 +464,21 @@ func (s *Synchronizer) processSkill(
 
 	// Detect source type and get source root path
 	sourceType, sourceRootPath := detectSourceType(source.Path)
+	decisions, err := opts.TrustPolicy.Evaluate(source, sourceRootPath)
+	if err != nil {
+		result.Action = ActionFailed
+		result.Error = fmt.Errorf("evaluate artifact trust: %w", err)
+		return result
+	}
+	result.TrustDecisions = decisions
+	for _, decision := range decisions {
+		if !decision.Allowed {
+			result.Action = ActionFailed
+			result.Error = fmt.Errorf("untrusted %s content blocked: %s", decision.Risk, decision.Reason)
+			result.Message = "blocked by runtime trust policy"
+			return result
+		}
+	}
 
 	logging.Debug(
 		"detected source type",
@@ -565,20 +584,6 @@ func (s *Synchronizer) processSkill(
 		// Create based on source type
 		switch sourceType {
 		case SourceTypeSymlink:
-			if source.Platform != targetPlatform && isSkillFile(filepath.Base(source.Path)) {
-				resolvedSource, err := filepath.EvalSymlinks(sourceRootPath)
-				if err != nil {
-					result.Action = ActionFailed
-					result.Error = fmt.Errorf("failed to resolve cross-harness skill symlink: %w", err)
-					return result
-				}
-				if err := s.copyTransformedBundle(source, targetPlatform, resolvedSource, targetEntryPath); err != nil {
-					result.Action = ActionFailed
-					result.Error = err
-					return result
-				}
-				break
-			}
 			// Recreate symlink with same target
 			symlinkTarget := getSymlinkTarget(sourceRootPath)
 			if symlinkTarget == "" {
@@ -649,14 +654,6 @@ func (s *Synchronizer) processSkill(
 					logging.Path(targetEntryPath),
 					logging.Path(sourceRootPath),
 				)
-				break
-			}
-			if source.Platform != targetPlatform && isSkillFile(filepath.Base(source.Path)) {
-				if err := s.copyTransformedBundle(source, targetPlatform, sourceRootPath, targetEntryPath); err != nil {
-					result.Action = ActionFailed
-					result.Error = err
-					return result
-				}
 				break
 			}
 			if needsCanonicalEntrypointCopy(source, targetPlatform) {
@@ -940,15 +937,18 @@ func (s *Synchronizer) SyncWithSkills(
 	}
 	result.SelectedCount = len(skills)
 	result.TotalAvailable = len(skills)
-	if !opts.SkipValidation {
-		if err := validateSourceSkills(skills, result.Source); err != nil {
-			return result, err
-		}
-	}
 
 	// Set default strategy
 	if result.Strategy == "" {
 		result.Strategy = StrategyOverwrite
+	}
+
+	// Evaluate trust on every provided skill before filtering nested duplicates.
+	// A nested skill may carry blocked metadata, scripts, or references even
+	// when its parent directory will be copied as the canonical artifact.
+	if blocked := preflightTrust(skills, opts.TrustPolicy); len(blocked) > 0 {
+		result.Skills = append(result.Skills, blocked...)
+		return result, nil
 	}
 
 	// Skip nested skills when a parent directory/symlink skill is also present.
@@ -971,7 +971,6 @@ func (s *Synchronizer) SyncWithSkills(
 		})
 		return result, nil
 	}
-
 	if err := s.emitProgress(opts, ProgressEvent{
 		Type:        ProgressEventStart,
 		TotalSkills: len(skills),
@@ -1088,31 +1087,28 @@ func (s *Synchronizer) SyncWithSkills(
 	return result, nil
 }
 
-func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
-	validationResult, err := validation.ValidateSkillsFormat(skills, platform)
-	if err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
+func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
+	var blocked []SkillResult
+	for _, skill := range skills {
+		_, root := detectSourceType(skill.Path)
+		decisions, err := policy.Evaluate(skill, root)
+		if err != nil {
+			blocked = append(blocked, SkillResult{Skill: skill, Action: ActionFailed, Error: fmt.Errorf("evaluate artifact trust: %w", err)})
+			continue
+		}
+		for _, decision := range decisions {
+			if decision.Allowed {
+				continue
+			}
+			blocked = append(blocked, SkillResult{
+				Skill: skill, Action: ActionFailed, TrustDecisions: decisions,
+				Message: "blocked by runtime trust policy",
+				Error:   fmt.Errorf("untrusted %s content blocked: %s", decision.Risk, decision.Reason),
+			})
+			break
+		}
 	}
-	if err := validationResult.Error(); err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
-	}
-	return nil
-}
-
-func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Platform, sourceRoot, targetRoot string) error {
-	if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
-		return fmt.Errorf("failed to copy cross-harness skill bundle: %w", err)
-	}
-	transformed, err := s.transformer.Transform(source, target)
-	if err != nil {
-		return fmt.Errorf("failed to transform cross-harness skill entrypoint: %w", err)
-	}
-	entrypoint := filepath.Join(targetRoot, "SKILL.md")
-	// #nosec G301 G306 -- synchronized skill entrypoints are intentionally readable.
-	if err := util.WriteFileWithPerms(entrypoint, []byte(transformed.Content), 0o750, 0o644); err != nil {
-		return fmt.Errorf("failed to write transformed cross-harness skill entrypoint: %w", err)
-	}
-	return nil
+	return blocked
 }
 
 // DeleteWithSkills deletes skills from target that match the source skills.
