@@ -36,12 +36,15 @@ type MCPServer struct {
 	MappingKey string            `json:"mapping_key,omitempty"`
 }
 
-var mcpReference = regexp.MustCompile(`^(?:\$[A-Za-z_][A-Za-z0-9_]*|\$\{[^{}]+\})$`)
+var mcpReference = regexp.MustCompile(`^(?:\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*(?::[A-Za-z_][A-Za-z0-9_-]*)?\})$`)
 
 // Validate checks transport requirements and rejects embedded secrets.
 func (s MCPServer) Validate() error {
 	if strings.TrimSpace(s.Name) == "" {
 		return fmt.Errorf("MCP server name is required")
+	}
+	if strings.TrimSpace(s.Name) != s.Name {
+		return fmt.Errorf("MCP server name %q must not have leading or trailing whitespace", s.Name)
 	}
 	if !s.Platform.IsValid() {
 		return fmt.Errorf("unsupported MCP server platform %q", s.Platform)
@@ -56,11 +59,11 @@ func (s MCPServer) Validate() error {
 			return fmt.Errorf("remote MCP server %q requires URL and forbids command and args", s.Name)
 		}
 		parsed, err := url.Parse(s.URL)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return fmt.Errorf("MCP server %q has invalid URL", s.Name)
 		}
-		if parsed.User != nil || parsed.RawQuery != "" {
-			return fmt.Errorf("MCP server %q URL contains credentials or query data", s.Name)
+		if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return fmt.Errorf("MCP server %q URL contains credentials, query data, or a fragment", s.Name)
 		}
 	default:
 		return fmt.Errorf("unsupported MCP transport %q", s.Transport)

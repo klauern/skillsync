@@ -30,6 +30,25 @@ func TestConfigRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGeminiHTTPUsesNativeHTTPURLField(t *testing.T) {
+	t.Parallel()
+	server := model.MCPServer{Name: "remote", Platform: model.Gemini, Transport: model.MCPTransportHTTP, URL: "https://example.com/mcp"}
+	data, err := EncodeConfig(model.Gemini, []model.MCPServer{server})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"httpUrl"`) || strings.Contains(string(data), `"url"`) {
+		t.Fatalf("Gemini config = %s, want httpUrl without url", data)
+	}
+	got, err := DecodeConfig(model.Gemini, []byte(`{"mcpServers":{"remote":{"httpUrl":"https://example.com/mcp"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, []model.MCPServer{server}) {
+		t.Fatalf("decoded Gemini config = %#v, want %#v", got, []model.MCPServer{server})
+	}
+}
+
 func TestRemoteConfigRoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, platform := range []model.Platform{model.ClaudeCode, model.Copilot, model.Gemini} {

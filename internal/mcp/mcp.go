@@ -35,12 +35,21 @@ func (r *Registry) Register(m Mapping) error {
 	if strings.TrimSpace(m.Key) == "" || strings.TrimSpace(m.SourceName) == "" || strings.TrimSpace(m.TargetName) == "" {
 		return fmt.Errorf("MCP mapping key and names are required")
 	}
+	if strings.TrimSpace(m.Key) != m.Key || strings.TrimSpace(m.SourceName) != m.SourceName || strings.TrimSpace(m.TargetName) != m.TargetName {
+		return fmt.Errorf("MCP mapping key and names must not have leading or trailing whitespace")
+	}
 	if !m.SourcePlatform.IsValid() || !m.TargetPlatform.IsValid() || m.SourcePlatform == m.TargetPlatform {
 		return fmt.Errorf("MCP mapping requires distinct valid platforms")
 	}
 	for _, existing := range r.mappings {
 		if existing.Key == m.Key && existing.SourcePlatform == m.SourcePlatform && existing.TargetPlatform == m.TargetPlatform {
 			return fmt.Errorf("MCP mapping %q already exists", m.Key)
+		}
+		if existing.SourcePlatform == m.SourcePlatform && existing.SourceName == m.SourceName && existing.TargetPlatform == m.TargetPlatform {
+			return fmt.Errorf("MCP source %s/%q already maps to target %s/%q", m.SourcePlatform, m.SourceName, m.TargetPlatform, existing.TargetName)
+		}
+		if existing.TargetPlatform == m.TargetPlatform && existing.TargetName == m.TargetName {
+			return fmt.Errorf("MCP target %s/%q already has a mapping", m.TargetPlatform, m.TargetName)
 		}
 	}
 	r.mappings = append(r.mappings, m)
@@ -105,11 +114,16 @@ func Plan(servers []model.MCPServer, target model.Platform, opts Options) ([]Pla
 		return nil, fmt.Errorf("unsupported target platform %q", target)
 	}
 	items := make([]PlanItem, 0, len(servers))
-	seen := make(map[string]bool)
+	seenSources := make(map[string]bool)
+	seenTargets := make(map[string]bool)
 	for i, source := range servers {
 		if err := source.Validate(); err != nil {
 			return nil, fmt.Errorf("validate source MCP server %d: %w", i, err)
 		}
+		if seenSources[source.Key()] {
+			return nil, fmt.Errorf("duplicate source MCP server %q", source.Name)
+		}
+		seenSources[source.Key()] = true
 		item := PlanItem{Source: clone(source)}
 		switch {
 		case !opts.Enabled:
@@ -131,10 +145,10 @@ func Plan(servers []model.MCPServer, target model.Platform, opts Options) ([]Pla
 			if err := validateTarget(item.Target); err != nil {
 				return nil, err
 			}
-			if seen[item.Target.Key()] {
+			if seenTargets[item.Target.Key()] {
 				return nil, fmt.Errorf("duplicate target MCP server %q", item.Target.Name)
 			}
-			seen[item.Target.Key()] = true
+			seenTargets[item.Target.Key()] = true
 		}
 		items = append(items, item)
 	}
@@ -168,6 +182,11 @@ func Sync(ctx context.Context, servers []model.MCPServer, target model.Platform,
 	items, err := Plan(servers, target, opts)
 	if err != nil {
 		return nil, err
+	}
+	for _, item := range items {
+		if item.Action == ActionBlocked {
+			return items, fmt.Errorf("MCP synchronization blocked: %s", item.Reason)
+		}
 	}
 	var writes []model.MCPServer
 	for _, item := range items {

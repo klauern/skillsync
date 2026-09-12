@@ -16,6 +16,7 @@ type serverConfig struct {
 	Command string            `json:"command,omitempty" toml:"command,omitempty"`
 	Args    []string          `json:"args,omitempty" toml:"args,omitempty"`
 	URL     string            `json:"url,omitempty" toml:"url,omitempty"`
+	HTTPURL string            `json:"httpUrl,omitempty" toml:"http_url,omitempty"`
 	Env     map[string]string `json:"env,omitempty" toml:"env,omitempty"`
 	Headers map[string]string `json:"headers,omitempty" toml:"headers,omitempty"`
 }
@@ -35,15 +36,28 @@ func DecodeConfig(platform model.Platform, data []byte) ([]model.MCPServer, erro
 	servers := make([]model.MCPServer, 0, len(names))
 	for _, name := range names {
 		cfg := configs[name]
+		if cfg.URL != "" && cfg.HTTPURL != "" {
+			return nil, fmt.Errorf("decode MCP server %q: both url and httpUrl are set", name)
+		}
 		transport := model.MCPTransport(cfg.Type)
+		serverURL := cfg.URL
+		if cfg.HTTPURL != "" {
+			if platform != model.Gemini {
+				return nil, fmt.Errorf("decode MCP server %q: httpUrl is only supported by Gemini", name)
+			}
+			serverURL = cfg.HTTPURL
+			if transport == "" {
+				transport = model.MCPTransportHTTP
+			}
+		}
 		if transport == "" {
-			if cfg.URL != "" {
+			if serverURL != "" {
 				transport = model.MCPTransportHTTP
 			} else {
 				transport = model.MCPTransportStdio
 			}
 		}
-		server := model.MCPServer{Name: name, Platform: platform, Transport: transport, Command: cfg.Command, Args: cfg.Args, URL: cfg.URL, Env: cfg.Env, Headers: cfg.Headers}
+		server := model.MCPServer{Name: name, Platform: platform, Transport: transport, Command: cfg.Command, Args: cfg.Args, URL: serverURL, Env: cfg.Env, Headers: cfg.Headers}
 		if err := validateTarget(server); err != nil {
 			return nil, fmt.Errorf("decode MCP server %q: %w", name, err)
 		}
@@ -65,7 +79,12 @@ func EncodeConfig(platform model.Platform, servers []model.MCPServer) ([]byte, e
 		if _, exists := configs[server.Name]; exists {
 			return nil, fmt.Errorf("duplicate MCP server %q", server.Name)
 		}
-		cfg := serverConfig{Command: server.Command, Args: server.Args, URL: server.URL, Env: server.Env, Headers: server.Headers}
+		cfg := serverConfig{Command: server.Command, Args: server.Args, Env: server.Env, Headers: server.Headers}
+		if platform == model.Gemini && server.Transport == model.MCPTransportHTTP {
+			cfg.HTTPURL = server.URL
+		} else {
+			cfg.URL = server.URL
+		}
 		if server.Transport != model.MCPTransportStdio {
 			cfg.Type = string(server.Transport)
 		}

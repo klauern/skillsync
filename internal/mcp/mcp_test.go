@@ -39,6 +39,52 @@ func TestSyncPreflightsFullBatchBeforeWrite(t *testing.T) {
 	}
 }
 
+func TestSyncDoesNotWriteWhenTrustBlocksBatch(t *testing.T) {
+	t.Parallel()
+	w := &recordingWriter{}
+	items, err := Sync(context.Background(), []model.MCPServer{validServer()}, model.ClaudeCode, w, Options{Enabled: true})
+	if err == nil || !strings.Contains(err.Error(), "synchronization blocked") {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if len(items) != 1 || items[0].Action != ActionBlocked {
+		t.Fatalf("items = %#v, want one blocked item", items)
+	}
+	if w.calls != 0 {
+		t.Fatalf("writer called %d times for blocked batch", w.calls)
+	}
+}
+
+func TestPlanRejectsDuplicateSourceIdentity(t *testing.T) {
+	t.Parallel()
+	_, err := Plan([]model.MCPServer{validServer(), validServer()}, model.ClaudeCode, Options{Enabled: true})
+	if err == nil || !strings.Contains(err.Error(), "duplicate source MCP server") {
+		t.Fatalf("Plan() error = %v", err)
+	}
+}
+
+func TestRegistryRejectsMappingCollisions(t *testing.T) {
+	t.Parallel()
+	registry := &Registry{}
+	first := Mapping{Key: "files", SourcePlatform: model.ClaudeCode, SourceName: "files", TargetPlatform: model.Codex, TargetName: "filesystem"}
+	if err := registry.Register(first); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		m    Mapping
+		want string
+	}{
+		{"source collision", Mapping{Key: "other", SourcePlatform: model.ClaudeCode, SourceName: "files", TargetPlatform: model.Codex, TargetName: "other-target"}, "source"},
+		{"target collision", Mapping{Key: "other", SourcePlatform: model.Gemini, SourceName: "remote", TargetPlatform: model.Codex, TargetName: "filesystem"}, "target"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := registry.Register(tc.m); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Register() error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestPlanRequiresTrustAndExactMapping(t *testing.T) {
 	t.Parallel()
 	server := validServer()

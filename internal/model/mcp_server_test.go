@@ -11,9 +11,14 @@ func TestMCPServerValidate(t *testing.T) {
 	}{
 		{"stdio reference", MCPServer{Name: "local", Platform: Codex, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "${MCP_TOKEN}"}}, false}, // #nosec G101 -- reference only
 		{"http header reference", MCPServer{Name: "remote", Platform: ClaudeCode, Transport: MCPTransportHTTP, URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "${AUTH_HEADER}"}}, false},
+		{"Copilot input reference", MCPServer{Name: "local", Platform: Copilot, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "${input:api-key}"}}, false},
 		{"literal environment secret", MCPServer{Name: "local", Platform: Codex, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "secret-value"}}, true},
 		{"URL userinfo", MCPServer{Name: "remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "https://user:pass@example.com/mcp"}, true}, // #nosec G101 -- rejection fixture
 		{"URL query", MCPServer{Name: "remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "https://example.com/mcp?token=secret"}, true},
+		{"URL fragment", MCPServer{Name: "remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "https://example.com/mcp#token"}, true},
+		{"URL non-http scheme", MCPServer{Name: "remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "ftp://example.com/mcp"}, true},
+		{"invalid reference expression", MCPServer{Name: "local", Platform: Codex, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "${TOKEN:-fallback}"}}, true}, // #nosec G101 -- rejection fixture
+		{"name whitespace", MCPServer{Name: " remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "https://example.com/mcp"}, true},
 		{"mixed transport", MCPServer{Name: "mixed", Platform: Copilot, Transport: MCPTransportStdio, Command: "server", URL: "https://example.com"}, true},
 	}
 	for _, tt := range tests {
