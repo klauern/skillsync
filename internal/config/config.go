@@ -42,6 +42,10 @@ type PlatformsConfig struct {
 	// Pi is the canonical Pi configuration. PiDev and PiAgent remain readable
 	// compatibility fields for callers and legacy files.
 	Pi PlatformConfig `yaml:"pi"`
+
+	// piSkillsPathsConfigured distinguishes an explicit empty override from the
+	// default paths populated by Default.
+	piSkillsPathsConfigured bool
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -257,7 +261,7 @@ func (p PlatformsConfig) MarshalYAML() (any, error) {
 }
 
 func (p *PlatformsConfig) normalizePi() {
-	if len(p.Pi.SkillsPaths) == 0 {
+	if !p.piSkillsPathsConfigured && len(p.Pi.SkillsPaths) == 0 {
 		if len(p.PiDev.SkillsPaths) > 0 {
 			p.Pi = p.PiDev
 		} else if len(p.PiAgent.SkillsPaths) > 0 {
@@ -272,24 +276,44 @@ func (p *PlatformsConfig) normalizePiFromYAML(data []byte) error {
 		Platforms map[string]yaml.Node `yaml:"platforms"`
 	}
 	if err := yaml.Unmarshal(data, &raw); err == nil {
-		if _, ok := raw.Platforms["pi"]; !ok {
-			if node, ok := raw.Platforms["pidev"]; ok {
-				var legacy PlatformConfig
-				if err := node.Decode(&legacy); err != nil {
-					return fmt.Errorf("decode platforms.pidev: %w", err)
-				}
-				p.Pi = legacy
-			} else if node, ok := raw.Platforms["pi_agent"]; ok {
-				var legacy PlatformConfig
-				if err := node.Decode(&legacy); err != nil {
-					return fmt.Errorf("decode platforms.pi_agent: %w", err)
-				}
-				p.Pi = legacy
+		if node, ok := raw.Platforms["pi"]; ok {
+			p.piSkillsPathsConfigured = hasSkillsPathsKey(node)
+		} else if node, ok := raw.Platforms["pidev"]; ok {
+			p.piSkillsPathsConfigured = hasSkillsPathsKey(node)
+			var legacy PlatformConfig
+			if err := node.Decode(&legacy); err != nil {
+				return fmt.Errorf("decode platforms.pidev: %w", err)
 			}
+			p.Pi = legacy
+		} else if node, ok := raw.Platforms["pi_agent"]; ok {
+			p.piSkillsPathsConfigured = hasSkillsPathsKey(node)
+			var legacy PlatformConfig
+			if err := node.Decode(&legacy); err != nil {
+				return fmt.Errorf("decode platforms.pi_agent: %w", err)
+			}
+			p.Pi = legacy
 		}
 	}
 	p.PiDev, p.PiAgent = p.Pi, p.Pi
 	return nil
+}
+
+func hasSkillsPathsKey(node yaml.Node) bool {
+	if node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == "skills_paths" {
+			return true
+		}
+	}
+	return false
+}
+
+// PiSkillsPathsConfigured reports whether Pi skills paths were explicitly
+// configured in YAML or through an environment override.
+func (p *PlatformsConfig) PiSkillsPathsConfigured() bool {
+	return p.piSkillsPathsConfigured
 }
 
 func (p PlatformsConfig) canonicalPi() PlatformConfig {
@@ -349,31 +373,33 @@ func (c *Config) applyEnvironment() {
 	// Prefer the newer colon-separated *_SKILLS_PATHS variables, but continue
 	// to honor the legacy single-path *_PATH aliases used by older tests and
 	// sync/validation code paths.
-	if v := firstNonEmptyEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", "SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
-		c.Platforms.ClaudeCode.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", "SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
+		c.Platforms.ClaudeCode.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", "SKILLSYNC_CURSOR_PATH"); v != "" {
-		c.Platforms.Cursor.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", "SKILLSYNC_CURSOR_PATH"); v != "" {
+		c.Platforms.Cursor.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
-		c.Platforms.Codex.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
+		c.Platforms.Codex.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv(
+	if v, key, ok := firstConfiguredEnv(
 		"SKILLSYNC_PI_SKILLS_PATHS", "SKILLSYNC_PI_PATH",
 		"SKILLSYNC_PI_DEV_SKILLS_PATHS",
 		"SKILLSYNC_PIDEV_SKILLS_PATHS",
 		"SKILLSYNC_PI_DEV_PATH",
 		"SKILLSYNC_PIDEV_PATH",
-	); v != "" {
-		c.Platforms.Pi.SkillsPaths = splitPaths(v)
-	} else if v := firstNonEmptyEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); v != "" {
-		c.Platforms.Pi.SkillsPaths = splitPaths(v)
+	); ok {
+		c.Platforms.Pi.SkillsPaths = configuredPaths(key, v)
+		c.Platforms.piSkillsPathsConfigured = true
+	} else if v, key, ok := firstConfiguredEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); ok {
+		c.Platforms.Pi.SkillsPaths = configuredPaths(key, v)
+		c.Platforms.piSkillsPathsConfigured = true
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
-		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
+		c.Platforms.Copilot.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", "SKILLSYNC_GEMINI_PATH"); v != "" {
-		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", "SKILLSYNC_GEMINI_PATH"); v != "" {
+		c.Platforms.Gemini.SkillsPaths = configuredPaths(key, v)
 	}
 
 	// Similarity settings
@@ -396,7 +422,7 @@ func (c *Config) applyEnvironment() {
 // splitPaths splits a colon-separated path string into individual paths.
 // Empty segments are filtered out.
 func splitPaths(s string) []string {
-	parts := strings.Split(s, ":")
+	parts := filepath.SplitList(s)
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -407,13 +433,29 @@ func splitPaths(s string) []string {
 	return result
 }
 
-func firstNonEmptyEnv(keys ...string) string {
+func firstNonEmptyEnv(keys ...string) (string, string) {
 	for _, key := range keys {
 		if value := os.Getenv(key); value != "" {
-			return value
+			return value, key
 		}
 	}
-	return ""
+	return "", ""
+}
+
+func firstConfiguredEnv(keys ...string) (string, string, bool) {
+	for _, key := range keys {
+		if value, ok := os.LookupEnv(key); ok {
+			return value, key, true
+		}
+	}
+	return "", "", false
+}
+
+func configuredPaths(key, value string) []string {
+	if strings.HasSuffix(key, "_SKILLS_PATHS") {
+		return splitPaths(value)
+	}
+	return []string{value}
 }
 
 // GetStrategy returns the sync strategy from config, validating it.

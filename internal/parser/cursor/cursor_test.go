@@ -49,10 +49,17 @@ func TestRulesDirectoryIgnoresPlainMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	foundActive := false
 	for _, skill := range got {
+		if skill.Name == "active" {
+			foundActive = true
+		}
 		if skill.Name == "inactive" {
 			t.Fatal("plain .md under rules was treated as active")
 		}
+	}
+	if !foundActive {
+		t.Fatal("active .mdc under rules was not discovered")
 	}
 }
 
@@ -91,6 +98,46 @@ func TestParserDiscoversProjectAndNestedAgents(t *testing.T) {
 	}
 	if len(byName) != 2 {
 		t.Fatalf("discovered %d instructions, want 2: %v", len(byName), byName)
+	}
+}
+
+func TestParserDisambiguatesNestedAgentNames(t *testing.T) {
+	repo := t.TempDir()
+	base := filepath.Join(repo, ".cursor", "skills")
+	paths := map[string]string{
+		filepath.Join(repo, "a-b", "AGENTS.md"):    "hyphenated instructions",
+		filepath.Join(repo, "a", "b", "AGENTS.md"): "nested instructions",
+	}
+	for path, content := range paths {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := New(base).Parse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("Parse() returned %d instructions, want 2: %#v", len(got), got)
+	}
+	for _, content := range []string{"hyphenated instructions", "nested instructions"} {
+		found := false
+		for _, skill := range got {
+			if skill.Content == content {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Parse() did not retain %q: %#v", content, got)
+		}
 	}
 }
 

@@ -40,9 +40,23 @@ func New(basePath string) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	configRoot, skillsRoot := p.resolveRoots()
 
-	// Continue discovery even when the Gemini root is absent: Gemini also
-	// discovers the shared user-level ~/.agents/skills root.
-	if _, err := os.Stat(configRoot); os.IsNotExist(err) {
+	hasRoot := false
+	if _, err := os.Stat(configRoot); err == nil {
+		hasRoot = true
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect Gemini config root %q: %w", configRoot, err)
+	}
+	if !hasRoot {
+		for _, root := range p.skillRoots(configRoot, skillsRoot) {
+			if _, err := os.Stat(root); err == nil {
+				hasRoot = true
+				break
+			} else if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("inspect Gemini skills root %q: %w", root, err)
+			}
+		}
+	}
+	if !hasRoot {
 		logging.Debug(
 			"config directory not found; checking shared skills root",
 			logging.Platform(string(p.Platform())),

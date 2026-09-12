@@ -135,7 +135,8 @@ Canonical skill roots are `.claude/skills`, `.agents/skills`, `.cursor/skills`,
 roots are `~/.claude/skills`, `~/.agents/skills`, `~/.cursor/skills`,
 `~/.copilot/skills`, `~/.gemini/skills`, and `~/.pi/agent/skills`. Codex,
 Cursor, Copilot, Gemini, and Pi retain documented compatibility discovery
-roots, but hooks, plugins, packages, and custom agents are not synchronized.
+roots, but hooks, plugins, and packages are not synchronized. Native custom
+agents use a separate opt-in path with explicit native-config trust.
 
 Use `SKILLSYNC_HOME` to relocate the config directory.
 

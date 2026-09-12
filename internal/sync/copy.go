@@ -248,21 +248,60 @@ func copySkillDir(src, dst, entrypointPath string) error {
 func CopySkillBundle(source model.Skill, targetPath string) error {
 	if sourceRoot, ok := standardSkillBundleRoot(source); ok {
 		targetRoot := filepath.Dir(targetPath)
-		if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
-			return fmt.Errorf("failed to copy skill bundle: %w", err)
-		}
-		if targetName := filepath.Base(targetRoot); targetName != source.Name {
+		targetName := filepath.Base(targetRoot)
+		if targetName != source.Name {
+			sourceInfo, err := os.Stat(sourceRoot)
+			if err != nil {
+				return fmt.Errorf("failed to stat source skill bundle: %w", err)
+			}
+			parent := filepath.Dir(targetRoot)
+			if err := os.MkdirAll(parent, 0o750); err != nil {
+				return fmt.Errorf("failed to create target skill parent: %w", err)
+			}
+			stageRoot, err := os.MkdirTemp(parent, ".skillsync-stage-")
+			if err != nil {
+				return fmt.Errorf("failed to create staging directory: %w", err)
+			}
+			committed := false
+			defer func() {
+				if !committed {
+					_ = os.RemoveAll(stageRoot)
+				}
+			}()
+
+			if err := copySkillDir(sourceRoot, stageRoot, source.Path); err != nil {
+				return fmt.Errorf("failed to stage skill bundle: %w", err)
+			}
+			if err := os.Chmod(stageRoot, sourceInfo.Mode().Perm()); err != nil {
+				return fmt.Errorf("failed to set staged skill permissions: %w", err)
+			}
+
 			renamed := source
 			renamed.Name = targetName
 			transformed, err := NewTransformer().Transform(renamed, source.Platform)
 			if err != nil {
 				return fmt.Errorf("failed to rename copied skill bundle: %w", err)
 			}
-			// #nosec G306 -- targetPath is a canonical skill entrypoint and the
-			// copied file already carries the source permissions.
-			if err := os.WriteFile(targetPath, []byte(transformed.Content), 0o644); err != nil {
+			stagedEntrypoint := filepath.Join(stageRoot, filepath.Base(targetPath))
+			if err := removeExisting(stagedEntrypoint); err != nil {
+				return fmt.Errorf("failed to prepare staged skill entrypoint: %w", err)
+			}
+			// #nosec G306 -- staged skill entrypoints are intentionally readable.
+			if err := os.WriteFile(stagedEntrypoint, []byte(transformed.Content), 0o644); err != nil {
 				return fmt.Errorf("failed to write renamed skill entrypoint: %w", err)
 			}
+			if err := removeExisting(targetRoot); err != nil {
+				return fmt.Errorf("failed to replace target skill bundle: %w", err)
+			}
+			if err := os.Rename(stageRoot, targetRoot); err != nil {
+				return fmt.Errorf("failed to commit staged skill bundle: %w", err)
+			}
+			committed = true
+			return nil
+		}
+
+		if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
+			return fmt.Errorf("failed to copy skill bundle: %w", err)
 		}
 		return nil
 	}

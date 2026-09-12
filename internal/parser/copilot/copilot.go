@@ -30,7 +30,14 @@ func New(basePath string) *Parser {
 
 // Parse discovers supported Copilot artifacts from the configured .github root.
 func (p *Parser) Parse() ([]model.Skill, error) {
-	if !pathExists(p.basePath) && !pathExists(p.nativeRoot()) {
+	hasDiscoverableRoot := false
+	for _, root := range p.skillRoots() {
+		if pathExists(root) {
+			hasDiscoverableRoot = true
+			break
+		}
+	}
+	if !hasDiscoverableRoot && !pathExists(p.nativeRoot()) {
 		logging.Debug(
 			"copilot directory not found",
 			logging.Platform(string(p.Platform())),

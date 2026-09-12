@@ -374,7 +374,7 @@ func (p *Parser) skipMissingPath(path string) bool {
 	// Codex and Copilot parsers derive native configuration/instruction roots
 	// from their canonical skills roots, so sibling artifacts can exist even
 	// when the skills directory itself does not.
-	return p.platform != model.Codex && p.platform != model.Copilot
+	return p.platform != model.Codex && p.platform != model.Copilot && p.platform != model.Gemini
 }
 
 // DefaultPath returns the user-level skills path for the platform.

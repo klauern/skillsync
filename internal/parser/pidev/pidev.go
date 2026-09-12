@@ -64,7 +64,6 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		if parseErr != nil {
 			logging.Warn(
 				"failed to parse Pi SKILL.md root",
-				logging.Platform(string(p.Platform())),
 				logging.Path(root),
 				logging.Err(parseErr),
 			)

@@ -283,6 +283,9 @@ func TestParser_SettingsSkillsAndInstructionVariants(t *testing.T) {
 		}
 		t.Fatalf("instruction variants not discovered: claude=%v override=%v names=%v", claudeFound, overrideFound, names)
 	}
+	if len(got) != 3 {
+		t.Fatalf("Parse() returned %d skills, want 3: %#v", len(got), got)
+	}
 	if got := []string{got[0].Name, got[1].Name, got[2].Name}; got[0] != "configured" || got[1] != "agents-agents-override" || got[2] != "agents" {
 		t.Fatalf("unexpected precedence order: %v", got)
 	}

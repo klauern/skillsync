@@ -24,8 +24,8 @@ platforms:
     native_only: [.mdc rules, nested AGENTS.md, subagents, hooks, plugins]
   copilot:
     name: GitHub Copilot
-    write_paths: [.github/skills, ~/.copilot/skills]
-    discovery_paths: [.github/skills, ~/.copilot/skills, .agents/skills, .claude/skills]
+    write_paths: [.github/skills, ~/.copilot/skills, ~/.agents/skills]
+    discovery_paths: [.github/skills, ~/.copilot/skills, .agents/skills, ~/.agents/skills, .claude/skills]
     source: https://docs.github.com/en/copilot/concepts/agents/about-agent-skills
   gemini:
     name: Gemini CLI
@@ -40,7 +40,8 @@ platforms:
   pi:
     name: Pi
     write_paths: [.pi/skills, ~/.pi/agent/skills]
-    discovery_paths: [.pi/skills, ~/.pi/agent/skills, .agents/skills, settings.json.skills]
+    discovery_paths: [.pi/skills, ~/.pi/agent/skills, .agents/skills]
+    settings_source: settings.json.skills
     source: https://pi.dev/docs/latest/skills
     instructions: AGENTS.md, CLAUDE.md, AGENTS.override.md; trust caveats; /skill:name
 capability_boundaries:
@@ -69,10 +70,14 @@ frontmatter:
   common:
     name: {type: string, required: true}
     description: {type: string, required: true}
+    license: {type: string}
+    compatibility: {type: string, max_length: 500}
+    metadata: {type: object, additional_properties: {type: string}}
+    allowed-tools: {type: string, format: space-separated, experimental: true}
   claude: [allowed-tools, argument-hint, disable-model-invocation, user-invocable, model, context, agent, hooks]
   codex: [version, allowed-tools]
   copilot: [tools, argument-hint, model, user-invokable, target, handoffs]
-  cursor: [paths, disable-model-invocation, globs (legacy fallback), alwaysApply, description]
+  cursor: [globs (current), paths (legacy fallback), disable-model-invocation, alwaysApply, description]
   gemini: [name, description]
   pi: [name, description]
 field_mappings:

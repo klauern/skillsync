@@ -1119,6 +1119,29 @@ func (s *Synchronizer) SyncWithSkills(
 	return result, nil
 }
 
+func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
+	// Skills synthesized by callers (rather than parsed from frontmatter) do
+	// not have enough source metadata for format validation. Retained
+	// conformance issues still indicate an explicit validation failure.
+	validated := make([]model.Skill, 0, len(skills))
+	for _, skill := range skills {
+		if skill.RawFrontmatter != nil || len(skill.ConformanceIssues) > 0 {
+			validated = append(validated, skill)
+		}
+	}
+	if len(validated) == 0 {
+		return nil
+	}
+	validationResult, err := validation.ValidateSkillsFormat(validated, platform)
+	if err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+	if err := validationResult.Error(); err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+	return nil
+}
+
 func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
 	var blocked []SkillResult
 	for _, skill := range skills {
@@ -1143,17 +1166,6 @@ func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
 	return blocked
 }
 
-func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
-	validationResult, err := validation.ValidateSkillsFormat(skills, platform)
-	if err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
-	}
-	if err := validationResult.Error(); err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
-	}
-	return nil
-}
-
 func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Platform, sourceRoot, targetRoot string) error {
 	if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
 		return fmt.Errorf("failed to copy cross-harness skill bundle: %w", err)
@@ -1163,6 +1175,9 @@ func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Pl
 		return fmt.Errorf("failed to transform cross-harness skill entrypoint: %w", err)
 	}
 	entrypoint := filepath.Join(targetRoot, "SKILL.md")
+	if err := removeExisting(entrypoint); err != nil {
+		return fmt.Errorf("failed to prepare transformed skill entrypoint: %w", err)
+	}
 	// #nosec G301 G306 -- synchronized skill entrypoints are intentionally readable.
 	if err := util.WriteFileWithPerms(entrypoint, []byte(transformed.Content), 0o750, 0o644); err != nil {
 		return fmt.Errorf("failed to write transformed cross-harness skill entrypoint: %w", err)

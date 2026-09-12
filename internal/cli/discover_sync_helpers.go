@@ -473,8 +473,8 @@ func executeSyncForSkills(cfg *syncConfig, skills []model.Skill, totalAvailable 
 		DryRun:         cfg.dryRun,
 		Strategy:       cfg.strategy,
 		TargetScope:    cfg.targetSpec.TargetScope(),
-		SkipValidation: cfg.skipValidation,
 		TrustPolicy:    cfg.trustPolicy,
+		SkipValidation: cfg.skipValidation,
 	}
 
 	syncer := sync.New()
@@ -1000,8 +1000,8 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 		DryRun:         cfg.dryRun,
 		Strategy:       cfg.strategy,
 		TargetScope:    cfg.targetSpec.TargetScope(),
-		SkipValidation: cfg.skipValidation,
 		TrustPolicy:    cfg.trustPolicy,
+		SkipValidation: cfg.skipValidation,
 	}
 
 	syncer := sync.New()
