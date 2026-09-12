@@ -739,7 +739,7 @@ func runScopePrune(cmd *cli.Command) error {
 	// Delete the duplicate skills
 	var deleted int
 	for _, skill := range toPrune {
-		if err := os.Remove(skill.Path); err != nil {
+		if err := sync.RemoveSkillBundle(skill); err != nil {
 			fmt.Printf("Warning: failed to remove %s: %v\n", skill.Path, err)
 			continue
 		}

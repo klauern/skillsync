@@ -3,6 +3,7 @@ package sync
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/klauern/skillsync/internal/model"
@@ -671,9 +672,10 @@ func TestDirectoryPreservation(t *testing.T) {
 
 	// Sync the skill
 	opts := Options{
-		DryRun:     false,
-		Strategy:   StrategyOverwrite,
-		TargetPath: targetDir,
+		DryRun:         false,
+		Strategy:       StrategyOverwrite,
+		TargetPath:     targetDir,
+		SkipValidation: true,
 	}
 
 	result, err := s.SyncWithSkills([]model.Skill{sourceSkill}, model.Codex, opts)
@@ -822,5 +824,72 @@ func TestCopyDirWithMixedContent(t *testing.T) {
 		t.Errorf("failed to readlink: %v", err)
 	} else if target != externalTarget {
 		t.Errorf("symlink target mismatch: got %q, want %q", target, externalTarget)
+	}
+}
+
+func TestCopyAndRemoveSkillBundle(t *testing.T) {
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "source", "bundle")
+	targetPath := filepath.Join(root, "target", "bundle", "SKILL.md")
+	if err := os.MkdirAll(filepath.Join(sourceRoot, "scripts"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		filepath.Join(sourceRoot, "SKILL.md"):          "---\nname: bundle\ndescription: bundle\n---\nBody",
+		filepath.Join(sourceRoot, "scripts", "run.sh"): "#!/bin/sh\n",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	skill := model.Skill{Name: "bundle", Path: filepath.Join(sourceRoot, "SKILL.md")}
+
+	if err := CopySkillBundle(skill, targetPath); err != nil {
+		t.Fatalf("CopySkillBundle() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(targetPath), "scripts", "run.sh")); err != nil {
+		t.Fatalf("supporting bundle file was not copied: %v", err)
+	}
+	if err := RemoveSkillBundle(skill); err != nil {
+		t.Fatalf("RemoveSkillBundle() error = %v", err)
+	}
+	if _, err := os.Stat(sourceRoot); !os.IsNotExist(err) {
+		t.Fatalf("source bundle still exists after removal: %v", err)
+	}
+}
+
+func TestCopySkillBundleUpdatesFrontmatterWhenRenamed(t *testing.T) {
+	root := t.TempDir()
+	sourceRoot := filepath.Join(root, "original")
+	if err := os.MkdirAll(sourceRoot, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(sourceRoot, "SKILL.md")
+	content := "---\nname: original\ndescription: Original\n---\nBody"
+	if err := os.WriteFile(sourcePath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sourcePath, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	targetPath := filepath.Join(root, "renamed", "SKILL.md")
+	skill := model.Skill{
+		Name:           "original",
+		Description:    "Original",
+		Platform:       model.Codex,
+		Path:           sourcePath,
+		Content:        "Body",
+		RawFrontmatter: map[string]any{"name": "original", "description": "Original"},
+		Type:           model.SkillTypeSkill,
+	}
+	if err := CopySkillBundle(skill, targetPath); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "name: renamed") {
+		t.Fatalf("renamed frontmatter was not updated:\n%s", got)
 	}
 }

@@ -938,7 +938,11 @@ func TestParser_CanonicalMissingRootRequiresActualSiblingArtifact(t *testing.T) 
 		t.Fatal(err)
 	}
 	p := New(filepath.Join(repo, ".agents", "skills"))
-	if p.hasDiscoverableRoot() {
+	hasRoot, err := p.hasDiscoverableRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasRoot {
 		t.Fatal("unrelated parent directory content activated Codex sibling discovery")
 	}
 	parsed, err := p.Parse()

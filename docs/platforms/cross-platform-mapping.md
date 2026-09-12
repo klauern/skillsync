@@ -125,7 +125,7 @@ skills or always-on instruction files.
 | Claude | -- | -- | No native pattern-based rules |
 | Codex | -- | -- | No native pattern-based rules |
 | Copilot | `*.instructions.md` | `applyTo` (glob) | Auto-applied when matching files in context |
-| Cursor | `.cursor/rules/*.mdc` | `paths` (current; `globs` legacy fallback) | Auto-applied when working with matching files |
+| Cursor | `.cursor/rules/*.mdc` | `globs` (current; `paths` legacy fallback) | Auto-applied when working with matching files |
 | Gemini | -- | -- | No native pattern-based rules |
 | Pi | -- | -- | No first-pass pattern-rule surface documented here |
 

@@ -281,7 +281,9 @@ func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessme
 	}
 
 	comparisonText := assessmentLower + "\n" + claudeLower + "\n" + geminiLower + "\n" + piLower + "\n" + mappingLower
-	if !strings.Contains(piLower, "pi.dev/docs/latest/skills") || !strings.Contains(piLower, "verified 2026-08-18") {
+	documents := []string{assessmentLower, claudeLower, geminiLower, piLower, mappingLower}
+	piVerifiedAt := strings.ToLower(snapshot.PlatformSupport["pi"].VerifiedAt)
+	if !strings.Contains(piLower, "pi.dev/docs/latest/skills") || piVerifiedAt == "" || !strings.Contains(piLower, "verified "+piVerifiedAt) {
 		result.AddError(fmt.Errorf("pi platform doc must include verified date and official source"))
 	}
 	if strings.Contains(strings.ToLower(schema), "pidev:") {
@@ -296,7 +298,7 @@ func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessme
 		}
 	}
 	for _, behavior := range snapshot.NonportableBehaviors {
-		if !behaviorReflected(comparisonText, behavior) {
+		if !behaviorReflectedInDocuments(documents, behavior) {
 			result.AddError(fmt.Errorf("nonportable behavior %q is not reflected in the docs", behavior))
 		}
 	}
@@ -329,19 +331,46 @@ func verifyDocConsistency(result *Result, snapshot PortabilitySnapshot, assessme
 	}
 }
 
-// behaviorReflected tolerates prose differences while requiring two meaningful
-// terms from each snapshot claim to appear in the narrative/reference docs.
+// behaviorReflected tolerates prose differences while requiring meaningful terms
+// from a single document to appear in the reference text.
 func behaviorReflected(text, behavior string) bool {
-	terms := strings.Fields(strings.ToLower(behavior))
-	found := 0
-	for _, term := range terms {
+	return behaviorReflectedInDocuments([]string{text}, behavior)
+}
+
+func behaviorReflectedInDocuments(documents []string, behavior string) bool {
+	termSet := make(map[string]struct{})
+	for _, term := range strings.Fields(strings.ToLower(behavior)) {
 		term = strings.Trim(term, "`.,;:/()")
 		if len(term) < 4 || term == "and" || term == "with" {
 			continue
 		}
-		if strings.Contains(text, term) {
-			found++
+		termSet[term] = struct{}{}
+	}
+	if len(termSet) == 0 {
+		return false
+	}
+
+	terms := make([]string, 0, len(termSet))
+	for term := range termSet {
+		terms = append(terms, term)
+	}
+	// Require at least 60% of the claim's unique terms, and at least two,
+	// to occur in one document rather than accumulating matches across docs.
+	required := (len(terms)*3 + 4) / 5
+	if required < 2 {
+		required = 2
+	}
+
+	for _, document := range documents {
+		found := 0
+		for _, term := range terms {
+			if strings.Contains(strings.ToLower(document), term) {
+				found++
+			}
+		}
+		if found >= required {
+			return true
 		}
 	}
-	return found >= 2
+	return false
 }

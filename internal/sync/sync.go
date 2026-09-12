@@ -1142,22 +1142,6 @@ func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
 	return nil
 }
 
-func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Platform, sourceRoot, targetRoot string) error {
-	if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
-		return fmt.Errorf("failed to copy cross-harness skill bundle: %w", err)
-	}
-	transformed, err := s.transformer.Transform(source, target)
-	if err != nil {
-		return fmt.Errorf("failed to transform cross-harness skill entrypoint: %w", err)
-	}
-	entrypoint := filepath.Join(targetRoot, "SKILL.md")
-	// #nosec G301 G306 -- synchronized skill entrypoints are intentionally readable.
-	if err := util.WriteFileWithPerms(entrypoint, []byte(transformed.Content), 0o750, 0o644); err != nil {
-		return fmt.Errorf("failed to write transformed cross-harness skill entrypoint: %w", err)
-	}
-	return nil
-}
-
 func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
 	var blocked []SkillResult
 	for _, skill := range skills {
@@ -1180,6 +1164,25 @@ func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
 		}
 	}
 	return blocked
+}
+
+func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Platform, sourceRoot, targetRoot string) error {
+	if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
+		return fmt.Errorf("failed to copy cross-harness skill bundle: %w", err)
+	}
+	transformed, err := s.transformer.Transform(source, target)
+	if err != nil {
+		return fmt.Errorf("failed to transform cross-harness skill entrypoint: %w", err)
+	}
+	entrypoint := filepath.Join(targetRoot, "SKILL.md")
+	if err := removeExisting(entrypoint); err != nil {
+		return fmt.Errorf("failed to prepare transformed skill entrypoint: %w", err)
+	}
+	// #nosec G301 G306 -- synchronized skill entrypoints are intentionally readable.
+	if err := util.WriteFileWithPerms(entrypoint, []byte(transformed.Content), 0o750, 0o644); err != nil {
+		return fmt.Errorf("failed to write transformed cross-harness skill entrypoint: %w", err)
+	}
+	return nil
 }
 
 // DeleteWithSkills deletes skills from target that match the source skills.

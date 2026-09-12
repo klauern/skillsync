@@ -108,8 +108,8 @@ for basic project-wide instructions.
 | Field         | Type       | Required | Description |
 |:--------------|:-----------|:---------|:------------|
 | `description` | `string`   | no       | Presented to the agent to decide if the rule should be applied |
-| `paths`       | `string[]` | no       | Current path patterns for file matching |
-| `globs`       | `string[]` | no       | Legacy fallback when `paths` is absent |
+| `globs`       | `string[]` | no       | Current path patterns for file matching |
+| `paths`       | `string[]` | no       | Legacy fallback when `globs` is absent |
 | `alwaysApply` | `bool`     | no       | If `true`, applies to all files regardless of globs |
 
 #### Application Modes
@@ -120,7 +120,7 @@ Cursor supports four rule application modes:
 |:-------------------------|:--------|:------------|
 | **Always**               | `alwaysApply: true` | Activates for every chat session |
 | **Apply Intelligently**  | `description` set, no `globs`/`alwaysApply` | Agent decides relevance based on `description` field |
-| **Apply to Specific Files** | `paths: [...]` (`globs` legacy fallback) | Triggers when files match path patterns |
+| **Apply to Specific Files** | `globs: [...]` (`paths` legacy fallback) | Triggers when files match path patterns |
 | **Apply Manually**       | none of the above | Invoked via `@rule-name` in chat |
 
 #### Example
@@ -128,7 +128,7 @@ Cursor supports four rule application modes:
 ```markdown
 ---
 description: Go error handling conventions
-paths: ["*.go"]
+globs: ["*.go"]
 alwaysApply: false
 ---
 

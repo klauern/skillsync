@@ -373,33 +373,33 @@ func (c *Config) applyEnvironment() {
 	// Prefer the newer colon-separated *_SKILLS_PATHS variables, but continue
 	// to honor the legacy single-path *_PATH aliases used by older tests and
 	// sync/validation code paths.
-	if v := firstNonEmptyEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", "SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
-		c.Platforms.ClaudeCode.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS", "SKILLSYNC_CLAUDE_CODE_PATH"); v != "" {
+		c.Platforms.ClaudeCode.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", "SKILLSYNC_CURSOR_PATH"); v != "" {
-		c.Platforms.Cursor.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_CURSOR_SKILLS_PATHS", "SKILLSYNC_CURSOR_PATH"); v != "" {
+		c.Platforms.Cursor.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
-		c.Platforms.Codex.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
+		c.Platforms.Codex.SkillsPaths = configuredPaths(key, v)
 	}
-	if v, ok := firstConfiguredEnv(
+	if v, key, ok := firstConfiguredEnv(
 		"SKILLSYNC_PI_SKILLS_PATHS", "SKILLSYNC_PI_PATH",
 		"SKILLSYNC_PI_DEV_SKILLS_PATHS",
 		"SKILLSYNC_PIDEV_SKILLS_PATHS",
 		"SKILLSYNC_PI_DEV_PATH",
 		"SKILLSYNC_PIDEV_PATH",
 	); ok {
-		c.Platforms.Pi.SkillsPaths = splitPaths(v)
+		c.Platforms.Pi.SkillsPaths = configuredPaths(key, v)
 		c.Platforms.piSkillsPathsConfigured = true
-	} else if v, ok := firstConfiguredEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); ok {
-		c.Platforms.Pi.SkillsPaths = splitPaths(v)
+	} else if v, key, ok := firstConfiguredEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); ok {
+		c.Platforms.Pi.SkillsPaths = configuredPaths(key, v)
 		c.Platforms.piSkillsPathsConfigured = true
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
-		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
+		c.Platforms.Copilot.SkillsPaths = configuredPaths(key, v)
 	}
-	if v := firstNonEmptyEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", "SKILLSYNC_GEMINI_PATH"); v != "" {
-		c.Platforms.Gemini.SkillsPaths = splitPaths(v)
+	if v, key := firstNonEmptyEnv("SKILLSYNC_GEMINI_SKILLS_PATHS", "SKILLSYNC_GEMINI_PATH"); v != "" {
+		c.Platforms.Gemini.SkillsPaths = configuredPaths(key, v)
 	}
 
 	// Similarity settings
@@ -422,7 +422,7 @@ func (c *Config) applyEnvironment() {
 // splitPaths splits a colon-separated path string into individual paths.
 // Empty segments are filtered out.
 func splitPaths(s string) []string {
-	parts := strings.Split(s, ":")
+	parts := filepath.SplitList(s)
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
@@ -433,22 +433,29 @@ func splitPaths(s string) []string {
 	return result
 }
 
-func firstNonEmptyEnv(keys ...string) string {
+func firstNonEmptyEnv(keys ...string) (string, string) {
 	for _, key := range keys {
 		if value := os.Getenv(key); value != "" {
-			return value
+			return value, key
 		}
 	}
-	return ""
+	return "", ""
 }
 
-func firstConfiguredEnv(keys ...string) (string, bool) {
+func firstConfiguredEnv(keys ...string) (string, string, bool) {
 	for _, key := range keys {
 		if value, ok := os.LookupEnv(key); ok {
-			return value, true
+			return value, key, true
 		}
 	}
-	return "", false
+	return "", "", false
+}
+
+func configuredPaths(key, value string) []string {
+	if strings.HasSuffix(key, "_SKILLS_PATHS") {
+		return splitPaths(value)
+	}
+	return []string{value}
 }
 
 // GetStrategy returns the sync strategy from config, validating it.
