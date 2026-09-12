@@ -11,7 +11,7 @@ func TestMCPServerValidate(t *testing.T) {
 	}{
 		{"stdio reference", MCPServer{Name: "local", Platform: Codex, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "${MCP_TOKEN}"}}, false}, // #nosec G101 -- reference only
 		{"http header reference", MCPServer{Name: "remote", Platform: ClaudeCode, Transport: MCPTransportHTTP, URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "${AUTH_HEADER}"}}, false},
-		{"Copilot input reference", MCPServer{Name: "local", Platform: Copilot, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "${input:api-key}"}}, false},
+		{"Copilot input reference", MCPServer{Name: "local", Platform: Copilot, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "${input:api-key}"}}, false}, // #nosec G101 -- reference only
 		{"literal environment secret", MCPServer{Name: "local", Platform: Codex, Transport: MCPTransportStdio, Command: "server", Env: map[string]string{"TOKEN": "secret-value"}}, true},
 		{"URL userinfo", MCPServer{Name: "remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "https://user:pass@example.com/mcp"}, true}, // #nosec G101 -- rejection fixture
 		{"URL query", MCPServer{Name: "remote", Platform: Gemini, Transport: MCPTransportHTTP, URL: "https://example.com/mcp?token=secret"}, true},
