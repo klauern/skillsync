@@ -554,8 +554,9 @@ func TestGetSymlinkTarget(t *testing.T) {
 	})
 }
 
-// TestSymlinkPreservation verifies that syncing a symlink skill creates a symlink at target.
-func TestSymlinkPreservation(t *testing.T) {
+// TestCrossHarnessSymlinkCopiesTransformedBundle verifies that cross-harness
+// syncing materializes a symlinked bundle instead of leaking the symlink.
+func TestCrossHarnessSymlinkCopiesTransformedBundle(t *testing.T) {
 	s := New()
 
 	tmpDir := t.TempDir()
@@ -616,23 +617,21 @@ func TestSymlinkPreservation(t *testing.T) {
 		t.Fatalf("sync failed with error: %v", result.Skills[0].Error)
 	}
 
-	// Verify target is a symlink
+	// Cross-harness sync must copy the bundle rather than recreate the
+	// source symlink, so target content is isolated from the source.
 	targetSkillPath := filepath.Join(targetDir, "my-dev-skill")
 	info, err := os.Lstat(targetSkillPath)
 	if err != nil {
 		t.Fatalf("failed to stat target: %v", err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("expected target to be a symlink, but it's not")
+	if !info.IsDir() {
+		t.Fatalf("expected copied target bundle directory, got %v", info.Mode())
 	}
-
-	// Verify symlink target
-	linkTarget, err := os.Readlink(targetSkillPath)
-	if err != nil {
-		t.Fatalf("failed to read symlink target: %v", err)
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("expected target bundle not to be a symlink")
 	}
-	if linkTarget != actualSkillDir {
-		t.Errorf("symlink target = %q, want %q", linkTarget, actualSkillDir)
+	if _, err := os.Stat(filepath.Join(targetSkillPath, "SKILL.md")); err != nil {
+		t.Fatalf("expected copied canonical entrypoint: %v", err)
 	}
 }
 

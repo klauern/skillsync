@@ -126,6 +126,11 @@ func (s *Synchronizer) Sync(source, target model.Platform, opts Options) (*Resul
 		)
 		return result, fmt.Errorf("failed to parse source skills: %w", err)
 	}
+	if !opts.SkipValidation {
+		if err := validateSourceSkills(sourceSkills, source); err != nil {
+			return result, err
+		}
+	}
 	result.SelectedCount = len(sourceSkills)
 	result.TotalAvailable = len(sourceSkills)
 
@@ -584,6 +589,20 @@ func (s *Synchronizer) processSkill(
 		// Create based on source type
 		switch sourceType {
 		case SourceTypeSymlink:
+			if source.Platform != targetPlatform && isSkillFile(filepath.Base(source.Path)) {
+				resolvedSource, err := filepath.EvalSymlinks(sourceRootPath)
+				if err != nil {
+					result.Action = ActionFailed
+					result.Error = fmt.Errorf("failed to resolve cross-harness skill symlink: %w", err)
+					return result
+				}
+				if err := s.copyTransformedBundle(source, targetPlatform, resolvedSource, targetEntryPath); err != nil {
+					result.Action = ActionFailed
+					result.Error = err
+					return result
+				}
+				break
+			}
 			// Recreate symlink with same target
 			symlinkTarget := getSymlinkTarget(sourceRootPath)
 			if symlinkTarget == "" {
@@ -654,6 +673,14 @@ func (s *Synchronizer) processSkill(
 					logging.Path(targetEntryPath),
 					logging.Path(sourceRootPath),
 				)
+				break
+			}
+			if source.Platform != targetPlatform && isSkillFile(filepath.Base(source.Path)) {
+				if err := s.copyTransformedBundle(source, targetPlatform, sourceRootPath, targetEntryPath); err != nil {
+					result.Action = ActionFailed
+					result.Error = err
+					return result
+				}
 				break
 			}
 			if needsCanonicalEntrypointCopy(source, targetPlatform) {
@@ -937,6 +964,11 @@ func (s *Synchronizer) SyncWithSkills(
 	}
 	result.SelectedCount = len(skills)
 	result.TotalAvailable = len(skills)
+	if !opts.SkipValidation {
+		if err := validateSourceSkills(skills, result.Source); err != nil {
+			return result, err
+		}
+	}
 
 	// Set default strategy
 	if result.Strategy == "" {
@@ -1085,6 +1117,45 @@ func (s *Synchronizer) SyncWithSkills(
 	})
 
 	return result, nil
+}
+
+func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
+	// Skills synthesized by callers (rather than parsed from frontmatter) do
+	// not have enough source metadata for format validation. Retained
+	// conformance issues still indicate an explicit validation failure.
+	validated := make([]model.Skill, 0, len(skills))
+	for _, skill := range skills {
+		if skill.RawFrontmatter != nil || len(skill.ConformanceIssues) > 0 {
+			validated = append(validated, skill)
+		}
+	}
+	if len(validated) == 0 {
+		return nil
+	}
+	validationResult, err := validation.ValidateSkillsFormat(validated, platform)
+	if err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+	if err := validationResult.Error(); err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+	return nil
+}
+
+func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Platform, sourceRoot, targetRoot string) error {
+	if err := copySkillDir(sourceRoot, targetRoot, source.Path); err != nil {
+		return fmt.Errorf("failed to copy cross-harness skill bundle: %w", err)
+	}
+	transformed, err := s.transformer.Transform(source, target)
+	if err != nil {
+		return fmt.Errorf("failed to transform cross-harness skill entrypoint: %w", err)
+	}
+	entrypoint := filepath.Join(targetRoot, "SKILL.md")
+	// #nosec G301 G306 -- synchronized skill entrypoints are intentionally readable.
+	if err := util.WriteFileWithPerms(entrypoint, []byte(transformed.Content), 0o750, 0o644); err != nil {
+		return fmt.Errorf("failed to write transformed cross-harness skill entrypoint: %w", err)
+	}
+	return nil
 }
 
 func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {

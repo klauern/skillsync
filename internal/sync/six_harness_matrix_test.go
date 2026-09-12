@@ -9,6 +9,7 @@ import (
 
 	"github.com/klauern/skillsync/internal/harness"
 	"github.com/klauern/skillsync/internal/model"
+	"github.com/klauern/skillsync/internal/trust"
 )
 
 func TestSixHarnessStandardBundleMatrix(t *testing.T) {
@@ -39,7 +40,10 @@ func TestSixHarnessStandardBundleMatrix(t *testing.T) {
 			if err := os.MkdirAll(targetRoot, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			result, err := New().Sync(model.ClaudeCode, target, Options{SourcePath: source, TargetPath: targetRoot, Strategy: StrategyOverwrite})
+			result, err := New().Sync(model.ClaudeCode, target, Options{
+				SourcePath: source, TargetPath: targetRoot, Strategy: StrategyOverwrite,
+				TrustPolicy: trust.Policy{Allowed: map[trust.Risk]bool{trust.RiskExecutable: true}},
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
