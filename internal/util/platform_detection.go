@@ -108,6 +108,12 @@ func platformDetectionPaths(cfg TieredPathConfig) []ScopedPath {
 	}
 
 	paths := make(map[model.SkillScope][]string)
+	if cfg.AdminPath != "" {
+		appendUniquePath(paths, model.ScopeAdmin, cfg.AdminPath)
+	}
+	if cfg.SystemPath != "" {
+		appendUniquePath(paths, model.ScopeSystem, cfg.SystemPath)
+	}
 	for _, root := range definition.RepoRoots {
 		for _, repoRoot := range repoSearchRoots(cfg) {
 			appendUniquePath(paths, model.ScopeRepo, filepath.Join(repoRoot, root))

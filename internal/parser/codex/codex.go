@@ -85,7 +85,11 @@ func New(basePath string) *Parser {
 func (p *Parser) Parse() ([]model.Skill, error) {
 	// Canonical skill roots can be absent even when sibling Codex configuration
 	// or repository instructions are present.
-	if !p.hasDiscoverableRoot() {
+	hasRoot, err := p.hasDiscoverableRoot()
+	if err != nil {
+		return nil, fmt.Errorf("discover Codex artifacts: %w", err)
+	}
+	if !hasRoot {
 		logging.Debug(
 			"config directory not found",
 			logging.Platform(string(p.Platform())),
@@ -179,20 +183,27 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	return allSkills, nil
 }
 
-func (p *Parser) hasDiscoverableRoot() bool {
+func (p *Parser) hasDiscoverableRoot() (bool, error) {
 	if _, err := os.Stat(p.basePath); err == nil {
-		return true
+		return true, nil
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("inspect skills root %q: %w", p.basePath, err)
 	}
 	for _, candidate := range p.configPaths() {
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return true
+			return true, nil
+		} else if err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("inspect Codex config %q: %w", candidate, err)
 		}
 	}
 	files, err := parser.DiscoverFiles(
 		p.instructionRoot(),
 		[]string{"AGENTS.md", "**/AGENTS.md", "AGENTS.override.md", "**/AGENTS.override.md"},
 	)
-	return err == nil && len(files) > 0
+	if err != nil {
+		return false, fmt.Errorf("discover Codex instruction files: %w", err)
+	}
+	return len(files) > 0, nil
 }
 
 func (p *Parser) configPaths() []string {
@@ -269,13 +280,13 @@ func (p *Parser) parseConfigFile() (*model.Skill, error) {
 	// Combine instructions
 	content := ""
 	if config.Instructions != "" {
-		content = p.resolveInstructionValue(config.Instructions, filepath.Dir(configPath))
+		content = config.Instructions
 	}
 	if config.DeveloperInstructions != "" {
 		if content != "" {
 			content += "\n\n"
 		}
-		content += p.resolveInstructionValue(config.DeveloperInstructions, filepath.Dir(configPath))
+		content += config.DeveloperInstructions
 	}
 
 	// Build metadata from config
@@ -304,19 +315,6 @@ func (p *Parser) parseConfigFile() (*model.Skill, error) {
 	}
 
 	return &skill, nil
-}
-
-func (p *Parser) resolveInstructionValue(value, baseDir string) string {
-	path := value
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(baseDir, path)
-	}
-	// #nosec G304 -- path is a configured instruction reference resolved from
-	// the trusted Codex config directory.
-	if data, err := os.ReadFile(path); err == nil {
-		return string(data)
-	}
-	return value
 }
 
 // parseAgentsFiles finds and parses AGENTS.md files

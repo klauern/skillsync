@@ -84,10 +84,7 @@ func TestSyncClaudeCodeToCodex(t *testing.T) {
 	// Codex may transform the file differently
 	e2e.AssertOutputContains(t, result, "Created")
 	// Verify something was created in codex directory
-	if !codexFixture.Exists("codex-test/SKILL.md") {
-		// Codex might aggregate into AGENTS.md or use individual files
-		t.Log("Note: Codex file structure may differ from other platforms")
-	}
+	e2e.AssertFileExists(t, codexFixture.Path("codex-test/SKILL.md"))
 }
 
 // TestSyncClaudeCodeToPi verifies sync from Claude Code to Pi.

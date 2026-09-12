@@ -189,9 +189,10 @@ func (p *Parser) parseNestedInstructions(seen map[string]bool) []model.Skill {
 		if dirRel != "." {
 			namePrefix = strings.ReplaceAll(dirRel, string(os.PathSeparator), "-")
 		}
-		name := namePrefix + "-agents"
-		if seen[name] {
-			continue
+		baseName := namePrefix + "-agents"
+		name := baseName
+		for suffix := 2; seen[name]; suffix++ {
+			name = fmt.Sprintf("%s-%d", baseName, suffix)
 		}
 		info, statErr := os.Stat(path)
 		if statErr != nil {

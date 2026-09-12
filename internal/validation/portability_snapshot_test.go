@@ -46,6 +46,16 @@ func TestBehaviorReflectedAllowsProseVariation(t *testing.T) {
 	}
 }
 
+func TestBehaviorReflectedRequiresOneDocument(t *testing.T) {
+	claim := "Pi trust checks and invocation behavior"
+	if behaviorReflectedInDocuments([]string{"Pi trust", "invocation behavior"}, claim) {
+		t.Fatal("terms scattered across documents must not satisfy a behavior claim")
+	}
+	if !behaviorReflectedInDocuments([]string{"Pi trust checks and invocation behavior"}, claim) {
+		t.Fatal("terms in one document should satisfy the behavior claim")
+	}
+}
+
 func TestSnapshotVerificationDateWindow(t *testing.T) {
 	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
 	base := PortabilitySnapshot{}

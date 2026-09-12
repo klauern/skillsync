@@ -666,7 +666,7 @@ func TestGetPlatformPath_PiEnvironmentPrecedence(t *testing.T) {
 	t.Setenv("SKILLSYNC_PI_AGENT_PATH", "/agent")
 	t.Setenv("SKILLSYNC_PIDEV_PATH", "/pidev")
 	t.Setenv("SKILLSYNC_PI_PATH", "/pi")
-	t.Setenv("SKILLSYNC_PI_SKILLS_PATHS", "/canonical:/secondary")
+	t.Setenv("SKILLSYNC_PI_SKILLS_PATHS", "/canonical"+string(os.PathListSeparator)+"/secondary")
 
 	got, err := GetPlatformPath(model.Pi)
 	if err != nil {
@@ -674,6 +674,19 @@ func TestGetPlatformPath_PiEnvironmentPrecedence(t *testing.T) {
 	}
 	if got != "/canonical" {
 		t.Fatalf("GetPlatformPath(Pi) = %q, want first canonical path", got)
+	}
+}
+
+func TestGetPlatformPath_LegacyPathPreservesColon(t *testing.T) {
+	legacy := "/tmp/skills:archive"
+	t.Setenv("SKILLSYNC_CURSOR_SKILLS_PATHS", "")
+	t.Setenv("SKILLSYNC_CURSOR_PATH", legacy)
+	got, err := GetPlatformPath(model.Cursor)
+	if err != nil {
+		t.Fatalf("GetPlatformPath() error = %v", err)
+	}
+	if got != legacy {
+		t.Fatalf("GetPlatformPath(Cursor) = %q, want legacy value %q", got, legacy)
 	}
 }
 

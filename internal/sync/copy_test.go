@@ -867,6 +867,9 @@ func TestCopySkillBundleUpdatesFrontmatterWhenRenamed(t *testing.T) {
 	if err := os.WriteFile(sourcePath, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(sourcePath, 0o400); err != nil {
+		t.Fatal(err)
+	}
 	targetPath := filepath.Join(root, "renamed", "SKILL.md")
 	skill := model.Skill{
 		Name:           "original",

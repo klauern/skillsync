@@ -8,6 +8,7 @@ import (
 	"github.com/klauern/skillsync/internal/model"
 	"github.com/klauern/skillsync/internal/parser"
 	"github.com/klauern/skillsync/internal/parser/mock"
+	"github.com/klauern/skillsync/internal/util"
 )
 
 func TestNew(t *testing.T) {
@@ -47,6 +48,35 @@ func TestParser_Parse_EmptyPaths(t *testing.T) {
 
 	if len(skills) != 0 {
 		t.Errorf("Parse() returned %d skills, expected 0", len(skills))
+	}
+}
+
+func TestParser_Parse_GeminiSharedRootWhenCanonicalMissing(t *testing.T) {
+	root := t.TempDir()
+	canonical := filepath.Join(root, ".gemini", "skills")
+	sharedSkill := filepath.Join(root, ".agents", "skills", "shared-skill", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(canonical), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(sharedSkill), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: shared-skill\ndescription: shared\n---\nbody\n"
+	if err := os.WriteFile(sharedSkill, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	p := New(Config{
+		Platform:      model.Gemini,
+		SearchPaths:   []util.ScopedPath{{Path: canonical, Scope: model.ScopeRepo}},
+		ParserFactory: GeminiParserFactory(),
+	})
+	skills, err := p.Parse()
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if len(skills) != 1 || skills[0].Name != "shared-skill" {
+		t.Fatalf("Parse() = %#v, want shared-skill from shared root", skills)
 	}
 }
 

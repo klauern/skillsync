@@ -79,7 +79,7 @@ type SimilarityConfig struct {
 
 // Default returns the default configuration.
 func Default() *Config {
-	return &Config{
+	cfg := &Config{
 		Platforms: PlatformsConfig{
 			ClaudeCode: PlatformConfig{
 				SkillsPaths: []string{
@@ -159,6 +159,8 @@ func Default() *Config {
 			Algorithm:        "combined",
 		},
 	}
+	cfg.Platforms.normalizePi()
+	return cfg
 }
 
 // configFileName is the name of the config file.

@@ -189,21 +189,7 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 		skill.Name = deriveNameFromPath(filePath)
 	}
 
-	// Codex commonly uses human-readable frontmatter names; fall back to the
-	// directory basename when it is the valid canonical identifier.
-	if err := parser.ValidateSkillName(skill.Name); err != nil {
-		if p.platform == model.Codex {
-			fallback := deriveNameFromPath(filePath)
-			if fallback != skill.Name {
-				if fallbackErr := parser.ValidateSkillName(fallback); fallbackErr == nil {
-					skill.Name = fallback
-				}
-			}
-		}
-		if err := parser.ValidateSkillName(skill.Name); err != nil {
-			return model.Skill{}, fmt.Errorf("invalid skill name %q in %q: %w", skill.Name, filePath, err)
-		}
-	}
+	// Conformance issues are retained for discovery; write validation decides whether the artifact can be synchronized.
 
 	// Detect skill directory structure
 	skillDir := filepath.Dir(filePath)

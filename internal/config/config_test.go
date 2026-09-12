@@ -79,6 +79,12 @@ func TestDefault(t *testing.T) {
 	if cfg.Output.Color != "auto" {
 		t.Errorf("expected Output.Color to be 'auto', got %q", cfg.Output.Color)
 	}
+	if !slices.Equal(cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.Pi.SkillsPaths) {
+		t.Errorf("expected PiAgent paths to mirror Pi, got %v vs %v", cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.Pi.SkillsPaths)
+	}
+	if !slices.Equal(cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.Pi.SkillsPaths) {
+		t.Errorf("expected PiDev paths to mirror Pi, got %v vs %v", cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.Pi.SkillsPaths)
+	}
 }
 
 func TestLoadSaveRoundTrip(t *testing.T) {
@@ -189,7 +195,7 @@ func TestEnvironmentOverrides(t *testing.T) {
 
 func TestDefault_PiAgentPaths(t *testing.T) {
 	cfg := Default()
-	want := []string{".pi/skills", "~/.pi/agent/skills"}
+	want := cfg.Platforms.Pi.SkillsPaths
 	if !slices.Equal(cfg.Platforms.PiAgent.SkillsPaths, want) {
 		t.Fatalf("PiAgent compatibility paths = %v, want %v", cfg.Platforms.PiAgent.SkillsPaths, want)
 	}
@@ -198,7 +204,7 @@ func TestDefault_PiAgentPaths(t *testing.T) {
 func TestDefault_PiDevPaths(t *testing.T) {
 	cfg := Default()
 
-	want := []string{".pi/skills", "~/.pi/agent/skills"}
+	want := cfg.Platforms.Pi.SkillsPaths
 	if !slices.Equal(cfg.Platforms.PiDev.SkillsPaths, want) {
 		t.Fatalf("PiDev compatibility paths = %v, want %v", cfg.Platforms.PiDev.SkillsPaths, want)
 	}

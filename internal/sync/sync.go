@@ -1163,6 +1163,9 @@ func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Pl
 		return fmt.Errorf("failed to transform cross-harness skill entrypoint: %w", err)
 	}
 	entrypoint := filepath.Join(targetRoot, "SKILL.md")
+	if err := removeExisting(entrypoint); err != nil {
+		return fmt.Errorf("failed to prepare transformed skill entrypoint: %w", err)
+	}
 	// #nosec G301 G306 -- synchronized skill entrypoints are intentionally readable.
 	if err := util.WriteFileWithPerms(entrypoint, []byte(transformed.Content), 0o750, 0o644); err != nil {
 		return fmt.Errorf("failed to write transformed cross-harness skill entrypoint: %w", err)

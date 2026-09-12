@@ -539,10 +539,13 @@ func GetPlatformPath(platform model.Platform) (string, error) {
 	}
 	for _, key := range rule.envVars {
 		if envPath := os.Getenv(key); envPath != "" {
-			paths := filepath.SplitList(envPath)
-			if len(paths) > 0 {
-				return paths[0], nil
+			if strings.HasSuffix(key, "_SKILLS_PATHS") {
+				paths := filepath.SplitList(envPath)
+				if len(paths) > 0 {
+					return paths[0], nil
+				}
 			}
+			return envPath, nil
 		}
 	}
 	return rule.defaultFn(), nil
