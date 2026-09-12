@@ -9,11 +9,13 @@ func TestHookConfigValidate(t *testing.T) {
 		t.Fatalf("Validate() error = %v", err)
 	}
 	for name, hook := range map[string]HookConfig{
-		"name":     {Platform: Codex, Event: "PreToolUse", Command: "true"},
-		"platform": {Name: "audit", Event: "PreToolUse", Command: "true"},
-		"event":    {Name: "audit", Platform: Codex, Command: "true"},
-		"command":  {Name: "audit", Platform: Codex, Event: "PreToolUse"},
-		"timeout":  {Name: "audit", Platform: Codex, Event: "PreToolUse", Command: "true", Timeout: -1},
+		"name":             {Platform: Codex, Event: "PreToolUse", Command: "true"},
+		"platform":         {Name: "audit", Event: "PreToolUse", Command: "true"},
+		"event":            {Name: "audit", Platform: Codex, Command: "true"},
+		"command":          {Name: "audit", Platform: Codex, Event: "PreToolUse"},
+		"timeout":          {Name: "audit", Platform: Codex, Event: "PreToolUse", Command: "true", Timeout: -1},
+		"name whitespace":  {Name: " audit", Platform: Codex, Event: "PreToolUse", Command: "true"},
+		"event whitespace": {Name: "audit", Platform: Codex, Event: "PreToolUse ", Command: "true"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

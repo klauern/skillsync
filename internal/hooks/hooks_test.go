@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/klauern/skillsync/internal/model"
@@ -45,6 +46,14 @@ func TestDiscoverIsOptInAndSorts(t *testing.T) {
 	}
 	if got[0].Name != "a" {
 		t.Fatalf("Discover() order = %+v", got)
+	}
+}
+
+func TestDiscoverRejectsUnsupportedEvent(t *testing.T) {
+	t.Parallel()
+	d := discovererStub{hooks: []model.HookConfig{{Name: "audit", Platform: model.Codex, Event: "BeforeModel", Command: "true"}}}
+	if _, err := Discover(context.Background(), model.Codex, d, true); err == nil || !strings.Contains(err.Error(), "unsupported event") {
+		t.Fatalf("Discover() error = %v, want unsupported event", err)
 	}
 }
 
@@ -111,6 +120,96 @@ func TestSyncPreflightsBatchAndWritesOnce(t *testing.T) {
 	}
 	if writer.calls != 1 || len(writer.hooks) != 1 {
 		t.Fatalf("writer = %+v", writer)
+	}
+}
+
+func TestSyncFailsClosedForBlockedUnsupportedAndUnmappedItems(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		source []model.HookConfig
+		target model.Platform
+		opts   Options
+		want   Action
+	}{
+		{
+			name:   "blocked",
+			source: []model.HookConfig{{Name: "allowed", Platform: model.Codex, Event: "Stop", Command: "true"}},
+			target: model.Codex,
+			opts:   Options{Enabled: true},
+			want:   ActionBlocked,
+		},
+		{
+			name: "unsupported",
+			source: []model.HookConfig{
+				{Name: "allowed", Platform: model.Codex, Event: "Stop", Command: "true"},
+				{Name: "foreign", Platform: model.ClaudeCode, Event: "Stop", Command: "true"},
+			},
+			target: model.Codex,
+			opts:   Options{Enabled: true, TrustPolicy: trusted()},
+			want:   ActionUnsupported,
+		},
+		{
+			name: "unmapped",
+			source: []model.HookConfig{
+				{Name: "allowed", Platform: model.Codex, Event: "PreToolUse", Command: "true", MappingKey: "mapped"},
+				{Name: "missing", Platform: model.Codex, Event: "Stop", Command: "true", MappingKey: "missing"},
+			},
+			target: model.Gemini,
+			opts: func() Options {
+				registry := &Registry{}
+				if err := registry.Register(Mapping{Key: "mapped", SourcePlatform: model.Codex, SourceEvent: "PreToolUse", TargetPlatform: model.Gemini, TargetEvent: "BeforeTool"}); err != nil {
+					t.Fatal(err)
+				}
+				return Options{Enabled: true, Registry: registry, TrustPolicy: trusted()}
+			}(),
+			want: ActionUnmapped,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			writer := &writerStub{}
+			items, err := Sync(context.Background(), tc.source, tc.target, writer, tc.opts)
+			if err == nil || !strings.Contains(err.Error(), "refused batch") {
+				t.Fatalf("Sync() error = %v", err)
+			}
+			if writer.calls != 0 {
+				t.Fatalf("writer calls = %d for %s", writer.calls, tc.name)
+			}
+			found := false
+			for _, item := range items {
+				if item.Action == tc.want {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("items = %+v, want %s item", items, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlanRejectsDuplicateSourceIdentity(t *testing.T) {
+	t.Parallel()
+	hook := model.HookConfig{Name: "audit", Platform: model.Codex, Event: "Stop", Command: "true"}
+	_, err := Plan([]model.HookConfig{hook, hook}, model.Codex, Options{Enabled: true})
+	if err == nil || !strings.Contains(err.Error(), "duplicate source hook") {
+		t.Fatalf("Plan() error = %v", err)
+	}
+}
+
+func TestRegistryRejectsDuplicateSourceMapping(t *testing.T) {
+	t.Parallel()
+	registry := &Registry{}
+	first := Mapping{Key: "stop", SourcePlatform: model.Codex, SourceEvent: "Stop", TargetPlatform: model.Gemini, TargetEvent: "SessionEnd"}
+	if err := registry.Register(first); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := first
+	duplicate.Key = "other"
+	duplicate.TargetEvent = "AfterAgent"
+	if err := registry.Register(duplicate); err == nil || !strings.Contains(err.Error(), "source") {
+		t.Fatalf("Register() error = %v, want source collision", err)
 	}
 }
 

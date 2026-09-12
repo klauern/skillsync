@@ -24,11 +24,17 @@ func (h HookConfig) Validate() error {
 	if strings.TrimSpace(h.Name) == "" {
 		return fmt.Errorf("hook name is required")
 	}
+	if strings.TrimSpace(h.Name) != h.Name {
+		return fmt.Errorf("hook name %q must not have leading or trailing whitespace", h.Name)
+	}
 	if !h.Platform.IsValid() {
 		return fmt.Errorf("unsupported hook platform %q", h.Platform)
 	}
 	if strings.TrimSpace(h.Event) == "" {
 		return fmt.Errorf("hook %q event is required", h.Name)
+	}
+	if strings.TrimSpace(h.Event) != h.Event {
+		return fmt.Errorf("hook %q event must not have leading or trailing whitespace", h.Name)
 	}
 	if strings.TrimSpace(h.Command) == "" {
 		return fmt.Errorf("hook %q command is required", h.Name)

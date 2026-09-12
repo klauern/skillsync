@@ -35,12 +35,21 @@ func (r *Registry) Register(m Mapping) error {
 	if strings.TrimSpace(m.Key) == "" || strings.TrimSpace(m.SourceEvent) == "" || strings.TrimSpace(m.TargetEvent) == "" {
 		return fmt.Errorf("hook mapping key and events are required")
 	}
+	if strings.TrimSpace(m.Key) != m.Key || strings.TrimSpace(m.SourceEvent) != m.SourceEvent || strings.TrimSpace(m.TargetEvent) != m.TargetEvent {
+		return fmt.Errorf("hook mapping key and events must not have leading or trailing whitespace")
+	}
 	if !supported(m.SourcePlatform) || !supported(m.TargetPlatform) || m.SourcePlatform == m.TargetPlatform {
 		return fmt.Errorf("hook mapping requires distinct supported platforms")
+	}
+	if !supportedEvents[m.SourcePlatform][m.SourceEvent] || !supportedEvents[m.TargetPlatform][m.TargetEvent] {
+		return fmt.Errorf("hook mapping uses unsupported event")
 	}
 	for _, existing := range r.mappings {
 		if existing.Key == m.Key && existing.SourcePlatform == m.SourcePlatform && existing.TargetPlatform == m.TargetPlatform {
 			return fmt.Errorf("hook mapping %q already exists", m.Key)
+		}
+		if existing.SourcePlatform == m.SourcePlatform && existing.SourceEvent == m.SourceEvent && existing.TargetPlatform == m.TargetPlatform {
+			return fmt.Errorf("hook source %s/%q already maps to target %s/%q", m.SourcePlatform, m.SourceEvent, m.TargetPlatform, existing.TargetEvent)
 		}
 	}
 	r.mappings = append(r.mappings, m)
@@ -91,7 +100,7 @@ func Discover(ctx context.Context, platform model.Platform, d Discoverer, enable
 		return nil, fmt.Errorf("discover hooks for %s: %w", platform, err)
 	}
 	for i := range hooks {
-		if err := hooks[i].Validate(); err != nil {
+		if err := validateTarget(hooks[i]); err != nil {
 			return nil, fmt.Errorf("validate discovered hook %d: %w", i, err)
 		}
 		if hooks[i].Platform != platform {
@@ -108,11 +117,16 @@ func Plan(sourceHooks []model.HookConfig, target model.Platform, opts Options) (
 		return nil, fmt.Errorf("unsupported target platform %q", target)
 	}
 	items := make([]PlanItem, 0, len(sourceHooks))
-	seen := make(map[string]bool)
+	seenSources := make(map[string]bool)
+	seenTargets := make(map[string]bool)
 	for i, source := range sourceHooks {
 		if err := source.Validate(); err != nil {
 			return nil, fmt.Errorf("validate source hook %d: %w", i, err)
 		}
+		if seenSources[source.Key()] {
+			return nil, fmt.Errorf("duplicate source hook %q", source.Name)
+		}
+		seenSources[source.Key()] = true
 		item := PlanItem{Source: source}
 		switch {
 		case !opts.Enabled:
@@ -137,10 +151,10 @@ func Plan(sourceHooks []model.HookConfig, target model.Platform, opts Options) (
 			if err := validateTarget(item.Target); err != nil {
 				return nil, err
 			}
-			if seen[item.Target.Key()] {
+			if seenTargets[item.Target.Key()] {
 				return nil, fmt.Errorf("duplicate target hook %q", item.Target.Name)
 			}
-			seen[item.Target.Key()] = true
+			seenTargets[item.Target.Key()] = true
 		}
 		items = append(items, item)
 	}
@@ -152,6 +166,12 @@ func Sync(ctx context.Context, sourceHooks []model.HookConfig, target model.Plat
 	items, err := Plan(sourceHooks, target, opts)
 	if err != nil {
 		return nil, err
+	}
+	for _, item := range items {
+		switch item.Action {
+		case ActionBlocked, ActionUnsupported, ActionUnmapped:
+			return items, fmt.Errorf("hook synchronization refused batch: %s", item.Reason)
+		}
 	}
 	var writes []model.HookConfig
 	for _, item := range items {
