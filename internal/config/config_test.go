@@ -35,6 +35,23 @@ func TestPiConfigYAMLPrecedenceAndCanonicalMarshal(t *testing.T) {
 	}
 }
 
+func TestPiConfigExplicitEmptyPathsArePreservedAsOverride(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("platforms:\n  pi: {skills_paths: []}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Platforms.Pi.SkillsPaths) != 0 {
+		t.Fatalf("Pi paths = %v, want empty", cfg.Platforms.Pi.SkillsPaths)
+	}
+	if !cfg.Platforms.PiSkillsPathsConfigured() {
+		t.Fatal("explicit empty Pi paths should be marked configured")
+	}
+}
+
 func TestPiConfigLegacyPrecedence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("platforms:\n  pi_agent: {skills_paths: [/agent]}\n  pidev: {skills_paths: [/dev]}\n"), 0o600); err != nil {

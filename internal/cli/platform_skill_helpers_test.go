@@ -5,11 +5,95 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/klauern/skillsync/internal/config"
 	"github.com/klauern/skillsync/internal/model"
 )
+
+func TestPlatformSkillsPaths_PiConfiguredPathsOverrideDefaults(t *testing.T) {
+	workingDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(workingDir); err != nil {
+		t.Fatalf("failed to change to working directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalWD) })
+
+	configuredPath := filepath.Join(workingDir, "custom", "skills")
+	configPath := filepath.Join(workingDir, "config.yaml")
+	configData := []byte("platforms:\n  pi:\n    skills_paths:\n      - " + configuredPath + "\n")
+	if err := os.WriteFile(configPath, configData, 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	cfg, err := config.LoadFromPath(configPath)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	paths, _, err := platformSkillsPaths(cfg, model.Pi)
+	if err != nil {
+		t.Fatalf("platformSkillsPaths() error = %v", err)
+	}
+	if len(paths) != 1 || paths[0].Path != configuredPath {
+		t.Fatalf("platformSkillsPaths() = %v, want only configured path %q", paths, configuredPath)
+	}
+}
+
+func TestPlatformSkillsPaths_PiEnvironmentOverrideTakesPrecedence(t *testing.T) {
+	workingDir := t.TempDir()
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(workingDir); err != nil {
+		t.Fatalf("failed to change to working directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalWD) })
+
+	first := filepath.Join(workingDir, "first")
+	second := filepath.Join(workingDir, "second")
+	t.Setenv("SKILLSYNC_PI_SKILLS_PATHS", first+":"+second)
+	configPath := filepath.Join(workingDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("{}\n"), 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	cfg, err := config.LoadFromPath(configPath)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	paths, _, err := platformSkillsPaths(cfg, model.Pi)
+	if err != nil {
+		t.Fatalf("platformSkillsPaths() error = %v", err)
+	}
+	if len(paths) != 2 || paths[0].Path != first || paths[1].Path != second {
+		t.Fatalf("platformSkillsPaths() = %v, want environment paths in order", paths)
+	}
+}
+
+func TestPlatformSkillsPaths_PiEmptyConfiguredPathsDisableDefaults(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("platforms:\n  pi:\n    skills_paths: []\n"), 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	cfg, err := config.LoadFromPath(configPath)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+
+	paths, _, err := platformSkillsPaths(cfg, model.Pi)
+	if err != nil {
+		t.Fatalf("platformSkillsPaths() error = %v", err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("platformSkillsPaths() = %v, want no paths", paths)
+	}
+}
 
 func TestDiscoverSkillsAcrossPlatforms(t *testing.T) {
 	original := parsePlatformSkillsFn

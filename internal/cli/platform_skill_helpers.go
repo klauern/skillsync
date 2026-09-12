@@ -129,6 +129,13 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	}
 
 	if platform == model.Pi {
+		// Configured paths are an override, not an addition to the registered
+		// harness defaults. This also preserves an explicit empty list as a way
+		// to disable Pi discovery entirely.
+		defaultPaths := config.Default().Platforms.Pi.SkillsPaths
+		if cfg.Platforms.PiSkillsPathsConfigured() || !sameStringSlice(rawPaths, defaultPaths) {
+			return scopedPathsFromStrings(resolveSkillsPaths(rawPaths, cwd, repoRoot), repoRoot), repoRoot, nil
+		}
 		return platformSkillsPathsForPi(rawPaths, cwd, repoRoot), repoRoot, nil
 	}
 
@@ -138,6 +145,18 @@ func platformSkillsPaths(cfg *config.Config, platform model.Platform) ([]util.Sc
 	}
 
 	return paths, repoRoot, nil
+}
+
+func sameStringSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func platformSkillsPathsForPi(rawPaths []string, cwd, repoRoot string) []util.ScopedPath {

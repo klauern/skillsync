@@ -177,6 +177,21 @@ func TestTransformer_TransformPath(t *testing.T) {
 	}
 }
 
+func TestTransformer_GeminiInstructionsMapToCopilotRepositoryInstructions(t *testing.T) {
+	tr := NewTransformer()
+	skill := model.Skill{
+		Name:     "gemini-md",
+		Platform: model.Gemini,
+		Path:     "/home/user/.gemini/GEMINI.md",
+		Type:     model.SkillTypeSkill,
+		Metadata: map[string]string{"type": "instructions"},
+	}
+
+	if got := tr.transformPath(skill, model.Copilot); got != "copilot-instructions.md" {
+		t.Fatalf("transformPath() = %q, want copilot-instructions.md", got)
+	}
+}
+
 func TestNamedArtifactTargetPath(t *testing.T) {
 	tests := []struct {
 		name     string

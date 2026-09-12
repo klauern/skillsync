@@ -42,6 +42,10 @@ type PlatformsConfig struct {
 	// Pi is the canonical Pi configuration. PiDev and PiAgent remain readable
 	// compatibility fields for callers and legacy files.
 	Pi PlatformConfig `yaml:"pi"`
+
+	// piSkillsPathsConfigured distinguishes an explicit empty override from the
+	// default paths populated by Default.
+	piSkillsPathsConfigured bool
 }
 
 // PlatformConfig holds configuration for a single platform.
@@ -257,7 +261,7 @@ func (p PlatformsConfig) MarshalYAML() (any, error) {
 }
 
 func (p *PlatformsConfig) normalizePi() {
-	if len(p.Pi.SkillsPaths) == 0 {
+	if !p.piSkillsPathsConfigured && len(p.Pi.SkillsPaths) == 0 {
 		if len(p.PiDev.SkillsPaths) > 0 {
 			p.Pi = p.PiDev
 		} else if len(p.PiAgent.SkillsPaths) > 0 {
@@ -272,24 +276,44 @@ func (p *PlatformsConfig) normalizePiFromYAML(data []byte) error {
 		Platforms map[string]yaml.Node `yaml:"platforms"`
 	}
 	if err := yaml.Unmarshal(data, &raw); err == nil {
-		if _, ok := raw.Platforms["pi"]; !ok {
-			if node, ok := raw.Platforms["pidev"]; ok {
-				var legacy PlatformConfig
-				if err := node.Decode(&legacy); err != nil {
-					return fmt.Errorf("decode platforms.pidev: %w", err)
-				}
-				p.Pi = legacy
-			} else if node, ok := raw.Platforms["pi_agent"]; ok {
-				var legacy PlatformConfig
-				if err := node.Decode(&legacy); err != nil {
-					return fmt.Errorf("decode platforms.pi_agent: %w", err)
-				}
-				p.Pi = legacy
+		if node, ok := raw.Platforms["pi"]; ok {
+			p.piSkillsPathsConfigured = hasSkillsPathsKey(node)
+		} else if node, ok := raw.Platforms["pidev"]; ok {
+			p.piSkillsPathsConfigured = hasSkillsPathsKey(node)
+			var legacy PlatformConfig
+			if err := node.Decode(&legacy); err != nil {
+				return fmt.Errorf("decode platforms.pidev: %w", err)
 			}
+			p.Pi = legacy
+		} else if node, ok := raw.Platforms["pi_agent"]; ok {
+			p.piSkillsPathsConfigured = hasSkillsPathsKey(node)
+			var legacy PlatformConfig
+			if err := node.Decode(&legacy); err != nil {
+				return fmt.Errorf("decode platforms.pi_agent: %w", err)
+			}
+			p.Pi = legacy
 		}
 	}
 	p.PiDev, p.PiAgent = p.Pi, p.Pi
 	return nil
+}
+
+func hasSkillsPathsKey(node yaml.Node) bool {
+	if node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == "skills_paths" {
+			return true
+		}
+	}
+	return false
+}
+
+// PiSkillsPathsConfigured reports whether Pi skills paths were explicitly
+// configured in YAML or through an environment override.
+func (p *PlatformsConfig) PiSkillsPathsConfigured() bool {
+	return p.piSkillsPathsConfigured
 }
 
 func (p PlatformsConfig) canonicalPi() PlatformConfig {
@@ -358,16 +382,18 @@ func (c *Config) applyEnvironment() {
 	if v := firstNonEmptyEnv("SKILLSYNC_CODEX_SKILLS_PATHS", "SKILLSYNC_CODEX_PATH"); v != "" {
 		c.Platforms.Codex.SkillsPaths = splitPaths(v)
 	}
-	if v := firstNonEmptyEnv(
+	if v, ok := firstConfiguredEnv(
 		"SKILLSYNC_PI_SKILLS_PATHS", "SKILLSYNC_PI_PATH",
 		"SKILLSYNC_PI_DEV_SKILLS_PATHS",
 		"SKILLSYNC_PIDEV_SKILLS_PATHS",
 		"SKILLSYNC_PI_DEV_PATH",
 		"SKILLSYNC_PIDEV_PATH",
-	); v != "" {
+	); ok {
 		c.Platforms.Pi.SkillsPaths = splitPaths(v)
-	} else if v := firstNonEmptyEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); v != "" {
+		c.Platforms.piSkillsPathsConfigured = true
+	} else if v, ok := firstConfiguredEnv("SKILLSYNC_PI_AGENT_SKILLS_PATHS", "SKILLSYNC_PI_AGENT_PATH"); ok {
 		c.Platforms.Pi.SkillsPaths = splitPaths(v)
+		c.Platforms.piSkillsPathsConfigured = true
 	}
 	if v := firstNonEmptyEnv("SKILLSYNC_COPILOT_SKILLS_PATHS", "SKILLSYNC_COPILOT_PATH"); v != "" {
 		c.Platforms.Copilot.SkillsPaths = splitPaths(v)
@@ -414,6 +440,15 @@ func firstNonEmptyEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstConfiguredEnv(keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := os.LookupEnv(key); ok {
+			return value, true
+		}
+	}
+	return "", false
 }
 
 // GetStrategy returns the sync strategy from config, validating it.
