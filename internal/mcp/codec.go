@@ -51,10 +51,12 @@ func DecodeConfig(platform model.Platform, data []byte) ([]model.MCPServer, erro
 			}
 		}
 		if transport == "" {
-			if serverURL != "" {
-				transport = model.MCPTransportHTTP
-			} else {
+			if serverURL == "" {
 				transport = model.MCPTransportStdio
+			} else if platform == model.Gemini && cfg.HTTPURL == "" {
+				transport = model.MCPTransportSSE
+			} else {
+				transport = model.MCPTransportHTTP
 			}
 		}
 		server := model.MCPServer{Name: name, Platform: platform, Transport: transport, Command: cfg.Command, Args: cfg.Args, URL: serverURL, Env: cfg.Env, Headers: cfg.Headers}
@@ -85,7 +87,7 @@ func EncodeConfig(platform model.Platform, servers []model.MCPServer) ([]byte, e
 		} else {
 			cfg.URL = server.URL
 		}
-		if server.Transport != model.MCPTransportStdio {
+		if server.Transport != model.MCPTransportStdio && platform != model.Gemini {
 			cfg.Type = string(server.Transport)
 		}
 		configs[server.Name] = cfg

@@ -59,10 +59,10 @@ func (s MCPServer) Validate() error {
 			return fmt.Errorf("remote MCP server %q requires URL and forbids command and args", s.Name)
 		}
 		parsed, err := url.Parse(s.URL)
-		if err != nil || parsed.Hostname() == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		if err != nil || parsed.Hostname() == "" || (!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) {
 			return fmt.Errorf("MCP server %q has invalid URL", s.Name)
 		}
-		if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
 			return fmt.Errorf("MCP server %q URL contains credentials, query data, or a fragment", s.Name)
 		}
 	default:

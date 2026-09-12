@@ -49,6 +49,25 @@ func TestGeminiHTTPUsesNativeHTTPURLField(t *testing.T) {
 	}
 }
 
+func TestGeminiSSERoundTripUsesURLField(t *testing.T) {
+	t.Parallel()
+	want := []model.MCPServer{{Name: "remote", Platform: model.Gemini, Transport: model.MCPTransportSSE, URL: "https://example.com/sse"}}
+	data, err := EncodeConfig(model.Gemini, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"url"`) || strings.Contains(string(data), `"type"`) {
+		t.Fatalf("Gemini SSE config = %s, want url without type", data)
+	}
+	got, err := DecodeConfig(model.Gemini, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("decoded Gemini SSE config = %#v, want %#v", got, want)
+	}
+}
+
 func TestRemoteConfigRoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, platform := range []model.Platform{model.ClaudeCode, model.Copilot, model.Gemini} {
