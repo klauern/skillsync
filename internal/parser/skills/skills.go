@@ -133,10 +133,17 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 			if metadata, ok := fm["metadata"].(map[string]any); ok {
 				skill.StandardMetadata = metadata
 			}
-			skill.Name = parser.ExtractString(fm, "name")
-			skill.Description = parser.ExtractString(fm, "description")
+
+			// Extract required fields
+			skill.Name = extractString(fm, "name")
+			skill.Description = extractString(fm, "description")
+
+			// Extract tool allowlist fields.
+			// SKILL.md content can use either `tools` or `allowed-tools`.
 			skill.Tools = extractTools(fm)
-			if typeStr := parser.ExtractString(fm, "type"); typeStr != "" {
+
+			// Extract skill type (skill vs prompt/slash-command)
+			if typeStr := extractString(fm, "type"); typeStr != "" {
 				skillType, err := model.ParseSkillType(typeStr)
 				if err != nil {
 					logging.Warn(
@@ -148,8 +155,12 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 					skill.Type = skillType
 				}
 			}
-			skill.Trigger = parser.ExtractString(fm, "trigger")
-			if scopeStr := parser.ExtractString(fm, "scope"); scopeStr != "" {
+
+			// Extract trigger for prompts/slash-commands
+			skill.Trigger = extractString(fm, "trigger")
+
+			// Extract Agent Skills Standard fields
+			if scopeStr := extractString(fm, "scope"); scopeStr != "" {
 				scope, err := model.ParseScope(scopeStr)
 				if err != nil {
 					logging.Warn(
@@ -161,16 +172,21 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 					skill.Scope = scope
 				}
 			}
+
 			skill.DisableModelInvocation = extractBool(fm, "disable-model-invocation")
-			skill.License = parser.ExtractString(fm, "license")
-			skill.Compatibility = parser.ExtractString(fm, "compatibility")
+			skill.License = extractString(fm, "license")
+			if compatibility, ok := fm["compatibility"].(string); ok {
+				skill.Compatibility = compatibility
+			}
 			skill.Scripts = extractStringSlice(fm, "scripts")
 			skill.References = extractStringSlice(fm, "references")
 			skill.Assets = extractStringSlice(fm, "assets")
+
+			// Store remaining frontmatter fields in metadata
 			knownFields := map[string]bool{
 				"name": true, "description": true, "tools": true, "allowed-tools": true, "type": true, "trigger": true,
-				"scope": true, "disable-model-invocation": true, "license": true, "compatibility": true,
-				"scripts": true, "references": true, "assets": true, "metadata": true,
+				"scope": true, "disable-model-invocation": true, "license": true,
+				"compatibility": true, "scripts": true, "references": true, "assets": true, "metadata": true,
 			}
 			for key, val := range fm {
 				if !knownFields[key] {
@@ -188,8 +204,6 @@ func (p *Parser) parseSkillFile(filePath string) (model.Skill, error) {
 	if skill.Name == "" {
 		skill.Name = deriveNameFromPath(filePath)
 	}
-
-	// Conformance issues are retained for discovery; write validation decides whether the artifact can be synchronized.
 
 	// Detect skill directory structure
 	skillDir := filepath.Dir(filePath)
@@ -328,6 +342,16 @@ func listFilesRecursive(dir string) []string {
 	return result
 }
 
+// extractString extracts a string value from a frontmatter map.
+func extractString(fm map[string]any, key string) string {
+	if val, ok := fm[key]; ok {
+		if strVal, ok := val.(string); ok {
+			return strVal
+		}
+	}
+	return ""
+}
+
 // extractBool extracts a boolean value from a frontmatter map.
 func extractBool(fm map[string]any, key string) bool {
 	if val, ok := fm[key]; ok {
@@ -463,32 +487,34 @@ func ParseSkillContent(content []byte, name string, platform model.Platform) (mo
 		}
 
 		// Override name if provided in frontmatter
-		if fmName := parser.ExtractString(fm, "name"); fmName != "" {
+		if fmName := extractString(fm, "name"); fmName != "" {
 			skill.Name = fmName
 		}
-		skill.Description = parser.ExtractString(fm, "description")
+		skill.Description = extractString(fm, "description")
 		skill.Tools = extractTools(fm)
 
 		// Extract skill type (skill vs prompt/slash-command)
-		if typeStr := parser.ExtractString(fm, "type"); typeStr != "" {
+		if typeStr := extractString(fm, "type"); typeStr != "" {
 			if skillType, err := model.ParseSkillType(typeStr); err == nil {
 				skill.Type = skillType
 			}
 		}
 
 		// Extract trigger for prompts/slash-commands
-		skill.Trigger = parser.ExtractString(fm, "trigger")
+		skill.Trigger = extractString(fm, "trigger")
 
 		// Extract Agent Skills Standard fields
-		if scopeStr := parser.ExtractString(fm, "scope"); scopeStr != "" {
+		if scopeStr := extractString(fm, "scope"); scopeStr != "" {
 			if scope, err := model.ParseScope(scopeStr); err == nil {
 				skill.Scope = scope
 			}
 		}
 
 		skill.DisableModelInvocation = extractBool(fm, "disable-model-invocation")
-		skill.License = parser.ExtractString(fm, "license")
-		skill.Compatibility = parser.ExtractString(fm, "compatibility")
+		skill.License = extractString(fm, "license")
+		if compatibility, ok := fm["compatibility"].(string); ok {
+			skill.Compatibility = compatibility
+		}
 		skill.Scripts = extractStringSlice(fm, "scripts")
 		skill.References = extractStringSlice(fm, "references")
 		skill.Assets = extractStringSlice(fm, "assets")
@@ -534,8 +560,8 @@ func IsAgentSkillsFormat(content []byte) bool {
 	}
 
 	// Agent Skills Standard requires name and description
-	name := parser.ExtractString(fm, "name")
-	description := parser.ExtractString(fm, "description")
+	name := extractString(fm, "name")
+	description := extractString(fm, "description")
 
 	return name != "" && description != ""
 }

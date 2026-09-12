@@ -701,7 +701,7 @@ var platformColorFns = map[model.Platform]func(...any) string{
 	model.ClaudeCode: ui.Info,
 	model.Cursor:     ui.Success,
 	model.Codex:      ui.Warning,
-	model.Pi:         ui.Magenta,
+	model.PiDev:      ui.Magenta,
 	model.Copilot:    ui.Blue,
 	model.Gemini:     ui.Bold,
 }

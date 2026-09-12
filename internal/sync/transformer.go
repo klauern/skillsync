@@ -108,6 +108,9 @@ func (t *Transformer) transformPath(skill model.Skill, target model.Platform) st
 	}
 
 	if target == model.Copilot {
+		if skill.Metadata["type"] == "instructions" {
+			return "copilot-instructions.md"
+		}
 		if skill.Type == model.SkillTypeSkill && skill.Name != "" {
 			return filepath.Join(skill.Name, "SKILL.md")
 		}

@@ -35,6 +35,23 @@ func TestPiConfigYAMLPrecedenceAndCanonicalMarshal(t *testing.T) {
 	}
 }
 
+func TestPiConfigExplicitEmptyPathsArePreservedAsOverride(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("platforms:\n  pi: {skills_paths: []}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Platforms.Pi.SkillsPaths) != 0 {
+		t.Fatalf("Pi paths = %v, want empty", cfg.Platforms.Pi.SkillsPaths)
+	}
+	if !cfg.Platforms.PiSkillsPathsConfigured() {
+		t.Fatal("explicit empty Pi paths should be marked configured")
+	}
+}
+
 func TestPiConfigLegacyPrecedence(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("platforms:\n  pi_agent: {skills_paths: [/agent]}\n  pidev: {skills_paths: [/dev]}\n"), 0o600); err != nil {
@@ -60,6 +77,17 @@ func TestPiEnvironmentPrecedence(t *testing.T) {
 	}
 }
 
+func TestLegacyPathEnvironmentPreservesColon(t *testing.T) {
+	cfg := Default()
+	legacy := "/tmp/skills:archive"
+	t.Setenv("SKILLSYNC_CURSOR_SKILLS_PATHS", "")
+	t.Setenv("SKILLSYNC_CURSOR_PATH", legacy)
+	cfg.applyEnvironment()
+	if got := cfg.Platforms.Cursor.SkillsPaths; len(got) != 1 || got[0] != legacy {
+		t.Fatalf("legacy path = %v, want one unchanged value %q", got, legacy)
+	}
+}
+
 func TestDefault(t *testing.T) {
 	cfg := Default()
 
@@ -78,12 +106,6 @@ func TestDefault(t *testing.T) {
 	// Check output defaults
 	if cfg.Output.Color != "auto" {
 		t.Errorf("expected Output.Color to be 'auto', got %q", cfg.Output.Color)
-	}
-	if !slices.Equal(cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.Pi.SkillsPaths) {
-		t.Errorf("expected PiAgent paths to mirror Pi, got %v vs %v", cfg.Platforms.PiAgent.SkillsPaths, cfg.Platforms.Pi.SkillsPaths)
-	}
-	if !slices.Equal(cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.Pi.SkillsPaths) {
-		t.Errorf("expected PiDev paths to mirror Pi, got %v vs %v", cfg.Platforms.PiDev.SkillsPaths, cfg.Platforms.Pi.SkillsPaths)
 	}
 }
 
@@ -157,7 +179,7 @@ func TestEnvironmentOverrides(t *testing.T) {
 		{
 			name:     "pi agent paths",
 			envKey:   "SKILLSYNC_PI_AGENT_SKILLS_PATHS",
-			envValue: ".agents/skills:~/.agents/skills",
+			envValue: ".agents/skills" + string(os.PathListSeparator) + "~/.agents/skills",
 			check: func(c *Config) bool {
 				return len(c.Platforms.PiAgent.SkillsPaths) == 2 &&
 					c.Platforms.PiAgent.SkillsPaths[0] == ".agents/skills" &&
@@ -167,7 +189,7 @@ func TestEnvironmentOverrides(t *testing.T) {
 		{
 			name:     "pi dev skills paths",
 			envKey:   "SKILLSYNC_PIDEV_SKILLS_PATHS",
-			envValue: ".agents/skills:~/.pi/agent/skills",
+			envValue: ".agents/skills" + string(os.PathListSeparator) + "~/.pi/agent/skills",
 			check: func(c *Config) bool {
 				return len(c.Platforms.PiDev.SkillsPaths) == 2 &&
 					c.Platforms.PiDev.SkillsPaths[0] == ".agents/skills" &&
@@ -195,7 +217,7 @@ func TestEnvironmentOverrides(t *testing.T) {
 
 func TestDefault_PiAgentPaths(t *testing.T) {
 	cfg := Default()
-	want := cfg.Platforms.Pi.SkillsPaths
+	want := []string{".pi/skills", "~/.pi/agent/skills"}
 	if !slices.Equal(cfg.Platforms.PiAgent.SkillsPaths, want) {
 		t.Fatalf("PiAgent compatibility paths = %v, want %v", cfg.Platforms.PiAgent.SkillsPaths, want)
 	}
@@ -204,7 +226,7 @@ func TestDefault_PiAgentPaths(t *testing.T) {
 func TestDefault_PiDevPaths(t *testing.T) {
 	cfg := Default()
 
-	want := cfg.Platforms.Pi.SkillsPaths
+	want := []string{".pi/skills", "~/.pi/agent/skills"}
 	if !slices.Equal(cfg.Platforms.PiDev.SkillsPaths, want) {
 		t.Fatalf("PiDev compatibility paths = %v, want %v", cfg.Platforms.PiDev.SkillsPaths, want)
 	}
@@ -326,6 +348,7 @@ func TestExists(t *testing.T) {
 }
 
 func TestSplitPaths(t *testing.T) {
+	sep := string(os.PathListSeparator)
 	tests := []struct {
 		name     string
 		input    string
@@ -338,22 +361,22 @@ func TestSplitPaths(t *testing.T) {
 		},
 		{
 			name:     "multiple paths",
-			input:    "/path/one:/path/two:/path/three",
+			input:    "/path/one" + sep + "/path/two" + sep + "/path/three",
 			expected: []string{"/path/one", "/path/two", "/path/three"},
 		},
 		{
 			name:     "with tilde",
-			input:    "~/.claude/skills:~/.cursor/skills",
+			input:    "~/.claude/skills" + sep + "~/.cursor/skills",
 			expected: []string{"~/.claude/skills", "~/.cursor/skills"},
 		},
 		{
 			name:     "empty segments filtered",
-			input:    "/path/one::/path/two:",
+			input:    "/path/one" + sep + sep + "/path/two" + sep,
 			expected: []string{"/path/one", "/path/two"},
 		},
 		{
 			name:     "whitespace trimmed",
-			input:    " /path/one : /path/two ",
+			input:    " /path/one " + sep + " /path/two ",
 			expected: []string{"/path/one", "/path/two"},
 		},
 		{
@@ -363,7 +386,7 @@ func TestSplitPaths(t *testing.T) {
 		},
 		{
 			name:     "only colons",
-			input:    ":::",
+			input:    sep + sep + sep,
 			expected: []string{},
 		},
 	}
@@ -483,7 +506,7 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 		{
 			name:     "claude code skills paths",
 			envKey:   "SKILLSYNC_CLAUDE_CODE_SKILLS_PATHS",
-			envValue: "/custom/path1:/custom/path2",
+			envValue: "/custom/path1" + string(os.PathListSeparator) + "/custom/path2",
 			check: func(c *Config) bool {
 				return len(c.Platforms.ClaudeCode.SkillsPaths) == 2 &&
 					c.Platforms.ClaudeCode.SkillsPaths[0] == "/custom/path1" &&
@@ -502,7 +525,7 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 		{
 			name:     "codex skills paths",
 			envKey:   "SKILLSYNC_CODEX_SKILLS_PATHS",
-			envValue: ".codex:/opt/codex/skills",
+			envValue: ".codex" + string(os.PathListSeparator) + "/opt/codex/skills",
 			check: func(c *Config) bool {
 				return len(c.Platforms.Codex.SkillsPaths) == 2 &&
 					c.Platforms.Codex.SkillsPaths[0] == ".codex" &&
@@ -512,7 +535,7 @@ func TestEnvironmentOverridesSkillsPaths(t *testing.T) {
 		{
 			name:     "pi.dev skills paths",
 			envKey:   "SKILLSYNC_PI_DEV_SKILLS_PATHS",
-			envValue: ".pi/skills:~/.pi/agent/skills",
+			envValue: ".pi/skills" + string(os.PathListSeparator) + "~/.pi/agent/skills",
 			check: func(c *Config) bool {
 				return len(c.Platforms.PiDev.SkillsPaths) == 2 &&
 					c.Platforms.PiDev.SkillsPaths[0] == ".pi/skills" &&

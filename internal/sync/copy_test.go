@@ -555,9 +555,9 @@ func TestGetSymlinkTarget(t *testing.T) {
 	})
 }
 
-// TestCrossHarnessSymlinkMaterialization verifies cross-harness writes resolve
-// symlinked bundles so target frontmatter can be filtered safely.
-func TestCrossHarnessSymlinkMaterialization(t *testing.T) {
+// TestCrossHarnessSymlinkCopiesTransformedBundle verifies that cross-harness
+// syncing materializes a symlinked bundle instead of leaking the symlink.
+func TestCrossHarnessSymlinkCopiesTransformedBundle(t *testing.T) {
 	s := New()
 
 	tmpDir := t.TempDir()
@@ -603,7 +603,6 @@ func TestCrossHarnessSymlinkMaterialization(t *testing.T) {
 		TrustPolicy: trust.Policy{Allowed: map[trust.Risk]bool{
 			trust.RiskExternalReference: true,
 		}},
-		SkipValidation: true,
 	}
 
 	result, err := s.SyncWithSkills([]model.Skill{sourceSkill}, model.Codex, opts)
@@ -619,18 +618,21 @@ func TestCrossHarnessSymlinkMaterialization(t *testing.T) {
 		t.Fatalf("sync failed with error: %v", result.Skills[0].Error)
 	}
 
-	// Verify target is a materialized directory rather than a link back to
-	// source-harness runtime content.
+	// Cross-harness sync must copy the bundle rather than recreate the
+	// source symlink, so target content is isolated from the source.
 	targetSkillPath := filepath.Join(targetDir, "my-dev-skill")
 	info, err := os.Lstat(targetSkillPath)
 	if err != nil {
 		t.Fatalf("failed to stat target: %v", err)
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		t.Errorf("expected target to be a materialized directory")
+	if !info.IsDir() {
+		t.Fatalf("expected copied target bundle directory, got %v", info.Mode())
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("expected target bundle not to be a symlink")
 	}
 	if _, err := os.Stat(filepath.Join(targetSkillPath, "SKILL.md")); err != nil {
-		t.Fatalf("materialized bundle missing SKILL.md: %v", err)
+		t.Fatalf("expected copied canonical entrypoint: %v", err)
 	}
 }
 

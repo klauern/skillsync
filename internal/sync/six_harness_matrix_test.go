@@ -40,8 +40,10 @@ func TestSixHarnessStandardBundleMatrix(t *testing.T) {
 			if err := os.MkdirAll(targetRoot, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			trustAll := trust.Policy{Allowed: map[trust.Risk]bool{trust.RiskExecutable: true, trust.RiskExternalReference: true, trust.RiskNativeConfig: true}}
-			result, err := New().Sync(model.ClaudeCode, target, Options{SourcePath: source, TargetPath: targetRoot, Strategy: StrategyOverwrite, TrustPolicy: trustAll})
+			result, err := New().Sync(model.ClaudeCode, target, Options{
+				SourcePath: source, TargetPath: targetRoot, Strategy: StrategyOverwrite,
+				TrustPolicy: trust.Policy{Allowed: map[trust.Risk]bool{trust.RiskExecutable: true}},
+			})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1119,6 +1119,29 @@ func (s *Synchronizer) SyncWithSkills(
 	return result, nil
 }
 
+func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
+	// Skills synthesized by callers (rather than parsed from frontmatter) do
+	// not have enough source metadata for format validation. Retained
+	// conformance issues still indicate an explicit validation failure.
+	validated := make([]model.Skill, 0, len(skills))
+	for _, skill := range skills {
+		if skill.RawFrontmatter != nil || len(skill.ConformanceIssues) > 0 {
+			validated = append(validated, skill)
+		}
+	}
+	if len(validated) == 0 {
+		return nil
+	}
+	validationResult, err := validation.ValidateSkillsFormat(validated, platform)
+	if err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+	if err := validationResult.Error(); err != nil {
+		return fmt.Errorf("source validation failed: %w", err)
+	}
+	return nil
+}
+
 func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
 	var blocked []SkillResult
 	for _, skill := range skills {
@@ -1141,17 +1164,6 @@ func preflightTrust(skills []model.Skill, policy trust.Policy) []SkillResult {
 		}
 	}
 	return blocked
-}
-
-func validateSourceSkills(skills []model.Skill, platform model.Platform) error {
-	validationResult, err := validation.ValidateSkillsFormat(skills, platform)
-	if err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
-	}
-	if err := validationResult.Error(); err != nil {
-		return fmt.Errorf("source validation failed: %w", err)
-	}
-	return nil
 }
 
 func (s *Synchronizer) copyTransformedBundle(source model.Skill, target model.Platform, sourceRoot, targetRoot string) error {
