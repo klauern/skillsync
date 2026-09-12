@@ -1028,6 +1028,10 @@ func runSyncCommand(cmd *cli.Command, deleteMode bool) error {
 		return fmt.Errorf("run sync orphan deletion: %w", err)
 	}
 
+	if !result.Success() {
+		return summarizeSyncFailures(result, "sync completed with errors")
+	}
+
 	return nil
 }
 

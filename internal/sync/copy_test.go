@@ -597,9 +597,10 @@ func TestCrossHarnessSymlinkCopiesTransformedBundle(t *testing.T) {
 
 	// Sync the skill
 	opts := Options{
-		DryRun:     false,
-		Strategy:   StrategyOverwrite,
-		TargetPath: targetDir,
+		DryRun:         false,
+		Strategy:       StrategyOverwrite,
+		TargetPath:     targetDir,
+		SkipValidation: true,
 		TrustPolicy: trust.Policy{Allowed: map[trust.Risk]bool{
 			trust.RiskExternalReference: true,
 		}},
@@ -847,8 +848,20 @@ func TestCopyAndRemoveSkillBundle(t *testing.T) {
 	if err := CopySkillBundle(skill, targetPath); err != nil {
 		t.Fatalf("CopySkillBundle() error = %v", err)
 	}
+
+	// A later overwrite must remove files no longer present in the source.
+	stalePath := filepath.Join(filepath.Dir(targetPath), "stale.txt")
+	if err := os.WriteFile(stalePath, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopySkillBundle(skill, targetPath); err != nil {
+		t.Fatalf("CopySkillBundle() overwrite error = %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(targetPath), "scripts", "run.sh")); err != nil {
 		t.Fatalf("supporting bundle file was not copied: %v", err)
+	}
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Fatalf("stale bundle file still exists after overwrite: %v", err)
 	}
 	if err := RemoveSkillBundle(skill); err != nil {
 		t.Fatalf("RemoveSkillBundle() error = %v", err)

@@ -41,7 +41,9 @@ func TestSixHarnessStandardBundleMatrix(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := New().Sync(model.ClaudeCode, target, Options{
-				SourcePath: source, TargetPath: targetRoot, Strategy: StrategyOverwrite,
+				SourcePath:  source,
+				TargetPath:  targetRoot,
+				Strategy:    StrategyOverwrite,
 				TrustPolicy: trust.Policy{Allowed: map[trust.Risk]bool{trust.RiskExecutable: true}},
 			})
 			if err != nil {

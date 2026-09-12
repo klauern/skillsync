@@ -40,7 +40,7 @@ digging into the full mapping details below.
 | Commands / prompts | Partially portable | Markdown content survives, but trigger syntax, arguments, and runtime controls diverge. |
 | Instructions (`CLAUDE.md`, `AGENTS.md`, system-prompt layers) | Partially portable | Persistent guidance transfers, but loading order and prompt-construction semantics do not. |
 | Gemini hook surfaces | Partially portable | `settings.json` hook intent can be preserved as config metadata, but extension `hooks/hooks.json` remains runtime-owned and must be re-authored manually. |
-| Agents / subagents / modes | Non-portable | Platform runtimes do not expose a common agent-definition file model. |
+| Native custom agents | Partially portable | Claude, Copilot, and Gemini use file-backed Markdown agents. SkillSync requires an exact directional mapping and warns about runtime loss. Cursor modes, Codex instructions, and Pi prompts are not agent targets. |
 | Lifecycle hook events | Non-portable | Runtime boundaries such as `SessionStart`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, and `Stop` are control-plane behavior, not shared file-backed content. |
 | Plugin / package / extension provenance | Non-portable | Install context and runtime ownership cannot be reconstructed by simple file sync. |
 
@@ -54,20 +54,38 @@ the destination platform.
 |---|---|---|
 | Extension hooks | `~/.gemini/extensions/<ext>/hooks/hooks.json` | Runtime-owned hook registry; hook semantics and event names diverge from all other CLIs |
 | `mcpServers` config | `~/.gemini/settings.json` → `mcpServers` key | MCP server configuration is stored per-tool and cannot be round-tripped without re-authoring connection details for each destination |
-| Subagents | `.gemini/agents/*.md` | Gemini subagent definition files are not yet part of the Agent Skills Standard and have no portable equivalent |
+| Subagents | `.gemini/agents/*.md` | Not part of the Agent Skills Standard. SkillSync can map them only to an explicitly registered Claude or Copilot native-agent target. |
 | Themes | `~/.gemini/settings.json` → `theme` key | UI theme is Gemini-specific and not a shareable skill artifact |
 | Extension install state | `~/.gemini/extensions/` directory | Package install provenance is runtime-owned; extension identifiers and registry membership differ across CLIs |
 
 **What SkillSync does with these surfaces:**
 - `settings.json` hook *intent* (the declared hook entry) may be preserved as `Metadata` on the
   parsed skill for round-tripping back to Gemini. The runtime behavior is dropped.
-- All other surfaces listed above are silently skipped during sync. A portability warning is
+- All other surfaces listed above are skipped during their applicable sync. A portability warning is
   emitted when a skill sourced from Gemini carries non-portable metadata and the target is not
   Gemini.
 
 ## Artifact Type Equivalences
 
 Detailed mapping of which artifact types serve the same purpose across platforms.
+
+### Native Custom Agents
+
+Native custom-agent synchronization is a separate opt-in path. It does not use
+`model.Skill`. The supported canonical repository destinations are:
+
+| Platform | Destination | Same-platform behavior | Cross-platform behavior |
+|---|---|---|---|
+| Claude Code | `.claude/agents/<name>.md` | Lossless frontmatter and body round trip | Exact Claude-Copilot-Gemini mapping required |
+| Copilot | `.github/agents/<name>.agent.md` | Lossless frontmatter and body round trip | Exact Claude-Copilot-Gemini mapping required |
+| Gemini CLI | `.gemini/agents/<name>.md` | Lossless frontmatter and body round trip | Exact Claude-Copilot-Gemini mapping required |
+| Codex, Cursor, Pi | -- | Unsupported | No write; never flatten to instructions, modes, prompts, or skills |
+
+All writes require explicit `native-config` trust. SkillSync validates the full
+batch before one writer call. Cross-platform writes preserve the common name,
+description, body, tools, and model fields. They drop source-only native fields
+and report a warning to verify routing, tools, model selection, invocation,
+handoffs, and per-agent MCP behavior on the target.
 
 ### Always-On Instructions
 

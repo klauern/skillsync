@@ -51,7 +51,8 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	seenNames := make(map[string]bool)
 
 	// Parse SKILL.md files first so they take precedence over prompt/instruction
-	// artifacts with the same discovery name.
+	// artifacts with the same discovery name. A failure in one configured root
+	// must not discard skills parsed successfully from the others.
 	skillRoots := append([]string{p.basePath}, p.settingsSkillRoots()...)
 	seenRoots := make(map[string]bool)
 	for _, root := range skillRoots {
@@ -62,8 +63,7 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 		parsed, parseErr := skills.New(root, p.Platform()).Parse()
 		if parseErr != nil {
 			logging.Warn(
-				"failed to parse SKILL.md files",
-				logging.Platform(string(p.Platform())),
+				"failed to parse Pi SKILL.md root",
 				logging.Path(root),
 				logging.Err(parseErr),
 			)

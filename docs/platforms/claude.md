@@ -385,7 +385,10 @@ Legacy format fixtures are in `testdata/skills/legacy/`:
   (deployed via managed settings). These are injected at a different layer.
 - **Dynamic context injection**: The `` !`command` `` preprocessing syntax is a runtime feature and
   is not parsed or evaluated by SkillSync.
-- **Subagent definitions**: `.claude/agents/*.md` files are not yet parsed by SkillSync.
+- **Subagent definitions**: The separate native-agent codec supports
+  `.claude/agents/*.md`. Its canonical repository destination is
+  `.claude/agents/<name>.md`. Cross-platform writes require an exact mapping
+  and `native-config` trust. Claude-only fields produce a loss warning.
 - **Nested monorepo discovery**: The parser does not yet replicate Claude Code's automatic
   discovery of skills from nested `.claude/skills/` directories within subdirectories.
 - **Context budget awareness**: SkillSync does not model the 2% context window budget for skill

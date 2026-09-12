@@ -58,11 +58,10 @@ func (p *Parser) Parse() ([]model.Skill, error) {
 	}
 	if !hasRoot {
 		logging.Debug(
-			"config directory not found",
+			"config directory not found; checking shared skills root",
 			logging.Platform(string(p.Platform())),
 			logging.Path(configRoot),
 		)
-		return []model.Skill{}, nil
 	}
 
 	var allSkills []model.Skill
